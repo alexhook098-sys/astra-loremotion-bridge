@@ -2,6 +2,7 @@ package com.astra.loremotionbridge;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.Gravity;
@@ -10,6 +11,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 public class MainActivity extends Activity {
+
+    private TextView title;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -34,8 +37,7 @@ public class MainActivity extends Activity {
                 Gravity.CENTER_HORIZONTAL
         );
 
-        TextView title =
-                new TextView(this);
+        title = new TextView(this);
 
         title.setText(
                 "ASTRA Browser Bridge\n\n" +
@@ -67,16 +69,17 @@ public class MainActivity extends Activity {
                 new Button(this);
 
         start.setText(
-                "Запустить Browser Bridge"
+                "ЗАПУСТИТЬ BROWSER BRIDGE"
         );
 
         start.setOnClickListener(v -> {
 
-            LocalBridgeServer.start();
+            startBrowserBridge();
 
             title.setText(
                     "ASTRA Browser Bridge\n\n" +
-                    "Сервер: http://127.0.0.1:18765"
+                    "Сервис запущен\n" +
+                    "http://127.0.0.1:18765"
             );
         });
 
@@ -86,7 +89,7 @@ public class MainActivity extends Activity {
                 new Button(this);
 
         open.setText(
-                "Открыть LoreMotion в Vivaldi"
+                "ОТКРЫТЬ LOREMOTION В VIVALDI"
         );
 
         open.setOnClickListener(
@@ -98,7 +101,24 @@ public class MainActivity extends Activity {
         box.addView(open);
 
         setContentView(box);
+    }
 
-        LocalBridgeServer.start();
+    private void startBrowserBridge() {
+
+        Intent intent =
+                new Intent(
+                        this,
+                        BrowserBridgeService.class
+                );
+
+        if (Build.VERSION.SDK_INT >=
+                Build.VERSION_CODES.O) {
+
+            startForegroundService(intent);
+
+        } else {
+
+            startService(intent);
+        }
     }
 }
