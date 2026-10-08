@@ -149,20 +149,23 @@ public class AstraAccessibilityService extends AccessibilityService {
         return result;
     }
 
-    public static boolean click(String query) {
-        AccessibilityNodeInfo r = root();
-        if (r == null) return false;
-        AccessibilityNodeInfo n = find(r, query == null ? "" : query.toLowerCase());
-        boolean ok = n != null && clickNode(n);
-        if (n != null) n.recycle();
-        r.recycle();
-        return ok;
-    }
     private static boolean clickNode(AccessibilityNodeInfo n) {
-        if (n.isClickable() && n.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true;
+        if (n == null) return false;
+
+        if (n.isClickable() &&
+                n.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+            return true;
+        }
+
         AccessibilityNodeInfo p = n.getParent();
-        if (p != null) { boolean ok = clickNode(p); p.recycle(); return ok; }
-        return false;
+        if (p != null) {
+            boolean ok = clickNode(p);
+            p.recycle();
+            if (ok) return true;
+        }
+
+        return n.performAction(AccessibilityNodeInfo.ACTION_FOCUS) &&
+               n.performAction(AccessibilityNodeInfo.ACTION_CLICK);
     }
     public static String typeInfo(String field, String value) {
         AccessibilityNodeInfo r = root();
