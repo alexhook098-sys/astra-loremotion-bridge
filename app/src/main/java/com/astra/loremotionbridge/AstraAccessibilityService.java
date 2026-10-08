@@ -29,7 +29,12 @@ public class AstraAccessibilityService extends AccessibilityService {
                 continue;
             }
 
-            if (w.isActive() && w.isFocused()) {
+            String pkg = String.valueOf(r.getPackageName());
+
+            // Prefer Vivaldi whenever it is available.
+            // This allows ASTRA to control the browser even when
+            // the ASTRA Browser Control UI is currently focused.
+            if ("com.vivaldi.browser".equals(pkg)) {
                 w.recycle();
                 if (fallback != null) fallback.recycle();
                 return r;
