@@ -48,6 +48,7 @@ public class MainActivity extends Activity {
 
         box.addView(title);
 
+        // Accessibility settings
         Button accessibility =
                 new Button(this);
 
@@ -65,6 +66,7 @@ public class MainActivity extends Activity {
 
         box.addView(accessibility);
 
+        // Start Browser Bridge
         Button start =
                 new Button(this);
 
@@ -74,17 +76,36 @@ public class MainActivity extends Activity {
 
         start.setOnClickListener(v -> {
 
-            startBrowserBridge();
+            try {
 
-            title.setText(
-                    "ASTRA Browser Bridge\n\n" +
-                    "Сервис запущен\n" +
-                    "http://127.0.0.1:18765"
-            );
+                startBrowserBridge();
+
+                title.setText(
+                        "ASTRA Browser Bridge\n\n" +
+                        "Команда запуска отправлена\n\n" +
+                        "http://127.0.0.1:18765"
+                );
+
+            } catch (Exception e) {
+
+                String message =
+                        e.getMessage() == null
+                                ? "без сообщения"
+                                : e.getMessage();
+
+                title.setText(
+                        "ASTRA Browser Bridge\n\n" +
+                        "ОШИБКА ЗАПУСКА:\n\n" +
+                        e.getClass().getName() +
+                        "\n\n" +
+                        message
+                );
+            }
         });
 
         box.addView(start);
 
+        // Open LoreMotion
         Button open =
                 new Button(this);
 
@@ -121,4 +142,4 @@ public class MainActivity extends Activity {
             startService(intent);
         }
     }
-}
+            }
