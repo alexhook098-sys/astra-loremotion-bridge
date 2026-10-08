@@ -9,7 +9,9 @@ public class AstraAccessibilityService extends AccessibilityService {
     private static volatile AstraAccessibilityService instance;
     @Override public void onServiceConnected() { super.onServiceConnected(); instance = this; }
     @Override public void onAccessibilityEvent(android.view.accessibility.AccessibilityEvent event) {}
-    @Override public void onInterrupt() { if (instance == this) instance = null; }
+    @Override public void onInterrupt() {
+        // Temporary interruption does not mean that the service is disconnected.
+    }
 
     public static AccessibilityNodeInfo root() {
         if (instance == null) return null;
