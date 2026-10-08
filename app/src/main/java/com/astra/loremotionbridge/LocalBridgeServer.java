@@ -265,14 +265,10 @@ public class LocalBridgeServer {
             }
 
             if ("/type".equals(p)) {
-
-                return
-                        "{\"ok\":" +
-                        AstraAccessibilityService.typeInfo(
-                                m.getOrDefault("field", ""),
-                                m.getOrDefault("value", "")
-                        ) +
-                        "}";
+                return AstraAccessibilityService.typeInfo(
+                        m.getOrDefault("field", ""),
+                        m.getOrDefault("value", "")
+                );
             }
 
             if ("/open-and-dump".equals(p)) {
