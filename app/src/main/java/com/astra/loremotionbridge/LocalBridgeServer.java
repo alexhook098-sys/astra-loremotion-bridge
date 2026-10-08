@@ -256,7 +256,7 @@ public class LocalBridgeServer {
 
                 return
                         "{\"ok\":" +
-                        AstraAccessibilityService.click(
+                        AstraAccessibilityService.clickInfo(
                                 m.getOrDefault(
                                         "text",
                                         m.getOrDefault(
@@ -272,7 +272,7 @@ public class LocalBridgeServer {
 
                 return
                         "{\"ok\":" +
-                        AstraAccessibilityService.type(
+                        AstraAccessibilityService.typeInfo(
                                 m.getOrDefault("field", ""),
                                 m.getOrDefault("value", "")
                         ) +

@@ -120,6 +120,35 @@ public class AstraAccessibilityService extends AccessibilityService {
         return result;
     }
 
+    public static String clickInfo(String query) {
+        AccessibilityNodeInfo r = root();
+        if (r == null) {
+            return "{\"ok\":false,\"error\":\"accessibility service is not connected\"}";
+        }
+
+        AccessibilityNodeInfo n = find(
+                r,
+                query == null ? "" : query.toLowerCase()
+        );
+
+        if (n == null) {
+            r.recycle();
+            return "{\"ok\":false,\"found\":false,\"clicked\":false}";
+        }
+
+        boolean clicked = clickNode(n);
+
+        String result =
+                "{\"ok\":true,\"found\":true,\"clicked\":" + clicked
+                + ",\"text\":\"" + esc(n.getText()) + "\""
+                + ",\"description\":\"" + esc(n.getContentDescription()) + "\""
+                + ",\"class\":\"" + esc(n.getClassName()) + "\"}";
+
+        n.recycle();
+        r.recycle();
+        return result;
+    }
+
     public static boolean click(String query) {
         AccessibilityNodeInfo r = root();
         if (r == null) return false;
@@ -135,6 +164,44 @@ public class AstraAccessibilityService extends AccessibilityService {
         if (p != null) { boolean ok = clickNode(p); p.recycle(); return ok; }
         return false;
     }
+    public static String typeInfo(String field, String value) {
+        AccessibilityNodeInfo r = root();
+        if (r == null) {
+            return "{\"ok\":false,\"error\":\"accessibility service is not connected\"}";
+        }
+
+        AccessibilityNodeInfo n = findEditable(
+                r,
+                field == null ? "" : field.toLowerCase()
+        );
+
+        if (n == null) {
+            r.recycle();
+            return "{\"ok\":false,\"found\":false,\"typed\":false}";
+        }
+
+        Bundle args = new Bundle();
+        args.putCharSequence(
+                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                value == null ? "" : value
+        );
+
+        boolean typed = n.performAction(
+                AccessibilityNodeInfo.ACTION_SET_TEXT,
+                args
+        );
+
+        String result =
+                "{\"ok\":true,\"found\":true,\"typed\":" + typed
+                + ",\"text\":\"" + esc(n.getText()) + "\""
+                + ",\"hint\":\"" + esc(n.getHintText()) + "\""
+                + ",\"class\":\"" + esc(n.getClassName()) + "\"}";
+
+        n.recycle();
+        r.recycle();
+        return result;
+    }
+
     public static boolean type(String field, String value) {
         AccessibilityNodeInfo r = root();
         if (r == null) return false;
