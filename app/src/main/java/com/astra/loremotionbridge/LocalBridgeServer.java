@@ -39,11 +39,7 @@ public class LocalBridgeServer {
 
             try {
 
-                server = new ServerSocket(
-                        18765,
-                        50,
-                        InetAddress.getByName("127.0.0.1")
-                );
+                server = new ServerSocket(18765);
 
                 running = true;
                 lastError = null;
