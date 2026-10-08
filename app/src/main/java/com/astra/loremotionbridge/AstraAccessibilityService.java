@@ -95,5 +95,49 @@ public class AstraAccessibilityService extends AccessibilityService {
         }
         return null;
     }
+    public static String windows() {
+        if (instance == null) {
+            return "{\"error\":\"accessibility service is not connected\"}";
+        }
+
+        StringBuilder out = new StringBuilder();
+        out.append("{\"windows\":[");
+
+        java.util.List<android.view.accessibility.AccessibilityWindowInfo> windows =
+                instance.getWindows();
+
+        for (int i = 0; i < windows.size(); i++) {
+            if (i > 0) out.append(",");
+
+            android.view.accessibility.AccessibilityWindowInfo w = windows.get(i);
+
+            out.append("{");
+            out.append("\"id\":").append(w.getId()).append(",");
+            out.append("\"type\":").append(w.getType()).append(",");
+            out.append("\"active\":").append(w.isActive()).append(",");
+            out.append("\"focused\":").append(w.isFocused()).append(",");
+
+            AccessibilityNodeInfo root = w.getRoot();
+
+            if (root != null) {
+                out.append("\"package\":\"")
+                        .append(esc(root.getPackageName()))
+                        .append("\",");
+                out.append("\"class\":\"")
+                        .append(esc(root.getClassName()))
+                        .append("\"");
+                root.recycle();
+            } else {
+                out.append("\"package\":\"\",\"class\":\"\"");
+            }
+
+            out.append("}");
+            w.recycle();
+        }
+
+        out.append("]}");
+        return out.toString();
+    }
+
     private static boolean has(CharSequence s, String q) { return s != null && s.toString().toLowerCase().contains(q); }
 }
