@@ -24,7 +24,7 @@ public class BrowserBridgeService extends Service {
 
         Notification notification =
                 new Notification.Builder(this, CHANNEL_ID)
-                        .setContentTitle("ASTRA Browser Bridge")
+                        .setContentTitle("ASTRA Browser Agent")
                         .setContentText("Browser Bridge работает на порту 18765")
                         .setSmallIcon(android.R.drawable.ic_menu_view)
                         .setOngoing(true)
@@ -91,7 +91,7 @@ public class BrowserBridgeService extends Service {
             NotificationChannel channel =
                     new NotificationChannel(
                             CHANNEL_ID,
-                            "ASTRA Browser Bridge",
+                            "ASTRA Browser Agent",
                             NotificationManager.IMPORTANCE_LOW
                     );
 
