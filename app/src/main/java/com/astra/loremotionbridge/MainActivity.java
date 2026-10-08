@@ -2,7 +2,6 @@ package com.astra.loremotionbridge;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.Gravity;
@@ -41,32 +40,35 @@ public class MainActivity extends Activity {
 
         title.setText(
                 "ASTRA Browser Bridge\n\n" +
-                "Local API: 127.0.0.1:18765"
+                "Local API: 127.0.0.1:18765\n\n" +
+                "Тестовая версия"
         );
 
         title.setTextSize(20);
 
         box.addView(title);
 
-        // Accessibility settings
+        // Специальные возможности
         Button accessibility =
                 new Button(this);
 
         accessibility.setText(
-                "Открыть специальные возможности"
+                "ОТКРЫТЬ СПЕЦИАЛЬНЫЕ ВОЗМОЖНОСТИ"
         );
 
-        accessibility.setOnClickListener(
-                v -> startActivity(
-                        new Intent(
-                                Settings.ACTION_ACCESSIBILITY_SETTINGS
-                        )
-                )
-        );
+        accessibility.setOnClickListener(v -> {
+
+            startActivity(
+                    new Intent(
+                            Settings.ACTION_ACCESSIBILITY_SETTINGS
+                    )
+            );
+
+        });
 
         box.addView(accessibility);
 
-        // Start Browser Bridge
+        // ТЕСТ КНОПКИ
         Button start =
                 new Button(this);
 
@@ -76,36 +78,21 @@ public class MainActivity extends Activity {
 
         start.setOnClickListener(v -> {
 
-            try {
+            title.setText(
+                    "ASTRA Browser Bridge\n\n" +
+                    "КНОПКА РАБОТАЕТ!\n\n" +
+                    "onClick успешно сработал."
+            );
 
-                startBrowserBridge();
+            start.setText(
+                    "РАБОТАЕТ ✓"
+            );
 
-                title.setText(
-                        "ASTRA Browser Bridge\n\n" +
-                        "Команда запуска отправлена\n\n" +
-                        "http://127.0.0.1:18765"
-                );
-
-            } catch (Exception e) {
-
-                String message =
-                        e.getMessage() == null
-                                ? "без сообщения"
-                                : e.getMessage();
-
-                title.setText(
-                        "ASTRA Browser Bridge\n\n" +
-                        "ОШИБКА ЗАПУСКА:\n\n" +
-                        e.getClass().getName() +
-                        "\n\n" +
-                        message
-                );
-            }
         });
 
         box.addView(start);
 
-        // Open LoreMotion
+        // LoreMotion
         Button open =
                 new Button(this);
 
@@ -113,33 +100,16 @@ public class MainActivity extends Activity {
                 "ОТКРЫТЬ LOREMOTION В VIVALDI"
         );
 
-        open.setOnClickListener(
-                v -> LocalBridgeServer.openUrl(
-                        "https://loremotion.com/generate/"
-                )
-        );
+        open.setOnClickListener(v -> {
+
+            LocalBridgeServer.openUrl(
+                    "https://loremotion.com/generate/"
+            );
+
+        });
 
         box.addView(open);
 
         setContentView(box);
-    }
-
-    private void startBrowserBridge() {
-
-        Intent intent =
-                new Intent(
-                        this,
-                        BrowserBridgeService.class
-                );
-
-        if (Build.VERSION.SDK_INT >=
-                Build.VERSION_CODES.O) {
-
-            startForegroundService(intent);
-
-        } else {
-
-            startService(intent);
-        }
     }
             }
