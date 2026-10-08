@@ -272,6 +272,23 @@ public class LocalBridgeServer {
                         "}";
             }
 
+            if ("/open-and-dump".equals(p)) {
+                openUrl(
+                        m.getOrDefault(
+                                "url",
+                                "https://www.google.com"
+                        )
+                );
+
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+
+                return AstraAccessibilityService.dump();
+            }
+
             if ("/open".equals(p)) {
 
                 openUrl(
