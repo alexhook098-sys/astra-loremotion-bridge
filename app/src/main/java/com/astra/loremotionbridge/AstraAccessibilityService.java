@@ -85,6 +85,41 @@ public class AstraAccessibilityService extends AccessibilityService {
         return String.valueOf(o).replace("\\","\\\\").replace("\"","\\\"").replace("\n","\\n").replace("\r","\\r");
     }
 
+    public static String findInfo(String query) {
+        AccessibilityNodeInfo r = root();
+        if (r == null) {
+            return "{\"ok\":false,\"error\":\"accessibility service is not connected\"}";
+        }
+
+        AccessibilityNodeInfo n = find(
+                r,
+                query == null ? "" : query.toLowerCase()
+        );
+
+        if (n == null) {
+            r.recycle();
+            return "{\"ok\":false,\"found\":false}";
+        }
+
+        Rect b = new Rect();
+        n.getBoundsInScreen(b);
+
+        String result =
+                "{\"ok\":true,\"found\":true"
+                + ",\"text\":\"" + esc(n.getText()) + "\""
+                + ",\"description\":\"" + esc(n.getContentDescription()) + "\""
+                + ",\"hint\":\"" + esc(n.getHintText()) + "\""
+                + ",\"id\":\"" + esc(n.getViewIdResourceName()) + "\""
+                + ",\"class\":\"" + esc(n.getClassName()) + "\""
+                + ",\"editable\":" + n.isEditable()
+                + ",\"clickable\":" + n.isClickable()
+                + ",\"bounds\":\"" + esc(b.toShortString()) + "\"}";
+
+        n.recycle();
+        r.recycle();
+        return result;
+    }
+
     public static boolean click(String query) {
         AccessibilityNodeInfo r = root();
         if (r == null) return false;
