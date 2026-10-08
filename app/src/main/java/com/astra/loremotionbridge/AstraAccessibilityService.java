@@ -220,14 +220,51 @@ public class AstraAccessibilityService extends AccessibilityService {
         return ok;
     }
     private static AccessibilityNodeInfo find(AccessibilityNodeInfo n, String q) {
-        if (has(n.getText(),q) || has(n.getContentDescription(),q) || has(n.getHintText(),q) || has(n.getViewIdResourceName(),q)) return n;
-        for (int i=0;i<n.getChildCount();i++) {
-            AccessibilityNodeInfo c=n.getChild(i);
-            AccessibilityNodeInfo hit=c==null?null:find(c,q);
-            if (hit!=null) { if(c!=hit)c.recycle(); return hit; }
-            if(c!=null)c.recycle();
+        if (n == null) return null;
+
+        String query = q == null ? "" : q.toLowerCase();
+
+        String text = n.getText() == null ? "" : n.getText().toString().toLowerCase();
+        String desc = n.getContentDescription() == null ? "" : n.getContentDescription().toString().toLowerCase();
+        String hint = n.getHintText() == null ? "" : n.getHintText().toString().toLowerCase();
+        String id = n.getViewIdResourceName() == null ? "" : n.getViewIdResourceName().toLowerCase();
+
+        boolean exact =
+                text.equals(query) ||
+                desc.equals(query) ||
+                hint.equals(query) ||
+                id.equals(query);
+
+        if (exact) return n;
+
+        AccessibilityNodeInfo clickableMatch = null;
+
+        for (int i = 0; i < n.getChildCount(); i++) {
+            AccessibilityNodeInfo c = n.getChild(i);
+            AccessibilityNodeInfo hit = c == null ? null : find(c, query);
+
+            if (hit != null) {
+                if (hit.isClickable() || hit.isFocusable()) {
+                    if (clickableMatch != null && clickableMatch != hit) clickableMatch.recycle();
+                    clickableMatch = hit;
+                    if (c != hit) c.recycle();
+                    continue;
+                }
+
+                if (clickableMatch == null) {
+                    clickableMatch = hit;
+                } else if (c != hit) {
+                    hit.recycle();
+                }
+
+                if (c != hit) c.recycle();
+                continue;
+            }
+
+            if (c != null) c.recycle();
         }
-        return null;
+
+        return clickableMatch;
     }
     private static AccessibilityNodeInfo findEditable(AccessibilityNodeInfo n, String q) {
         if (n.isEditable() && (q.isEmpty() || has(n.getText(),q) || has(n.getHintText(),q) || has(n.getContentDescription(),q) || has(n.getViewIdResourceName(),q))) return n;
