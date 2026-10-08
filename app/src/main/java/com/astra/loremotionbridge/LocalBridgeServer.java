@@ -253,19 +253,15 @@ public class LocalBridgeServer {
             }
 
             if ("/click".equals(p)) {
-
-                return
-                        "{\"ok\":" +
-                        AstraAccessibilityService.clickInfo(
+                return AstraAccessibilityService.clickInfo(
+                        m.getOrDefault(
+                                "text",
                                 m.getOrDefault(
-                                        "text",
-                                        m.getOrDefault(
-                                                "description",
-                                                ""
-                                        )
+                                        "description",
+                                        ""
                                 )
-                        ) +
-                        "}";
+                        )
+                );
             }
 
             if ("/type".equals(p)) {
