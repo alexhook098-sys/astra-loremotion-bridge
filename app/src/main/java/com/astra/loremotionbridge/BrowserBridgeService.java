@@ -5,11 +5,14 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
+import android.util.Log;
 
 public class BrowserBridgeService extends Service {
 
+    private static final String TAG = "ASTRA-BrowserBridge";
     private static final String CHANNEL_ID = "astra_browser_bridge";
     private static final int NOTIFICATION_ID = 18765;
 
@@ -27,9 +30,41 @@ public class BrowserBridgeService extends Service {
                         .setOngoing(true)
                         .build();
 
-        startForeground(NOTIFICATION_ID, notification);
+        try {
 
-        LocalBridgeServer.start();
+            if (Build.VERSION.SDK_INT >=
+                    Build.VERSION_CODES.Q) {
+
+                startForeground(
+                        NOTIFICATION_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                );
+
+            } else {
+
+                startForeground(
+                        NOTIFICATION_ID,
+                        notification
+                );
+            }
+
+            Log.i(TAG, "Foreground service started");
+
+            LocalBridgeServer.start();
+
+            Log.i(TAG, "LocalBridgeServer.start() called");
+
+        } catch (Exception e) {
+
+            Log.e(
+                    TAG,
+                    "FAILED TO START BROWSER BRIDGE",
+                    e
+            );
+
+            stopSelf();
+        }
     }
 
     @Override
@@ -38,7 +73,9 @@ public class BrowserBridgeService extends Service {
             int flags,
             int startId
     ) {
+
         LocalBridgeServer.start();
+
         return START_STICKY;
     }
 
@@ -72,4 +109,4 @@ public class BrowserBridgeService extends Service {
             }
         }
     }
-          }
+}
