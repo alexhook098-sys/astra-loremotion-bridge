@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.widget.Button;
@@ -56,9 +58,36 @@ public class MainActivity extends Activity {
 
                 title.setText(
                         "ASTRA LoreMotion Bridge\n\n" +
-                        "Browser Bridge запускается...\n\n" +
-                        "http://127.0.0.1:18765"
+                        "ПРОВЕРКА Browser Bridge...\n\n" +
+                        "127.0.0.1:18765"
                 );
+
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+
+                    if (LocalBridgeServer.isRunning()) {
+
+                        title.setText(
+                                "ASTRA LoreMotion Bridge\n\n" +
+                                "SERVER ONLINE ✓\n\n" +
+                                "127.0.0.1:18765"
+                        );
+
+                    } else {
+
+                        String error = LocalBridgeServer.getLastError();
+
+                        if (error == null || error.isEmpty()) {
+                            error = "Сервер не запустился, причина не определена";
+                        }
+
+                        title.setText(
+                                "ASTRA LoreMotion Bridge\n\n" +
+                                "SERVER ERROR\n\n" +
+                                error
+                        );
+                    }
+
+                }, 1000);
 
             } catch (Exception e) {
                 String message =

@@ -23,6 +23,14 @@ public class LocalBridgeServer {
     private static volatile String lastError = null;
     private static ServerSocket server;
 
+    public static boolean isRunning() {
+        return running;
+    }
+
+    public static String getLastError() {
+        return lastError;
+    }
+
     public static synchronized void start() {
 
         if (running) return;
