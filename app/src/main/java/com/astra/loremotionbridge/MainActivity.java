@@ -49,7 +49,7 @@ public class MainActivity extends Activity {
                         new Intent(this, BrowserBridgeService.class);
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(intent);
+                    LocalBridgeServer.start();
                 } else {
                     startService(intent);
                 }
