@@ -241,6 +241,10 @@ public class LocalBridgeServer {
                 return AstraAccessibilityService.windows();
             }
 
+            if ("/service-info".equals(p)) {
+                return AstraAccessibilityService.serviceInfo();
+            }
+
             if ("/click".equals(p)) {
 
                 return

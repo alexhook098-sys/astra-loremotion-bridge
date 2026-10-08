@@ -95,6 +95,26 @@ public class AstraAccessibilityService extends AccessibilityService {
         }
         return null;
     }
+    public static String serviceInfo() {
+        if (instance == null) {
+            return "{\"error\":\"accessibility service is not connected\"}";
+        }
+
+        android.accessibilityservice.AccessibilityServiceInfo info =
+                instance.getServiceInfo();
+
+        if (info == null) {
+            return "{\"error\":\"service info is null\"}";
+        }
+
+        return "{"
+                + "\"flags\":" + info.flags + ","
+                + "\"eventTypes\":" + info.eventTypes + ","
+                + "\"feedbackType\":" + info.feedbackType + ","
+                + "\"notificationTimeout\":" + info.notificationTimeout
+                + "}";
+    }
+
     public static String windows() {
         if (instance == null) {
             return "{\"error\":\"accessibility service is not connected\"}";
