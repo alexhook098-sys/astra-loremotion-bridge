@@ -13,7 +13,7 @@
     <application
         android:name=".MainApplication"
         android:theme="@style/AppTheme"
-        android:label="ASTRA Browser Agent"
+        android:label="ASTRA Browser Control"
         android:allowBackup="false"
         android:supportsRtl="true">
 

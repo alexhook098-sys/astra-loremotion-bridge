@@ -27,7 +27,7 @@ public class MainActivity extends Activity {
 
         title = new TextView(this);
         title.setText(
-                "ASTRA LoreMotion Bridge\n\n" +
+                "ASTRA Browser Control\n\n" +
                 "Local API: 127.0.0.1:18765"
         );
         title.setTextSize(20);
@@ -57,7 +57,7 @@ public class MainActivity extends Activity {
                 }
 
                 title.setText(
-                        "ASTRA LoreMotion Bridge\n\n" +
+                        "ASTRA Browser Control\n\n" +
                         "ПРОВЕРКА Browser Bridge...\n\n" +
                         "127.0.0.1:18765"
                 );
@@ -67,7 +67,7 @@ public class MainActivity extends Activity {
                     if (LocalBridgeServer.isRunning()) {
 
                         title.setText(
-                                "ASTRA LoreMotion Bridge\n\n" +
+                                "ASTRA Browser Control\n\n" +
                                 "SERVER ONLINE ✓\n\n" +
                                 "127.0.0.1:18765"
                         );
@@ -81,7 +81,7 @@ public class MainActivity extends Activity {
                         }
 
                         title.setText(
-                                "ASTRA LoreMotion Bridge\n\n" +
+                                "ASTRA Browser Control\n\n" +
                                 "SERVER ERROR\n\n" +
                                 error
                         );
@@ -96,7 +96,7 @@ public class MainActivity extends Activity {
                                 : e.getMessage();
 
                 title.setText(
-                        "ASTRA LoreMotion Bridge\n\n" +
+                        "ASTRA Browser Control\n\n" +
                         "ОШИБКА ЗАПУСКА:\n\n" +
                         e.getClass().getName() +
                         "\n\n" +
