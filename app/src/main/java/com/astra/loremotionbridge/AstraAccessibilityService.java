@@ -11,7 +11,39 @@ public class AstraAccessibilityService extends AccessibilityService {
     @Override public void onAccessibilityEvent(android.view.accessibility.AccessibilityEvent event) {}
     @Override public void onInterrupt() { if (instance == this) instance = null; }
 
-    public static AccessibilityNodeInfo root() { return instance == null ? null : instance.getRootInActiveWindow(); }
+    public static AccessibilityNodeInfo root() {
+        if (instance == null) return null;
+
+        java.util.List<android.view.accessibility.AccessibilityWindowInfo> windows =
+                instance.getWindows();
+
+        AccessibilityNodeInfo fallback = null;
+
+        for (android.view.accessibility.AccessibilityWindowInfo w : windows) {
+            AccessibilityNodeInfo r = w.getRoot();
+
+            if (r == null) {
+                w.recycle();
+                continue;
+            }
+
+            if (w.isActive() && w.isFocused()) {
+                w.recycle();
+                if (fallback != null) fallback.recycle();
+                return r;
+            }
+
+            if (w.isActive() && fallback == null) {
+                fallback = r;
+            } else {
+                r.recycle();
+            }
+
+            w.recycle();
+        }
+
+        return fallback;
+    }
 
     public static String dump() {
         AccessibilityNodeInfo r = root();
