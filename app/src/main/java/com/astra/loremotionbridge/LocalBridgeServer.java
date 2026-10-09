@@ -3,7 +3,6 @@ package com.astra.loremotionbridge;
 import android.content.Intent;
 import android.net.Uri;
 import android.util.Log;
-
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -28,7 +27,8 @@ public class LocalBridgeServer {
         Thread t = new Thread(() -> {
             try {
                 server = new ServerSocket(18765);
-                running = true; lastError = null;
+                running = true;
+                lastError = null;
                 Log.i(TAG, "HTTP server listening on 127.0.0.1:18765");
                 while (running) {
                     final Socket s = server.accept();
@@ -41,7 +41,8 @@ public class LocalBridgeServer {
                 try { if (server != null) server.close(); } catch (Exception ignored) {}
             }
         }, "ASTRA-Bridge");
-        t.setDaemon(true); t.start();
+        t.setDaemon(true);
+        t.start();
     }
 
     public static void openUrl(String url) {
@@ -61,18 +62,37 @@ public class LocalBridgeServer {
 
     private static void handle(Socket s) {
         try (Socket sock = s) {
+            sock.setSoTimeout(10000);
             BufferedReader r = new BufferedReader(new InputStreamReader(sock.getInputStream(), StandardCharsets.UTF_8));
             String line = r.readLine();
             if (line == null) return;
             String[] parts = line.split(" ", 3);
             if (parts.length < 2) return;
-            String result = route(parts[1]);
-            byte[] body = result.getBytes(StandardCharsets.UTF_8);
+            String target = parts[1];
+            boolean binary = "/control/screen.png".equals(target.split("\\?", 2)[0]);
+            byte[] body;
+            String contentType;
+            if (binary) {
+                body = AstraControl.screenPng();
+                contentType = "image/png";
+                if (body == null) {
+                    body = "{\"ok\":false,\"error\":\"screen frame unavailable\",\"hint\":\"Call /control/screen-status first\"}".getBytes(StandardCharsets.UTF_8);
+                    contentType = "application/json; charset=utf-8";
+                }
+            } else {
+                body = route(target).getBytes(StandardCharsets.UTF_8);
+                contentType = "application/json; charset=utf-8";
+            }
             OutputStream o = sock.getOutputStream();
-            String h = "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: "
-                    + body.length + "\r\nConnection: close\r\n\r\n";
-            o.write(h.getBytes(StandardCharsets.UTF_8)); o.write(body); o.flush();
-        } catch (Exception e) { Log.e(TAG, "HTTP request failed", e); }
+            String headers = "HTTP/1.1 200 OK\r\nContent-Type: " + contentType
+                    + "\r\nContent-Length: " + body.length
+                    + "\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n";
+            o.write(headers.getBytes(StandardCharsets.UTF_8));
+            o.write(body);
+            o.flush();
+        } catch (Exception e) {
+            Log.e(TAG, "HTTP request failed", e);
+        }
     }
 
     private static String route(String path) {
@@ -86,43 +106,27 @@ public class LocalBridgeServer {
                     if (kv.length == 2) m.put(URLDecoder.decode(kv[0],"UTF-8"), URLDecoder.decode(kv[1],"UTF-8"));
                 }
             }
-
-            if ("/control/observe".equals(p)) {
-                return AstraControl.observe();
-            }
-            if ("/control/status".equals(p)) {
-                return AstraControl.status();
-            }
-            if ("/control/screen-status".equals(p)) {
-                return AstraControl.screenStatus();
-            }
-            if ("/health".equals(p)) {
-                return running ? "{\"ok\":true,\"service\":\"astra-browser-bridge\",\"port\":18765,\"running\":true}"
-                        : "{\"ok\":false,\"service\":\"astra-browser-bridge\",\"port\":18765,\"running\":false,\"error\":\"" + esc(lastError) + "\"}";
-            }
+            if ("/control/observe".equals(p)) return AstraControl.observe();
+            if ("/control/status".equals(p)) return AstraControl.status();
+            if ("/control/screen-status".equals(p)) return AstraControl.screenStatus();
+            if ("/health".equals(p)) return running
+                    ? "{\"ok\":true,\"service\":\"astra-browser-bridge\",\"port\":18765,\"running\":true}"
+                    : "{\"ok\":false,\"service\":\"astra-browser-bridge\",\"port\":18765,\"running\":false,\"error\":\"" + esc(lastError) + "\"}";
             if ("/dump".equals(p)) return AstraAccessibilityService.dump();
             if ("/windows".equals(p)) return AstraAccessibilityService.windows();
             if ("/service-info".equals(p)) return AstraAccessibilityService.serviceInfo();
             if ("/find".equals(p)) return AstraAccessibilityService.findInfo(m.getOrDefault("text",m.getOrDefault("description","")));
             if ("/click".equals(p)) return AstraAccessibilityService.clickInfo(m.getOrDefault("text",m.getOrDefault("description","")));
             if ("/type".equals(p)) return AstraAccessibilityService.typeInfo(m.getOrDefault("field",""),m.getOrDefault("value",""));
-
-            if ("/browser/tap".equals(p)) {
-                return BrowserController.tap(Float.parseFloat(m.getOrDefault("x","0")), Float.parseFloat(m.getOrDefault("y","0")));
-            }
-            if ("/browser/swipe".equals(p)) {
-                return BrowserController.swipe(
-                        Float.parseFloat(m.getOrDefault("x1","0")),
-                        Float.parseFloat(m.getOrDefault("y1","0")),
-                        Float.parseFloat(m.getOrDefault("x2","0")),
-                        Float.parseFloat(m.getOrDefault("y2","0")),
-                        Long.parseLong(m.getOrDefault("duration","350")));
-            }
+            if ("/browser/tap".equals(p)) return BrowserController.tap(Float.parseFloat(m.getOrDefault("x","0")), Float.parseFloat(m.getOrDefault("y","0")));
+            if ("/browser/swipe".equals(p)) return BrowserController.swipe(
+                    Float.parseFloat(m.getOrDefault("x1","0")), Float.parseFloat(m.getOrDefault("y1","0")),
+                    Float.parseFloat(m.getOrDefault("x2","0")), Float.parseFloat(m.getOrDefault("y2","0")),
+                    Long.parseLong(m.getOrDefault("duration","350")));
             if ("/browser/scroll".equals(p)) return BrowserController.scroll(m.getOrDefault("direction","down"));
             if ("/browser/back".equals(p)) return BrowserController.back();
             if ("/browser/home".equals(p)) return BrowserController.home();
             if ("/browser/focus".equals(p)) return BrowserController.focus(m.getOrDefault("text",""));
-
             if ("/open-and-dump".equals(p)) {
                 openUrl(m.getOrDefault("url","https://www.google.com"));
                 try { Thread.sleep(2000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
