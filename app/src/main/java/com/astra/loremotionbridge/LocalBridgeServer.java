@@ -71,6 +71,30 @@ public class LocalBridgeServer {
         }
     }
 
+    public static String browserHandlers() {
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse("https://loremotion.com/generate/"));
+            android.content.pm.PackageManager pm = MainApplication.context().getPackageManager();
+            java.util.List<android.content.pm.ResolveInfo> list =
+                    pm.queryIntentActivities(i, android.content.pm.PackageManager.MATCH_ALL);
+
+            StringBuilder out = new StringBuilder("{\"ok\":true,\"handlers\":[");
+            for (int n = 0; n < list.size(); n++) {
+                if (n > 0) out.append(",");
+                android.content.pm.ResolveInfo r = list.get(n);
+                out.append("{\"package\":\"")
+                   .append(esc(r.activityInfo.packageName))
+                   .append("\",\"activity\":\"")
+                   .append(esc(r.activityInfo.name))
+                   .append("\"}");
+            }
+            out.append("]}");
+            return out.toString();
+        } catch (Exception e) {
+            return "{\"ok\":false,\"error\":\"" + esc(String.valueOf(e)) + "\"}";
+        }
+    }
+
     private static void handle(Socket s) {
         try (Socket sock = s) {
             sock.setSoTimeout(10000);
@@ -138,6 +162,10 @@ public class LocalBridgeServer {
             if ("/browser/back".equals(p)) return BrowserController.back();
             if ("/browser/home".equals(p)) return BrowserController.home();
             if ("/browser/focus".equals(p)) return BrowserController.focus(m.getOrDefault("text",""));
+            if ("/control/browser-handlers".equals(p)) {
+                return browserHandlers();
+            }
+
             if ("/control/open-browser".equals(p)) {
                 openBrowserChooser(m.getOrDefault("url","https://loremotion.com/generate/"));
                 return "{\"ok\":true,\"action\":\"open-browser\"}";
