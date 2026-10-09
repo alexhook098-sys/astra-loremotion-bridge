@@ -133,6 +133,8 @@ public class MainActivity extends Activity {
         box.addView(open);
 
         setContentView(box);
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -151,12 +153,6 @@ public class MainActivity extends Activity {
             startService(intent);
         }
 
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (ScreenCaptureService.instance != null) {
-                ScreenCaptureService.instance.startCapture(resultCode, data);
-                ScreenCaptureService.instance.activateForeground();
-            }
-        }, 500);
+
     }
     }
-}
