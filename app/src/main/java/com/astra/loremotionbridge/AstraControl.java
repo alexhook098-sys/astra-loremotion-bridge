@@ -13,6 +13,35 @@ public final class AstraControl {
     private static volatile String captureError = "";
     private static volatile int framesReceived;
 
+    public static synchronized boolean screenChanged(android.graphics.Bitmap before) {
+        android.graphics.Bitmap after = lastScreen;
+        if (before == null || after == null) return false;
+        if (before.getWidth() != after.getWidth() || before.getHeight() != after.getHeight()) return true;
+
+        int w = after.getWidth();
+        int h = after.getHeight();
+        int different = 0;
+
+        for (int i = 0; i < 64; i++) {
+            int x = (i * 997) % w;
+            int y = (i * 577) % h;
+            if (before.getPixel(x, y) != after.getPixel(x, y)) {
+                different++;
+            }
+        }
+
+        return different >= 4;
+    }
+
+    public static synchronized android.graphics.Bitmap copyLastScreen() {
+        return lastScreen == null ? null : lastScreen.copy(
+                lastScreen.getConfig() == null
+                        ? android.graphics.Bitmap.Config.ARGB_8888
+                        : lastScreen.getConfig(),
+                false
+        );
+    }
+
     public static synchronized void setLastScreen(Bitmap bitmap) {
         if (bitmap == null || bitmap.isRecycled()) return;
         Bitmap old = lastScreen;
