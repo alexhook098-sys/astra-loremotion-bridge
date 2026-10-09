@@ -166,7 +166,27 @@ public class LocalBridgeServer {
                 return browserHandlers();
             }
 
-            if ("/control/visual-tap".equals(p)) {
+            if ("/control/launch-app".equals(p)) {
+            String pkg = m.getOrDefault("package", "com.android.chrome");
+            try {
+                android.content.pm.PackageManager pm =
+                        MainApplication.context().getPackageManager();
+                android.content.Intent launch = pm.getLaunchIntentForPackage(pkg);
+
+                if (launch == null) {
+                    return "{\"ok\":false,\"error\":\"no_launch_intent\",\"package\":\"" + esc(pkg) + "\"}";
+                }
+
+                launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                MainApplication.context().startActivity(launch);
+
+                return "{\"ok\":true,\"action\":\"launch-app\",\"package\":\"" + esc(pkg) + "\"}";
+            } catch (Exception e) {
+                return "{\"ok\":false,\"error\":\"" + esc(String.valueOf(e)) + "\"}";
+            }
+        }
+
+        if ("/control/visual-tap".equals(p)) {
             float x = Float.parseFloat(m.getOrDefault("x", "0"));
             float y = Float.parseFloat(m.getOrDefault("y", "0"));
             return BrowserController.visualTap(x, y);
