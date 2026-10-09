@@ -251,10 +251,13 @@ public class AstraAccessibilityService extends AccessibilityService {
                 || hint.contains(query)
                 || id.contains(query);
 
-        if (matches && (n.isEditable() || n.isFocusable() || n.isClickable())) {
+        // For browser input, prefer the actual editable field.
+        if (matches && n.isEditable()) {
             return n;
         }
 
+        // Search children first so a clickable parent does not hide
+        // the actual editable field inside it.
         for (int i = 0; i < n.getChildCount(); i++) {
             AccessibilityNodeInfo c = n.getChild(i);
 
@@ -267,6 +270,12 @@ public class AstraAccessibilityService extends AccessibilityService {
             }
 
             if (c != null) c.recycle();
+        }
+
+        // Only after editable descendants were checked, accept
+        // a normal focusable/clickable matching node.
+        if (matches && (n.isFocusable() || n.isClickable())) {
+            return n;
         }
 
         return null;
