@@ -60,6 +60,17 @@ public class LocalBridgeServer {
         }
     }
 
+    public static void openBrowserChooser(String url) {
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            MainApplication.context().startActivity(Intent.createChooser(i, "Выберите браузер"));
+        } catch (Exception e) {
+            Log.e(TAG, "Browser chooser failed", e);
+        }
+    }
+
     private static void handle(Socket s) {
         try (Socket sock = s) {
             sock.setSoTimeout(10000);
@@ -127,6 +138,11 @@ public class LocalBridgeServer {
             if ("/browser/back".equals(p)) return BrowserController.back();
             if ("/browser/home".equals(p)) return BrowserController.home();
             if ("/browser/focus".equals(p)) return BrowserController.focus(m.getOrDefault("text",""));
+            if ("/control/open-browser".equals(p)) {
+                openBrowserChooser(m.getOrDefault("url","https://loremotion.com/generate/"));
+                return "{\"ok\":true,\"action\":\"open-browser\"}";
+            }
+
             if ("/open-and-dump".equals(p)) {
                 openUrl(m.getOrDefault("url","https://www.google.com"));
                 try { Thread.sleep(2000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
