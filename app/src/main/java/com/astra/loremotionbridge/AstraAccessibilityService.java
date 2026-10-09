@@ -192,16 +192,84 @@ public class AstraAccessibilityService extends AccessibilityService {
 
     public static String focusInfo(String query) {
         AccessibilityNodeInfo r = root();
-        if (r == null) return "{\"ok\":false,\"error\":\"accessibility service is not connected\"}";
-        AccessibilityNodeInfo n = find(r, query == null ? "" : query.toLowerCase());
-        if (n == null) {
-            r.recycle(); return "{\"ok\":false,\"found\":false,\"focused\":false}";
+        if (r == null) {
+            return "{\"ok\":false,\"error\":\"accessibility service is not connected\"}";
         }
-        boolean focused = n.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
-        Rect b = new Rect(); n.getBoundsInScreen(b);
-        String result = "{\"ok\":true,\"found\":true,\"focused\":" + focused
-                + ",\"text\":\"" + esc(n.getText()) + "\",\"bounds\":\"" + esc(b.toShortString()) + "\"}";
-        n.recycle(); r.recycle(); return result;
+
+        AccessibilityNodeInfo n = findFocusable(
+                r,
+                query == null ? "" : query.toLowerCase()
+        );
+
+        if (n == null) {
+            r.recycle();
+            return "{\"ok\":false,\"found\":false,\"focused\":false}";
+        }
+
+        boolean focused =
+                n.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+
+        Rect b = new Rect();
+        n.getBoundsInScreen(b);
+
+        String result =
+                "{\"ok\":true,\"found\":true,\"focused\":" + focused
+                + ",\"text\":\"" + esc(n.getText())
+                + "\",\"hint\":\"" + esc(n.getHintText())
+                + "\",\"description\":\"" + esc(n.getContentDescription())
+                + "\",\"editable\":" + n.isEditable()
+                + ",\"bounds\":\"" + esc(b.toShortString()) + "\"}";
+
+        n.recycle();
+        r.recycle();
+        return result;
+    }
+
+    private static AccessibilityNodeInfo findFocusable(
+            AccessibilityNodeInfo n, String q) {
+
+        if (n == null) return null;
+
+        String query = q == null ? "" : q.toLowerCase();
+
+        String text = n.getText() == null
+                ? "" : n.getText().toString().toLowerCase();
+
+        String desc = n.getContentDescription() == null
+                ? "" : n.getContentDescription().toString().toLowerCase();
+
+        String hint = n.getHintText() == null
+                ? "" : n.getHintText().toString().toLowerCase();
+
+        String id = n.getViewIdResourceName() == null
+                ? "" : n.getViewIdResourceName().toLowerCase();
+
+        boolean matches =
+                query.isEmpty()
+                || text.contains(query)
+                || desc.contains(query)
+                || hint.contains(query)
+                || id.contains(query);
+
+        if (matches && (n.isEditable() || n.isFocusable() || n.isClickable())) {
+            return n;
+        }
+
+        for (int i = 0; i < n.getChildCount(); i++) {
+            AccessibilityNodeInfo c = n.getChild(i);
+
+            AccessibilityNodeInfo hit =
+                    c == null ? null : findFocusable(c, query);
+
+            if (hit != null) {
+                if (c != hit && c != null) c.recycle();
+                return hit;
+            }
+
+            if (c != null) c.recycle();
+        }
+
+        return null;
     }
 
     private static AccessibilityNodeInfo find(AccessibilityNodeInfo n, String q) {
