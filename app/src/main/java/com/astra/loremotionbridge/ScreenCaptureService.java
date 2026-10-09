@@ -56,7 +56,7 @@ public class ScreenCaptureService extends Service {
         }
         int resultCode = intent.getIntExtra("resultCode", -1);
         Intent data = getProjectionData(intent);
-        if (resultCode != -1 && data != null && projection == null) {
+        if (resultCode == -1 && data != null && projection == null) {
             try {
                 startCapture(resultCode, data);
             } catch (Exception e) {
