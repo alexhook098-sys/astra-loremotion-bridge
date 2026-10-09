@@ -7,6 +7,27 @@ public final class BrowserController {
         return "{\"ok\":" + AstraAccessibilityService.tap(x, y) + ",\"action\":\"tap\",\"x\":" + x + ",\"y\":" + y + "}";
     }
 
+    public static String visualTap(float x, float y) {
+        android.graphics.Bitmap before = AstraControl.copyLastScreen();
+
+        boolean dispatched = AstraAccessibilityService.tap(x, y);
+
+        if (!dispatched) {
+            return "{\"ok\":false,\"action\":\"visual_tap\",\"x\":" + x + ",\"y\":" + y + ",\"dispatched\":false}";
+        }
+
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        boolean changed = AstraControl.screenChanged(before);
+
+        return "{\"ok\":true,\"action\":\"visual_tap\",\"x\":" + x + ",\"y\":" + y
+                + ",\"dispatched\":true,\"changed\":" + changed + "}";
+    }
+
     public static String swipe(float x1, float y1, float x2, float y2, long duration) {
         return "{\"ok\":" + AstraAccessibilityService.swipe(x1, y1, x2, y2, duration)
                 + ",\"action\":\"swipe\"}";

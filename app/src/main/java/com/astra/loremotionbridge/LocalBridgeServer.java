@@ -166,7 +166,13 @@ public class LocalBridgeServer {
                 return browserHandlers();
             }
 
-            if ("/control/open-browser".equals(p)) {
+            if ("/control/visual-tap".equals(p)) {
+            float x = Float.parseFloat(m.getOrDefault("x", "0"));
+            float y = Float.parseFloat(m.getOrDefault("y", "0"));
+            return BrowserController.visualTap(x, y);
+        }
+
+        if ("/control/open-browser".equals(p)) {
                 openBrowserChooser(m.getOrDefault("url","https://loremotion.com/generate/"));
                 return "{\"ok\":true,\"action\":\"open-browser\"}";
             }
