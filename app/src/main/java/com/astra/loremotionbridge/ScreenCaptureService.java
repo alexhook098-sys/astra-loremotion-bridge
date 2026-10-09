@@ -10,6 +10,7 @@ import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
 import android.media.Image;
 import android.media.ImageReader;
+import android.hardware.display.DisplayManager;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
 import android.os.Build;
@@ -129,7 +130,7 @@ public class ScreenCaptureService extends Service {
                 width,
                 height,
                 density,
-                0,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 imageReader.getSurface(),
                 null,
                 null
