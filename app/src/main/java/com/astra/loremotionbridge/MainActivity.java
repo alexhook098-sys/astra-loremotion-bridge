@@ -1,6 +1,7 @@
 package com.astra.loremotionbridge;
 
 import android.app.Activity;
+import android.media.projection.MediaProjectionManager;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
@@ -13,6 +14,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 public class MainActivity extends Activity {
+
+    private static final int SCREEN_CAPTURE_REQUEST = 9001;
 
     private TextView title;
 
@@ -107,6 +110,19 @@ public class MainActivity extends Activity {
 
         box.addView(start);
 
+        Button screen = new Button(this);
+        screen.setText("РАЗРЕШИТЬ ЗАХВАТ ЭКРАНА");
+        screen.setOnClickListener(v -> {
+            MediaProjectionManager manager =
+                    (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
+
+            startActivityForResult(
+                    manager.createScreenCaptureIntent(),
+                    SCREEN_CAPTURE_REQUEST
+            );
+        });
+        box.addView(screen);
+
         Button open = new Button(this);
         open.setText("ОТКРЫТЬ LOREMOTION В VIVALDI");
         open.setOnClickListener(v ->
@@ -117,5 +133,30 @@ public class MainActivity extends Activity {
         box.addView(open);
 
         setContentView(box);
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode != SCREEN_CAPTURE_REQUEST || resultCode != RESULT_OK || data == null) {
+            return;
+        }
+
+        Intent intent = new Intent(this, ScreenCaptureService.class);
+        intent.putExtra("resultCode", resultCode);
+        intent.putExtra("data", data);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent);
+        } else {
+            startService(intent);
+        }
+
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (ScreenCaptureService.instance != null) {
+                ScreenCaptureService.instance.startCapture(resultCode, data);
+                ScreenCaptureService.instance.activateForeground();
+            }
+        }, 500);
+    }
     }
 }

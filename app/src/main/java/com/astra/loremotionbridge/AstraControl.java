@@ -2,6 +2,17 @@ package com.astra.loremotionbridge;
 
 public final class AstraControl {
 
+    private static volatile android.graphics.Bitmap lastScreen;
+
+    public static void setLastScreen(android.graphics.Bitmap bitmap) {
+        android.graphics.Bitmap old = lastScreen;
+        lastScreen = bitmap;
+        if (old != null && old != bitmap && !old.isRecycled()) {
+            old.recycle();
+        }
+    }
+
+
     private AstraControl() {}
 
     public static String status() {
