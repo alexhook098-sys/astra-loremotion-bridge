@@ -171,13 +171,12 @@ public class LocalBridgeServer {
             try {
                 android.content.pm.PackageManager pm =
                         MainApplication.context().getPackageManager();
-                android.content.Intent launch = pm.getLaunchIntentForPackage(pkg);
-
-                if (launch == null) {
-                    return "{\"ok\":false,\"error\":\"no_launch_intent\",\"package\":\"" + esc(pkg) + "\"}";
-                }
-
+                android.content.Intent launch =
+                        new android.content.Intent(android.content.Intent.ACTION_MAIN);
+                launch.addCategory(android.content.Intent.CATEGORY_LAUNCHER);
+                launch.setPackage(pkg);
                 launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+
                 MainApplication.context().startActivity(launch);
 
                 return "{\"ok\":true,\"action\":\"launch-app\",\"package\":\"" + esc(pkg) + "\"}";
