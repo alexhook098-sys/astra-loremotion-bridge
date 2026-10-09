@@ -29,6 +29,7 @@ public class ScreenCaptureService extends Service {
     private MediaProjection projection;
     private MediaProjection.Callback projectionCallback;
     private ImageReader imageReader;
+    private android.hardware.display.VirtualDisplay virtualDisplay;
 
     private int width;
     private int height;
@@ -123,7 +124,7 @@ public class ScreenCaptureService extends Service {
                 null
         );
 
-        projection.createVirtualDisplay(
+        virtualDisplay = projection.createVirtualDisplay(
                 "ASTRA-Screen",
                 width,
                 height,
@@ -232,6 +233,11 @@ public class ScreenCaptureService extends Service {
         if (imageReader != null) {
             imageReader.close();
             imageReader = null;
+        }
+
+        if (virtualDisplay != null) {
+            virtualDisplay.release();
+            virtualDisplay = null;
         }
 
         if (projection != null) {
