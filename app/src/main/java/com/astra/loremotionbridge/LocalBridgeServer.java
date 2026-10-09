@@ -87,6 +87,12 @@ public class LocalBridgeServer {
                 }
             }
 
+            if ("/control/observe".equals(p)) {
+                return AstraControl.observe();
+            }
+            if ("/control/status".equals(p)) {
+                return AstraControl.status();
+            }
             if ("/health".equals(p)) {
                 return running ? "{\"ok\":true,\"service\":\"astra-browser-bridge\",\"port\":18765,\"running\":true}"
                         : "{\"ok\":false,\"service\":\"astra-browser-bridge\",\"port\":18765,\"running\":false,\"error\":\"" + esc(lastError) + "\"}";
