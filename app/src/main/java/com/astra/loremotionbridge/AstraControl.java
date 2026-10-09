@@ -19,6 +19,19 @@ public final class AstraControl {
         return "{\"ok\":true,\"layer\":\"astra-control\",\"version\":\"0.1\"}";
     }
 
+    public static String screenStatus() {
+        android.graphics.Bitmap screen = lastScreen;
+        boolean service = ScreenCaptureService.instance != null;
+        boolean frame = screen != null && !screen.isRecycled();
+
+        return "{\\"ok\\":true"
+                + ",\\"captureService\\":" + service
+                + ",\\"frameAvailable\\":" + frame
+                + ",\\"width\\":" + (frame ? screen.getWidth() : 0)
+                + ",\\"height\\":" + (frame ? screen.getHeight() : 0)
+                + "}";
+    }
+
     public static String tap(String query, float x, float y) {
         if (query != null && !query.isEmpty()) {
             String found = AstraAccessibilityService.clickInfo(query);
