@@ -166,7 +166,23 @@ public class LocalBridgeServer {
                 return browserHandlers();
             }
 
-            if ("/control/launch-app".equals(p)) {
+            if ("/control/open-chrome".equals(p)) {
+            String url = m.getOrDefault("url", "https://loremotion.com/generate/");
+            try {
+                android.content.Intent i =
+                        new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse(url));
+                i.setPackage("com.android.chrome");
+                i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                MainApplication.context().startActivity(i);
+
+                return "{\"ok\":true,\"action\":\"open-chrome\",\"url\":\"" + esc(url) + "\"}";
+            } catch (Exception e) {
+                return "{\"ok\":false,\"error\":\"" + esc(String.valueOf(e)) + "\"}";
+            }
+        }
+
+        if ("/control/launch-app".equals(p)) {
             String pkg = m.getOrDefault("package", "com.android.chrome");
             try {
                 android.content.pm.PackageManager pm =
