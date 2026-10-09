@@ -86,7 +86,14 @@ public class ScreenCaptureService extends Service {
         projectionCallback = new MediaProjection.Callback() {
             @Override
             public void onStop() {
-                cleanupCapture();
+                if (imageReader != null) {
+                    imageReader.close();
+                    imageReader = null;
+                }
+
+                projection = null;
+                projectionCallback = null;
+
                 stopSelf();
             }
         };

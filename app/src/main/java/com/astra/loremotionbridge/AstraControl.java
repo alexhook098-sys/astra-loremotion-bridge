@@ -24,11 +24,11 @@ public final class AstraControl {
         boolean service = ScreenCaptureService.instance != null;
         boolean frame = screen != null && !screen.isRecycled();
 
-        return "{\\"ok\\":true"
-                + ",\\"captureService\\":" + service
-                + ",\\"frameAvailable\\":" + frame
-                + ",\\"width\\":" + (frame ? screen.getWidth() : 0)
-                + ",\\"height\\":" + (frame ? screen.getHeight() : 0)
+        return "{\"ok\":true"
+                + ",\"captureService\":" + service
+                + ",\"frameAvailable\":" + frame
+                + ",\"width\":" + (frame ? screen.getWidth() : 0)
+                + ",\"height\":" + (frame ? screen.getHeight() : 0)
                 + "}";
     }
 
