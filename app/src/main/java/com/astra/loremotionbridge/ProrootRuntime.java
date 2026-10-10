@@ -161,18 +161,18 @@ public final class ProrootRuntime {
                     Files.deleteIfExists(target.toPath());
                     Files.createSymbolicLink(
                             target.toPath(),
-                            Paths.get(entry.linkName())
+                            Paths.get(entry.linkName)
                     );
                     continue;
                 }
 
                 if (entry.isHardLink()) {
-                    File source = new File(temp, entry.linkName());
+                    File source = new File(temp, entry.linkName);
 
                     if (!source.exists()) {
                         throw new IOException(
                                 "Hardlink target missing: " +
-                                entry.linkName()
+                                entry.linkName
                         );
                     }
 
@@ -194,9 +194,10 @@ public final class ProrootRuntime {
                     }
                 }
 
-                if ((entry.mode() & 0100) != 0) {
-                    target.setExecutable(true, false);
-                }
+                int mode = entry.mode();
+                target.setReadable((mode & 0444) != 0, false);
+                target.setWritable((mode & 0222) != 0, false);
+                target.setExecutable((mode & 0111) != 0, false);
             }
         }
 
@@ -339,8 +340,7 @@ public final class ProrootRuntime {
 
             remaining = e.size;
 
-            long blocks = (e.size + 511) / 512;
-            padding = blocks * 512;
+            padding = (512 - (e.size % 512)) % 512;
 
             return e;
         }
