@@ -61,7 +61,7 @@ public class MainActivity extends Activity {
 
                 title.setText(
                         "ASTRA Browser Control\n\n" +
-                        "Proroot libs: " + (ProrootRuntime.checkLibraries(this) ? "OK ✓" : "MISSING ✗") + "\n\n" +
+                        "Native libs: " + getApplicationInfo().nativeLibraryDir + "\n\n" +
                         "127.0.0.1:18765"
                 );
 
