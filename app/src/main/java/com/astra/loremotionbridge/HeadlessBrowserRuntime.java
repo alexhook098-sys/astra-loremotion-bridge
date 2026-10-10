@@ -368,7 +368,8 @@ public final class HeadlessBrowserRuntime {
                 "export HOME=/root; export XDG_CONFIG_HOME=/root/.config; export XDG_CACHE_HOME=/root/.cache; export TMPDIR=/tmp; " +
                 "mkdir -p /root/.astra/loremotion-profile /root/.config /root/.cache /tmp; " +
                 "exec " + CHROME_EXECUTABLE +
-                " --headless --no-sandbox --disable-gpu --disable-dev-shm-usage" +
+                " --headless --no-sandbox --disable-dev-shm-usage" +
+                " --use-gl=angle --use-angle=swiftshader-webgl --enable-unsafe-swiftshader" +
                 " --disable-crash-reporter --disable-breakpad --disable-background-networking" +
                 " --disable-default-apps --no-first-run --no-default-browser-check" +
                 " --password-store=basic --use-mock-keychain" +
