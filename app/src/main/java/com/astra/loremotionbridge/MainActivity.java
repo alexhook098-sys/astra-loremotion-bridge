@@ -61,10 +61,14 @@ public class MainActivity extends Activity {
 
                 ProrootRuntime.prepare(this);
 
+                String prorootTest = runProrootTest();
+
                 title.setText(
                         "ASTRA Browser Control\n\n" +
                         "Proroot extracted: " +
                         (ProrootRuntime.checkExtracted(this) ? "OK ✓" : "FAILED ✗") +
+                        "\n\n" +
+                        "Proroot test: " + prorootTest +
                         "\n\n" +
                         "127.0.0.1:18765"
                 );
@@ -161,6 +165,43 @@ public class MainActivity extends Activity {
             return found + "/5";
         } catch (Exception e) {
             return "ERROR " + e.getClass().getSimpleName();
+        }
+    }
+
+    private String runProrootTest() {
+        try {
+            Process process = new ProcessBuilder(
+                    ProrootRuntime.prorootExecutable(this).getAbsolutePath()
+            )
+                    .redirectErrorStream(true)
+                    .start();
+
+            java.io.ByteArrayOutputStream out =
+                    new java.io.ByteArrayOutputStream();
+
+            java.io.InputStream in = process.getInputStream();
+            byte[] buffer = new byte[4096];
+            int n;
+
+            while ((n = in.read(buffer)) != -1) {
+                out.write(buffer, 0, n);
+                if (out.size() > 2000) break;
+            }
+
+            int exit = process.waitFor();
+
+            String text = out.toString("UTF-8")
+                    .replace("\n", " ")
+                    .trim();
+
+            if (text.length() > 120) {
+                text = text.substring(0, 120);
+            }
+
+            return "exit=" + exit + " " + text;
+        } catch (Exception e) {
+            return "ERROR " + e.getClass().getSimpleName() +
+                    ": " + e.getMessage();
         }
     }
 
