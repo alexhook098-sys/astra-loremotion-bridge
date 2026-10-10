@@ -186,7 +186,7 @@ public class MainActivity extends Activity {
                     "-w", "/root",
                     "/bin/sh",
                     "-c",
-                    "echo PROROOT_OK; id; cat /etc/os-release | head -5; echo APT_DEBUG_START; apt-get update 2>&1; echo APT_EXIT=$?"
+                    "echo PROROOT_OK; id; cat /etc/os-release | head -5; echo APT_INSTALL_DEBUG_START; apt-get update >/tmp/apt-update.log 2>&1; u=$?; echo APT_UPDATE_EXIT=$u; apt-get install -y chromium >/tmp/apt-install.log 2>&1; i=$?; echo APT_INSTALL_EXIT=$i; tail -30 /tmp/apt-install.log"
             ).redirectErrorStream(true).start();
 
             java.io.ByteArrayOutputStream out =
