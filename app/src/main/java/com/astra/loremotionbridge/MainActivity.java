@@ -61,7 +61,7 @@ public class MainActivity extends Activity {
 
                 title.setText(
                         "ASTRA Browser Control\n\n" +
-                        "Native libs: " + getApplicationInfo().nativeLibraryDir + "\n\n" +
+                        "Native libs: " + getApplicationInfo().nativeLibraryDir + "\n\n" + "FILES: " + java.util.Arrays.toString(new java.io.File(getApplicationInfo().nativeLibraryDir).list()) + "\n\n" +
                         "127.0.0.1:18765"
                 );
 
