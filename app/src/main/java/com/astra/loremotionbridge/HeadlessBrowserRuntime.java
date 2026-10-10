@@ -369,7 +369,7 @@ public final class HeadlessBrowserRuntime {
                 "mkdir -p /root/.astra/loremotion-profile /root/.config /root/.cache /tmp; " +
                 "exec " + CHROME_EXECUTABLE +
                 " --headless --no-sandbox --disable-dev-shm-usage" +
-                " --disable-gpu --disable-gpu-compositing" +
+                " --use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader" +
                 " --disable-crash-reporter --disable-breakpad --disable-background-networking" +
                 " --disable-default-apps --no-first-run --no-default-browser-check" +
                 " --password-store=basic --use-mock-keychain" +
