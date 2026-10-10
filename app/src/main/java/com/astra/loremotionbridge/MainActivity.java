@@ -171,7 +171,7 @@ public class MainActivity extends Activity {
     private String runProrootTest() {
         try {
             Process process = new ProcessBuilder(
-                    ProrootRuntime.prorootExecutable(this).getAbsolutePath()
+                    new java.io.File(getApplicationInfo().nativeLibraryDir, "libproroot.so").getAbsolutePath()
             )
                     .redirectErrorStream(true)
                     .start();
