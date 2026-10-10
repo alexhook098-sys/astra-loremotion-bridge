@@ -186,7 +186,7 @@ public class MainActivity extends Activity {
                     "-w", "/root",
                     "/bin/sh",
                     "-c",
-                    "echo PROROOT_OK; id; cat /etc/os-release | head -5; echo APT_INSTALL_DEBUG_START; apt-get update >/tmp/apt-update.log 2>&1; u=$?; echo APT_UPDATE_EXIT=$u; apt-get install -y chromium >/tmp/apt-install.log 2>&1; i=$?; echo APT_INSTALL_EXIT=$i; tail -30 /tmp/apt-install.log"
+                    "echo PROROOT_OK; id; cat /etc/os-release | head -5; echo ENABLE_UNIVERSE; sed -i 's/^Components: main/Components: main universe/' /etc/apt/sources.list.d/ubuntu.sources; apt-get update >/tmp/apt-update.log 2>&1; u=$?; echo APT_UPDATE_EXIT=$u; echo CHROMIUM_POLICY; apt-cache policy chromium; echo CHROMIUM_SEARCH; apt-cache search ^chromium$"
             ).redirectErrorStream(true).start();
 
             java.io.ByteArrayOutputStream out =
