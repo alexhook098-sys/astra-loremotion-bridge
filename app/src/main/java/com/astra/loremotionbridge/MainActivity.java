@@ -60,8 +60,8 @@ public class MainActivity extends Activity {
                 }
 
                 title.setText(
-                        "ASTRA Browser Control\n\n" +
-                        "Native libs: " + getApplicationInfo().nativeLibraryDir + "\n\n" + "FILES: " + java.util.Arrays.toString(new java.io.File(getApplicationInfo().nativeLibraryDir).list()) + "\n\n" +
+                        "APK: " + getApplicationInfo().sourceDir + "\n\n" +
+                        "Proroot in APK: " + hasProrootInApk() + "\n\n" +
                         "127.0.0.1:18765"
                 );
 
@@ -133,6 +133,31 @@ public class MainActivity extends Activity {
         box.addView(open);
 
         setContentView(box);
+    }
+
+    private String hasProrootInApk() {
+        try {
+            java.util.zip.ZipFile zip =
+                    new java.util.zip.ZipFile(getApplicationInfo().sourceDir);
+
+            String[] names = {
+                    "lib/arm64-v8a/libproroot.so",
+                    "lib/arm64-v8a/libproroot-runtime.so",
+                    "lib/arm64-v8a/libproroot-linker.so",
+                    "lib/arm64-v8a/libproroot-bridge.so",
+                    "lib/arm64-v8a/libproroot-stub-loader.so"
+            };
+
+            int found = 0;
+            for (String name : names) {
+                if (zip.getEntry(name) != null) found++;
+            }
+
+            zip.close();
+            return found + "/5";
+        } catch (Exception e) {
+            return "ERROR " + e.getClass().getSimpleName();
+        }
     }
 
     @Override
