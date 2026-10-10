@@ -334,9 +334,16 @@ public final class HeadlessBrowserRuntime {
                 "if [ \"$INDEX_COUNT\" -lt 1 ] || [ \"$PACKAGE_CHECK\" -eq 0 ]; then echo ASTRA_APT_INDEX_OR_CANDIDATE_CHECK_FAILED; exit 40; fi; " +
                 "fi; " +
                 "apt-cache policy ca-certificates curl unzip libnss3 libgbm1 libgtk-3-0t64; " +
+                "echo ASTRA_CHECK_ALL_PACKAGE_CANDIDATES; MISSING=0; for p in " + packages + "; do " +
+                "if ! apt-cache show \"$p\" >/dev/null 2>&1; then echo ASTRA_PACKAGE_UNAVAILABLE=$p; MISSING=1; fi; done; " +
+                "if [ \"$MISSING\" -ne 0 ]; then echo ASTRA_REQUIRED_PACKAGE_CANDIDATE_MISSING; exit 41; fi; " +
+                "echo ASTRA_PREPARE_PROOT_DPKG; " +
+                "mkdir -p /usr/sbin; if [ ! -e /usr/sbin/policy-rc.d ]; then printf '#!/bin/sh\\nexit 101\\n' > /usr/sbin/policy-rc.d; chmod 755 /usr/sbin/policy-rc.d; fi; " +
+                "dpkg --configure -a >/tmp/astra-dpkg-configure.log 2>&1 || { echo ASTRA_DPKG_CONFIGURE_WARNING; cat /tmp/astra-dpkg-configure.log; }; " +
+                "apt-get -f install -y --no-install-recommends >/tmp/astra-apt-fix.log 2>&1 || { echo ASTRA_APT_REPAIR_FAILED; cat /tmp/astra-apt-fix.log; exit 44; }; " +
                 "echo ASTRA_CHROME_DEPENDENCY_INSTALL_START; " +
                 "apt-get install -y --no-install-recommends " + packages + " >/tmp/astra-apt-install.log 2>&1 " +
-                "|| { echo ASTRA_APT_INSTALL_FAILED; cat /tmp/astra-apt-install.log; exit 42; }; " +
+                "|| { echo ASTRA_APT_INSTALL_FAILED; cat /tmp/astra-apt-install.log; echo ASTRA_DPKG_LOG_TAIL; tail -n 100 /var/log/dpkg.log 2>&1; exit 42; }; " +
                 "cat /tmp/astra-apt-install.log; " +
                 "ldd " + CHROME_EXECUTABLE + " >/tmp/astra-chrome-ldd.log 2>&1 || true; cat /tmp/astra-chrome-ldd.log; " +
                 "if grep -q 'not found' /tmp/astra-chrome-ldd.log; then echo ASTRA_CHROME_HAS_MISSING_SHARED_LIBRARIES; exit 43; fi; " +
@@ -467,6 +474,14 @@ public final class HeadlessBrowserRuntime {
 
     public static String getSummary() {
         return state + "\n" + detail + "\nLocal API: 127.0.0.1:18765\nCDP: 127.0.0.1:" + CDP_PORT;
+    }
+
+    /** Read the persistent log directly so diagnostics still work if the local HTTP service stopped. */
+    public static String getLogText() {
+        Context c = appContext;
+        if (c == null) c = MainApplication.context();
+        if (c == null) return "Runtime has not started.";
+        return readTail(new File(ProrootRuntime.rootDir(c), "headless-runtime.log"), 18000);
     }
 
     public static String statusJson() {

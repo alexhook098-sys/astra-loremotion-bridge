@@ -1,12 +1,15 @@
 package com.astra.loremotionbridge;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
+import android.view.ViewGroup;
+import android.widget.ScrollView;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -55,6 +58,34 @@ public class MainActivity extends Activity {
             handler.post(statusPoll);
         });
         layout.addView(start);
+
+        Button showLog = new Button(this);
+        showLog.setText("ПОКАЗАТЬ ЖУРНАЛ ОШИБОК");
+        showLog.setOnClickListener(v -> {
+            TextView logText = new TextView(this);
+            logText.setText(HeadlessBrowserRuntime.getLogText());
+            logText.setTextIsSelectable(true);
+            logText.setTextSize(12);
+            logText.setPadding(24, 16, 24, 16);
+            ScrollView scroll = new ScrollView(this);
+            scroll.addView(logText, new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT));
+            new AlertDialog.Builder(this)
+                    .setTitle("ASTRA — журнал запуска")
+                    .setView(scroll)
+                    .setPositiveButton("ЗАКРЫТЬ", null)
+                    .setNeutralButton("КОПИРОВАТЬ", (dialog, which) -> {
+                        android.content.ClipboardManager clipboard =
+                                (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                        if (clipboard != null) {
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText(
+                                    "ASTRA runtime log", HeadlessBrowserRuntime.getLogText()));
+                        }
+                    })
+                    .show();
+        });
+        layout.addView(showLog);
 
         Button refresh = new Button(this);
         refresh.setText("ОБНОВИТЬ СТАТУС");
