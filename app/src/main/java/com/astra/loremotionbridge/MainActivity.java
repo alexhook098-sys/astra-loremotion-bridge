@@ -61,7 +61,7 @@ public class MainActivity extends Activity {
 
                 title.setText(
                         "ASTRA Browser Control\n\n" +
-                        "ПРОВЕРКА Browser Bridge...\n\n" +
+                        "Proroot libs: " + (ProrootRuntime.checkLibraries(this) ? "OK ✓" : "MISSING ✗") + "\n\n" +
                         "127.0.0.1:18765"
                 );
 
