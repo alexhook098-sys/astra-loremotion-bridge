@@ -376,7 +376,7 @@ public final class HeadlessBrowserRuntime {
                 " --remote-debugging-address=127.0.0.1 --remote-debugging-port=" + CDP_PORT +
                 " --remote-allow-origins='*'" +
                 " --user-data-dir=/root/.astra/loremotion-profile" +
-                " --window-size=1280,720 about:blank";
+                " --window-size=1280,720 https://loremotion.com/generate/";
         Process p = new ProcessBuilder(
                 proroot.getAbsolutePath(),
                 "-r", rootfs.getAbsolutePath(),
