@@ -19,6 +19,7 @@
         android:theme="@style/AppTheme"
         android:label="ASTRA Browser Control"
         android:allowBackup="false"
+        android:usesCleartextTraffic="true"
         android:supportsRtl="true">
 
         <activity
