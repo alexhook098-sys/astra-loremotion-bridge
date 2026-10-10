@@ -186,7 +186,7 @@ public class MainActivity extends Activity {
                     "-w", "/root",
                     "/bin/sh",
                     "-c",
-                    "echo PROROOT_OK; id; cat /etc/os-release | head -5"
+                    "echo PROROOT_OK; id; cat /etc/os-release | head -5; echo APT_UPDATE_START; apt-get update"
             ).redirectErrorStream(true).start();
 
             java.io.ByteArrayOutputStream out =
