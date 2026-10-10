@@ -435,7 +435,8 @@ public final class HeadlessBrowserRuntime {
             }
             String version = new String(out.toByteArray(), StandardCharsets.UTF_8);
             return version.contains("HeadlessChrome/");
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            appendLog("CDP CHECK ERROR: " + e.getClass().getName() + ": " + safe(e.getMessage()));
             return false;
         } finally {
             if (connection != null) connection.disconnect();
