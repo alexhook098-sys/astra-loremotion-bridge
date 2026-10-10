@@ -1,6 +1,9 @@
 package com.astra.loremotionbridge;
 
 import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.LinkProperties;
+import android.net.Network;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
@@ -83,6 +86,7 @@ public final class HeadlessBrowserRuntime {
             ProrootRuntime.prepare(context);
             ProrootRuntime.extractRootfs(context);
             File rootfs = ProrootRuntime.rootfsDir(context);
+            prepareRootfsDns(context, rootfs);
 
             File executable = new File(rootfs, CHROME_EXECUTABLE.substring(1));
             if (!executable.isFile() || executable.length() < 10_000_000L) {
@@ -233,8 +237,66 @@ public final class HeadlessBrowserRuntime {
         if (!archive.delete()) appendLog("Warning: could not delete Chrome ZIP archive; it can be removed to free space.");
     }
 
+    /** Write usable DNS servers into the Ubuntu rootfs before running apt.
+     * The Android app has working networking, but a fresh Ubuntu Base rootfs can
+     * contain an empty or dangling /etc/resolv.conf symlink. */
+    private static void prepareRootfsDns(Context context, File rootfs) throws IOException {
+        File etc = new File(rootfs, "etc");
+        if (!etc.isDirectory() && !etc.mkdirs()) {
+            throw new IOException("Cannot create Ubuntu /etc for DNS resolver.");
+        }
+        File resolv = new File(etc, "resolv.conf");
+        try {
+            if (java.nio.file.Files.isSymbolicLink(resolv.toPath())) {
+                java.nio.file.Files.deleteIfExists(resolv.toPath());
+                appendLog("Removed Ubuntu /etc/resolv.conf symlink so ASTRA can provide the Android DNS configuration.");
+            }
+        } catch (Exception e) {
+            throw new IOException("Cannot replace Ubuntu /etc/resolv.conf: " + safe(e.getMessage()), e);
+        }
+
+        java.util.LinkedHashSet<String> servers = new java.util.LinkedHashSet<>();
+        try {
+            ConnectivityManager manager = (ConnectivityManager)
+                    context.getSystemService(Context.CONNECTIVITY_SERVICE);
+            Network active = manager == null ? null : manager.getActiveNetwork();
+            LinkProperties properties = manager == null || active == null
+                    ? null : manager.getLinkProperties(active);
+            if (properties != null && properties.getDnsServers() != null) {
+                for (java.net.InetAddress dns : properties.getDnsServers()) {
+                    if (dns == null || dns.isAnyLocalAddress() || dns.isLoopbackAddress()
+                            || dns.isLinkLocalAddress()) continue;
+                    String address = dns.getHostAddress();
+                    if (address != null && !address.isEmpty() && !address.contains("%")) {
+                        servers.add(address);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            appendLog("Could not read Android network DNS settings: " + e.getClass().getSimpleName()
+                    + "; using public DNS fallbacks.");
+        }
+        // Keep public fallbacks after Android's current-network resolvers.
+        servers.add("1.1.1.1");
+        servers.add("8.8.8.8");
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(resolv, false))) {
+            writer.write("# Managed by ASTRA; generated from Android network DNS.\n");
+            writer.write("options timeout:2 attempts:2 rotate\n");
+            for (String server : servers) {
+                writer.write("nameserver ");
+                writer.write(server);
+                writer.write('\n');
+            }
+        }
+        if (!resolv.isFile() || resolv.length() < 1L) {
+            throw new IOException("Ubuntu /etc/resolv.conf was not created.");
+        }
+        appendLog("Ubuntu DNS resolver configured with " + servers.size()
+                + " nameserver entries (Android network DNS first, public fallbacks after).");
+    }
+
     private static void installRuntimeDependencies(Context context) throws Exception {
-        File rootfs = ProrootRuntime.rootfsDir(context);
         String packages = "libnss3 libnspr4 libglib2.0-0t64 libdbus-1-3 " +
                 "libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 " +
                 "libcups2t64 libdrm2 libxkbcommon0 libx11-6 libx11-xcb1 libxcb1 " +
@@ -243,34 +305,49 @@ public final class HeadlessBrowserRuntime {
                 "libasound2t64 libgtk-3-0t64 libxrender1 libxi6 libxtst6 libxcursor1 " +
                 "libxss1 libegl1 libgles2 libgl1 libvulkan1 libpci3 libudev1 fonts-liberation";
         String script =
-                "export DEBIAN_FRONTEND=noninteractive; " +
+                "set -u; export DEBIAN_FRONTEND=noninteractive; " +
+                "echo ASTRA_DNS_RESOLV_CONF; cat /etc/resolv.conf 2>&1; " +
+                "echo ASTRA_DNS_PROBE_PORTS_UBUNTU; " +
+                "if ! getent hosts ports.ubuntu.com; then echo ASTRA_DNS_RESOLUTION_FAILED; exit 39; fi; " +
+                "echo ASTRA_DNS_RESOLUTION_OK; " +
                 "apt-get clean >/dev/null 2>&1 || true; " +
                 "rm -rf /var/lib/apt/lists/*; mkdir -p /var/lib/apt/lists/partial; chmod 755 /var/lib/apt/lists /var/lib/apt/lists/partial; " +
-                "sed -i 's|http://ports.ubuntu.com/ubuntu-ports/|https://ports.ubuntu.com/ubuntu-ports/|g' /etc/apt/sources.list.d/ubuntu.sources; " +
-                "apt-get -o Acquire::https::Verify-Peer=false -o Acquire::https::Verify-Host=false -o Acquire::ForceIPv4=true -o Acquire::Retries=2 -o Acquire::https::Timeout=25 update >/tmp/astra-apt-update-https.log 2>&1; H=$?; cat /tmp/astra-apt-update-https.log; " +
-                "INDEX_COUNT=$(find /var/lib/apt/lists -type f -name '*Packages*' ! -path '*/partial/*' | wc -l); PACKAGE_CHECK=1; " +
-                "apt-cache show ca-certificates >/dev/null 2>&1 || PACKAGE_CHECK=0; apt-cache show curl >/dev/null 2>&1 || PACKAGE_CHECK=0; apt-cache show unzip >/dev/null 2>&1 || PACKAGE_CHECK=0; " +
-                "echo APT_PACKAGE_INDEX_COUNT_HTTPS=$INDEX_COUNT PACKAGE_CANDIDATES_HTTPS=$PACKAGE_CHECK; " +
-                "if [ $H -ne 0 ] || [ \"$INDEX_COUNT\" -lt 1 ] || [ $PACKAGE_CHECK -eq 0 ]; then " +
-                "echo APT_HTTPS_INDEXES_INCOMPLETE_TRYING_HTTP; " +
+                // Use Ubuntu's standard HTTP mirror. apt still verifies signed InRelease/Release metadata;
+                // this avoids disabling TLS checks in a minimal rootfs without installed CA certificates.
                 "sed -i 's|https://ports.ubuntu.com/ubuntu-ports/|http://ports.ubuntu.com/ubuntu-ports/|g' /etc/apt/sources.list.d/ubuntu.sources; " +
+                "sed -i 's|http://ports.ubuntu.com/ubuntu-ports/|http://ports.ubuntu.com/ubuntu-ports/|g' /etc/apt/sources.list.d/ubuntu.sources; " +
+                "echo ASTRA_APT_UPDATE_HTTP_START; " +
+                "apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update >/tmp/astra-apt-update-http.log 2>&1; U=$?; cat /tmp/astra-apt-update-http.log; " +
+                "INDEX_COUNT=$(find /var/lib/apt/lists -type f -name '*Packages*' ! -path '*/partial/*' | wc -l); " +
+                "PACKAGE_CHECK=1; for p in ca-certificates curl unzip libnss3 libgbm1 libgtk-3-0t64; do " +
+                "if ! apt-cache show \"$p\" >/dev/null 2>&1; then PACKAGE_CHECK=0; echo ASTRA_MISSING_PACKAGE_CANDIDATE=$p; fi; done; " +
+                "echo ASTRA_APT_HTTP_RESULT=exit:$U indexes:$INDEX_COUNT candidates:$PACKAGE_CHECK; " +
+                "if [ \"$INDEX_COUNT\" -lt 1 ] || [ \"$PACKAGE_CHECK\" -eq 0 ]; then " +
+                "echo ASTRA_APT_HTTP_INCOMPLETE_TRYING_HTTPS_WITH_DEFAULT_CERTIFICATE_VALIDATION; " +
+                "sed -i 's|http://ports.ubuntu.com/ubuntu-ports/|https://ports.ubuntu.com/ubuntu-ports/|g' /etc/apt/sources.list.d/ubuntu.sources; " +
                 "rm -rf /var/lib/apt/lists/*; mkdir -p /var/lib/apt/lists/partial; chmod 755 /var/lib/apt/lists /var/lib/apt/lists/partial; " +
-                "apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=2 -o Acquire::http::Timeout=25 update >/tmp/astra-apt-update-http.log 2>&1; U=$?; cat /tmp/astra-apt-update-http.log; " +
-                "INDEX_COUNT=$(find /var/lib/apt/lists -type f -name '*Packages*' ! -path '*/partial/*' | wc -l); PACKAGE_CHECK=1; " +
-                "apt-cache show ca-certificates >/dev/null 2>&1 || PACKAGE_CHECK=0; apt-cache show curl >/dev/null 2>&1 || PACKAGE_CHECK=0; apt-cache show unzip >/dev/null 2>&1 || PACKAGE_CHECK=0; " +
-                "echo APT_PACKAGE_INDEX_COUNT_HTTP=$INDEX_COUNT PACKAGE_CANDIDATES_HTTP=$PACKAGE_CHECK; " +
-                "if [ $U -ne 0 ] || [ \"$INDEX_COUNT\" -lt 1 ] || [ $PACKAGE_CHECK -eq 0 ]; then echo APT_INDEX_FETCH_FAILED_HTTPS_AND_HTTP; exit 40; fi; " +
+                "apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=3 -o Acquire::https::Timeout=30 update >/tmp/astra-apt-update-https.log 2>&1; H=$?; cat /tmp/astra-apt-update-https.log; " +
+                "INDEX_COUNT=$(find /var/lib/apt/lists -type f -name '*Packages*' ! -path '*/partial/*' | wc -l); " +
+                "PACKAGE_CHECK=1; for p in ca-certificates curl unzip libnss3 libgbm1 libgtk-3-0t64; do " +
+                "if ! apt-cache show \"$p\" >/dev/null 2>&1; then PACKAGE_CHECK=0; echo ASTRA_MISSING_PACKAGE_CANDIDATE_HTTPS=$p; fi; done; " +
+                "echo ASTRA_APT_HTTPS_RESULT=exit:$H indexes:$INDEX_COUNT candidates:$PACKAGE_CHECK; " +
+                "if [ \"$INDEX_COUNT\" -lt 1 ] || [ \"$PACKAGE_CHECK\" -eq 0 ]; then echo ASTRA_APT_INDEX_OR_CANDIDATE_CHECK_FAILED; exit 40; fi; " +
                 "fi; " +
-                "apt-cache policy ca-certificates curl unzip libnss3 libgbm1; " +
+                "apt-cache policy ca-certificates curl unzip libnss3 libgbm1 libgtk-3-0t64; " +
+                "echo ASTRA_CHROME_DEPENDENCY_INSTALL_START; " +
                 "apt-get install -y --no-install-recommends " + packages + " >/tmp/astra-apt-install.log 2>&1 " +
-                "|| { echo APT_INSTALL_FAILED; cat /tmp/astra-apt-install.log; exit 42; }; " +
+                "|| { echo ASTRA_APT_INSTALL_FAILED; cat /tmp/astra-apt-install.log; exit 42; }; " +
                 "cat /tmp/astra-apt-install.log; " +
                 "ldd " + CHROME_EXECUTABLE + " >/tmp/astra-chrome-ldd.log 2>&1 || true; cat /tmp/astra-chrome-ldd.log; " +
-                "if grep -q 'not found' /tmp/astra-chrome-ldd.log; then echo CHROME_HAS_MISSING_SHARED_LIBRARIES; exit 43; fi; " +
+                "if grep -q 'not found' /tmp/astra-chrome-ldd.log; then echo ASTRA_CHROME_HAS_MISSING_SHARED_LIBRARIES; exit 43; fi; " +
                 "apt-get clean >/dev/null 2>&1 || true; rm -rf /var/lib/apt/lists/*; mkdir -p /var/lib/apt/lists/partial; " +
                 "mkdir -p /opt/chrome; touch /opt/chrome/.astra_deps_ready; echo CHROME_DEPENDENCIES_OK";
-        int exit = runProotScript(context, "Ubuntu APT + Chrome dependency setup", script);
-        if (exit != 0) throw new IOException("Ubuntu dependency setup failed (exit=" + exit + "). Read http://127.0.0.1:18765/headless/log before changing code.");
+        int exit = runProotScript(context, "Ubuntu DNS + APT + Chrome dependency setup", script);
+        if (exit != 0) {
+            String reason = exit == 39 ? "Ubuntu could not resolve ports.ubuntu.com even after ASTRA wrote resolv.conf" :
+                    "Ubuntu DNS/Chrome dependency setup failed (exit=" + exit + ")";
+            throw new IOException(reason + ". Read http://127.0.0.1:18765/headless/log.");
+        }
     }
 
     private static void launchChrome(Context context) throws Exception {

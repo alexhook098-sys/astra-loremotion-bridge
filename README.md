@@ -20,6 +20,12 @@ curl -sS http://127.0.0.1:9222/json/version
 
 `/headless/log` exposes the full tail of the runtime log so startup failures can be diagnosed from Termux without relying on the Android status card, which can truncate long output.
 
+## Rootfs DNS and package setup
+
+Before Ubuntu's package manager runs, ASTRA replaces a dangling rootfs `/etc/resolv.conf` with DNS servers read from Android's active network, followed by public fallback resolvers. The runtime confirms that `ports.ubuntu.com` resolves before downloading package indexes. Ubuntu APT keeps its normal repository signature validation; HTTPS verification is not disabled.
+
+If setup fails, retrieve the complete log from Termux with `curl -sS http://127.0.0.1:18765/headless/log`. The downloaded Chrome archive and extracted binary remain in app-private storage, so retrying setup does not download Chrome again when its extracted executable is intact.
+
 ## Persistent profile and sign-in
 
 Chrome stores its profile inside the app's private Ubuntu rootfs at `/root/.astra/loremotion-profile`. The profile is reused on subsequent starts and is separate from Vivaldi; the app does not copy Vivaldi/Google cookies or store account passwords. Sign in to LoreMotion in this headless profile once through ASTRA's CDP-connected Browser Worker. The website session can persist between restarts as long as the app data is not cleared or the app is uninstalled. If the provider forces a new login or blocks headless sign-in, that must be completed through an approved interactive login flow; do not send passwords to ChatGPT.
