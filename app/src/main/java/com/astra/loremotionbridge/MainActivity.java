@@ -59,9 +59,13 @@ public class MainActivity extends Activity {
                     startService(intent);
                 }
 
+                ProrootRuntime.prepare(this);
+
                 title.setText(
-                        "APK: " + getApplicationInfo().sourceDir + "\n\n" +
-                        "Proroot in APK: " + hasProrootInApk() + "\n\n" +
+                        "ASTRA Browser Control\n\n" +
+                        "Proroot extracted: " +
+                        (ProrootRuntime.checkExtracted(this) ? "OK ✓" : "FAILED ✗") +
+                        "\n\n" +
                         "127.0.0.1:18765"
                 );
 
