@@ -339,6 +339,8 @@ public final class HeadlessBrowserRuntime {
                 "if [ \"$MISSING\" -ne 0 ]; then echo ASTRA_REQUIRED_PACKAGE_CANDIDATE_MISSING; exit 41; fi; " +
                 "echo ASTRA_PREPARE_PROOT_DPKG; " +
                 "mkdir -p /usr/sbin; if [ ! -e /usr/sbin/policy-rc.d ]; then printf '#!/bin/sh\\nexit 101\\n' > /usr/sbin/policy-rc.d; chmod 755 /usr/sbin/policy-rc.d; fi; " +
+                "echo ASTRA_CLEAN_DPKG_PAXHEADERS; " +
+                "if [ -d /etc/dpkg/dpkg.cfg.d ]; then find /etc/dpkg/dpkg.cfg.d -maxdepth 1 -type d -name 'PaxHeaders*' -print -exec rm -rf {} +; fi; " +
                 "dpkg --configure -a >/tmp/astra-dpkg-configure.log 2>&1 || { echo ASTRA_DPKG_CONFIGURE_WARNING; cat /tmp/astra-dpkg-configure.log; }; " +
                 "apt-get -f install -y --no-install-recommends >/tmp/astra-apt-fix.log 2>&1 || { echo ASTRA_APT_REPAIR_FAILED; cat /tmp/astra-apt-fix.log; exit 44; }; " +
                 "echo ASTRA_CHROME_DEPENDENCY_INSTALL_START; " +
