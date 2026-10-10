@@ -60,6 +60,7 @@ public class MainActivity extends Activity {
                 }
 
                 ProrootRuntime.prepare(this);
+                ProrootRuntime.extractRootfs(this);
 
                 String prorootTest = runProrootTest();
 
