@@ -11,102 +11,49 @@ import android.os.IBinder;
 import android.util.Log;
 
 public class BrowserBridgeService extends Service {
-
     private static final String TAG = "ASTRA-BrowserBridge";
     private static final String CHANNEL_ID = "astra_browser_bridge";
     private static final int NOTIFICATION_ID = 18765;
 
-    @Override
-    public void onCreate() {
+    @Override public void onCreate() {
         super.onCreate();
-
         createNotificationChannel();
-
-        Notification notification =
-                new Notification.Builder(this, CHANNEL_ID)
-                        .setContentTitle("ASTRA Browser Agent")
-                        .setContentText("Browser Bridge работает на порту 18765")
-                        .setSmallIcon(android.R.drawable.ic_menu_view)
-                        .setOngoing(true)
-                        .build();
-
+        Notification notification = new Notification.Builder(this, CHANNEL_ID)
+                .setContentTitle("ASTRA Headless Browser")
+                .setContentText("Headless Chrome / CDP :9222")
+                .setSmallIcon(android.R.drawable.ic_menu_view)
+                .setOngoing(true)
+                .build();
         try {
-
-            if (Build.VERSION.SDK_INT >=
-                    Build.VERSION_CODES.Q) {
-
-                startForeground(
-                        NOTIFICATION_ID,
-                        notification,
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-                );
-
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
             } else {
-
-                startForeground(
-                        NOTIFICATION_ID,
-                        notification
-                );
+                startForeground(NOTIFICATION_ID, notification);
             }
-
-            Log.i(TAG, "Foreground service started");
-
             LocalBridgeServer.start();
-
-            Log.i(TAG, "LocalBridgeServer.start() called");
-
+            HeadlessBrowserRuntime.startAsync(this);
+            Log.i(TAG, "Bridge and headless runtime requested");
         } catch (Exception e) {
-
-            Log.e(
-                    TAG,
-                    "FAILED TO START BROWSER BRIDGE",
-                    e
-            );
-
+            Log.e(TAG, "FAILED TO START BROWSER BRIDGE", e);
             stopSelf();
         }
     }
 
-    @Override
-    public int onStartCommand(
-            Intent intent,
-            int flags,
-            int startId
-    ) {
-
+    @Override public int onStartCommand(Intent intent, int flags, int startId) {
         LocalBridgeServer.start();
-
+        HeadlessBrowserRuntime.startAsync(this);
         return START_STICKY;
     }
 
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
-    }
+    @Override public IBinder onBind(Intent intent) { return null; }
 
     private void createNotificationChannel() {
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-
-            NotificationChannel channel =
-                    new NotificationChannel(
-                            CHANNEL_ID,
-                            "ASTRA Browser Agent",
-                            NotificationManager.IMPORTANCE_LOW
-                    );
-
-            channel.setDescription(
-                    "Local browser automation bridge"
-            );
-
-            NotificationManager manager =
-                    getSystemService(
-                            NotificationManager.class
-                    );
-
-            if (manager != null) {
-                manager.createNotificationChannel(channel);
-            }
-        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+        NotificationChannel channel = new NotificationChannel(
+                CHANNEL_ID, "ASTRA Browser Agent", NotificationManager.IMPORTANCE_LOW);
+        channel.setDescription("Local bridge and persistent headless Chromium runtime");
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        if (manager != null) manager.createNotificationChannel(channel);
     }
 }

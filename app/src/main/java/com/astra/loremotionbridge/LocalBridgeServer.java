@@ -7,6 +7,8 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.ServerSocket;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -26,7 +28,9 @@ public class LocalBridgeServer {
         if (running) return;
         Thread t = new Thread(() -> {
             try {
-                server = new ServerSocket(18765);
+                server = new ServerSocket();
+                server.setReuseAddress(true);
+                server.bind(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 18765));
                 running = true;
                 lastError = null;
                 Log.i(TAG, "HTTP server listening on 127.0.0.1:18765");
@@ -141,6 +145,13 @@ public class LocalBridgeServer {
                     if (kv.length == 2) m.put(URLDecoder.decode(kv[0],"UTF-8"), URLDecoder.decode(kv[1],"UTF-8"));
                 }
             }
+            if ("/headless/status".equals(p)) return HeadlessBrowserRuntime.statusJson();
+            if ("/headless/log".equals(p)) return HeadlessBrowserRuntime.logJson();
+            if ("/headless/start".equals(p)) {
+                HeadlessBrowserRuntime.startAsync(MainApplication.context());
+                return "{\"ok\":true,\"state\":\"STARTING\"}";
+            }
+            if ("/headless/open".equals(p)) return HeadlessBrowserRuntime.openUrl(m.getOrDefault("url", "https://loremotion.com/generate/"));
             if ("/control/observe".equals(p)) return AstraControl.observe();
             if ("/control/status".equals(p)) return AstraControl.status();
             if ("/control/screen-status".equals(p)) return AstraControl.screenStatus();
