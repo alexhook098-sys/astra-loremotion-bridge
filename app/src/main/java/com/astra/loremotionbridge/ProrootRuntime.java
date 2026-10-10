@@ -18,7 +18,7 @@ public final class ProrootRuntime {
     };
 
     private static final String ROOTFS_ASSET =
-            "ubuntu-base-arm64.tar.gz";
+            "ubuntu-base-arm64.tar";
 
     private ProrootRuntime() {}
 
@@ -125,10 +125,8 @@ public final class ProrootRuntime {
 
         try (InputStream raw =
                      context.getAssets().open(ROOTFS_ASSET);
-             GZIPInputStream gzip =
-                     new GZIPInputStream(new BufferedInputStream(raw));
              TarInputStream tar =
-                     new TarInputStream(gzip)) {
+                     new TarInputStream(new BufferedInputStream(raw))) {
 
             TarEntry entry;
 
