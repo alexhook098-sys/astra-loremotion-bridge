@@ -171,38 +171,41 @@ public class MainActivity extends Activity {
 
     private String runProrootTest() {
         try {
+            String proroot = new java.io.File(
+                    getApplicationInfo().nativeLibraryDir,
+                    "libproroot.so"
+            ).getAbsolutePath();
+
+            String rootfs = ProrootRuntime.rootfsDir(this).getAbsolutePath();
+
             Process process = new ProcessBuilder(
-                    new java.io.File(getApplicationInfo().nativeLibraryDir, "libproroot.so").getAbsolutePath()
-            )
-                    .redirectErrorStream(true)
-                    .start();
+                    proroot,
+                    "-r", rootfs,
+                    "-0",
+                    "--link2symlink",
+                    "-w", "/root",
+                    "/bin/sh",
+                    "-c",
+                    "echo PROROOT_OK; id; cat /etc/os-release | head -5"
+            ).redirectErrorStream(true).start();
 
             java.io.ByteArrayOutputStream out =
                     new java.io.ByteArrayOutputStream();
 
-            java.io.InputStream in = process.getInputStream();
-            byte[] buffer = new byte[4096];
-            int n;
-
-            while ((n = in.read(buffer)) != -1) {
-                out.write(buffer, 0, n);
-                if (out.size() > 2000) break;
+            try (java.io.InputStream in = process.getInputStream()) {
+                byte[] buffer = new byte[4096];
+                int n;
+                while ((n = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, n);
+                }
             }
 
             int exit = process.waitFor();
+            return "exit=" + exit + " " +
+                    out.toString(java.nio.charset.StandardCharsets.UTF_8.name());
 
-            String text = out.toString("UTF-8")
-                    .replace("\n", " ")
-                    .trim();
-
-            if (text.length() > 120) {
-                text = text.substring(0, 120);
-            }
-
-            return "exit=" + exit + " " + text;
         } catch (Exception e) {
-            return "ERROR " + e.getClass().getSimpleName() +
-                    ": " + e.getMessage();
+            return e.getClass().getName() + ": " + e.getMessage();
         }
     }
 
