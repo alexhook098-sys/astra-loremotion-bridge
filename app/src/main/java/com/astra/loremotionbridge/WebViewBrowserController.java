@@ -26,13 +26,24 @@ public final class WebViewBrowserController {
             a.openUrl(url);
             return "{\"ok\":true,\"action\":\"webview-open-requested\",\"url\":\"" + esc(url) + "\"}";
         }
+
         try {
             Intent i = new Intent(context, WebViewBrowserActivity.class);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             i.putExtra("url", url);
             i.putExtra("background", true);
+
+            android.content.pm.ResolveInfo ri =
+                    context.getPackageManager().resolveActivity(i, 0);
+
+            if (ri == null) {
+                return "{\"ok\":false,\"error\":\"webview_activity_not_resolvable\"}";
+            }
+
             context.startActivity(i);
-            return "{\"ok\":true,\"action\":\"webview-start-requested\",\"url\":\"" + esc(url) + "\"}";
+
+            return "{\"ok\":true,\"action\":\"webview-start-requested\",\"resolved\":true,\"activity\":\"" +
+                    esc(String.valueOf(ri.activityInfo.name)) + "\",\"url\":\"" + esc(url) + "\"}";
         } catch (Exception e) {
             return "{\"ok\":false,\"error\":\"" + esc(String.valueOf(e)) + "\"}";
         }
