@@ -71,6 +71,14 @@ public class MainActivity extends Activity {
         });
         layout.addView(start);
 
+        Button showWebView = new Button(this);
+        showWebView.setText("ПОКАЗАТЬ WEBVIEW");
+        showWebView.setOnClickListener(v -> {
+            String result = WebViewBrowserController.bringToFront(this);
+            statusText.setText("WebView: " + result);
+        });
+        layout.addView(showWebView);
+
         Button showLog = new Button(this);
         showLog.setText("ПОКАЗАТЬ ЖУРНАЛ ОШИБОК");
         showLog.setOnClickListener(v -> {

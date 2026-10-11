@@ -49,6 +49,24 @@ public final class WebViewBrowserController {
         }
     }
 
+    public static String bringToFront(Context context) {
+        WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
+        if (a == null)
+            return "{\"ok\":false,\"error\":\"webview_not_started\"}";
+
+        try {
+            Intent i = new Intent(context, WebViewBrowserActivity.class);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP |
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+            context.startActivity(i);
+            return "{\"ok\":true,\"action\":\"webview-brought-to-front\"}";
+        } catch (Exception e) {
+            return "{\"ok\":false,\"error\":\"" +
+                    esc(String.valueOf(e)) + "\"}";
+        }
+    }
+
     public static String open(String url) {
         WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
         if (a == null)
