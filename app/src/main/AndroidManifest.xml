@@ -41,27 +41,39 @@
 
         <activity
             android:name=".WebViewBrowserActivity"
-            android:exported="false"
+            android:exported="true"
             android:launchMode="singleTask"
             android:taskAffinity="com.astra.loremotionbridge.webview"
             android:excludeFromRecents="false"
             android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
             android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize" />
+            android:windowSoftInputMode="adjustResize">
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="fimkggchtjzudtarfqai.supabase.co"
+                    android:pathPrefix="/auth/v1/verify" />
+            </intent-filter>
+
+        </activity>
 
         <service
             android:name=".BrowserBridgeService"
-            android:exported="false"
+            android:exported="true"
             android:foregroundServiceType="dataSync" />
         <service
             android:name=".ScreenCaptureService"
-            android:exported="false"
+            android:exported="true"
             android:foregroundServiceType="mediaProjection" />
 
         <service
             android:name=".AstraAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="false">
+            android:exported="true">
 
             <intent-filter>
                 <action
