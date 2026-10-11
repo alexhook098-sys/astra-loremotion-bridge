@@ -10,7 +10,7 @@ public final class WebViewBrowserController {
         if (WebViewBrowserActivity.getInstance() != null) return "{\"ok\":true,\"action\":\"webview-host-ready\"}";
         try {
             Intent i = new Intent(context, WebViewBrowserActivity.class);
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_MULTIPLE_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             i.putExtra("url", "about:blank");
             i.putExtra("background", true);
             context.startActivity(i);
@@ -28,7 +28,7 @@ public final class WebViewBrowserController {
         }
         try {
             Intent i = new Intent(context, WebViewBrowserActivity.class);
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_MULTIPLE_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             i.putExtra("url", url);
             i.putExtra("background", true);
             context.startActivity(i);
