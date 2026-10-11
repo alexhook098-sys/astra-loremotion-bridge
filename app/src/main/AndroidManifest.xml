@@ -36,6 +36,13 @@
 
         </activity>
 
+        <activity
+            android:name=".WebViewBrowserActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
+            android:hardwareAccelerated="true" />
+
         <service
             android:name=".BrowserBridgeService"
             android:exported="false"

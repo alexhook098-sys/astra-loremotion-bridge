@@ -152,6 +152,15 @@ public class LocalBridgeServer {
                 return "{\"ok\":true,\"state\":\"STARTING\"}";
             }
             if ("/headless/open".equals(p)) return HeadlessBrowserRuntime.openUrl(m.getOrDefault("url", "https://loremotion.com/generate/"));
+            if ("/webview/status".equals(p)) return WebViewBrowserController.status();
+            if ("/webview/start".equals(p)) return WebViewBrowserController.start(
+                    MainApplication.context(),
+                    m.getOrDefault("url", "https://loremotion.com/generate/"));
+            if ("/webview/open".equals(p)) return WebViewBrowserController.open(
+                    m.getOrDefault("url", "https://loremotion.com/generate/"));
+            if ("/webview/eval".equals(p)) return WebViewBrowserController.evaluate(
+                    m.getOrDefault("script", "document.title"));
+
             if ("/control/observe".equals(p)) return AstraControl.observe();
             if ("/control/status".equals(p)) return AstraControl.status();
             if ("/control/screen-status".equals(p)) return AstraControl.screenStatus();
