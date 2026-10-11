@@ -19,8 +19,8 @@ public class BrowserBridgeService extends Service {
         super.onCreate();
         createNotificationChannel();
         Notification notification = new Notification.Builder(this, CHANNEL_ID)
-                .setContentTitle("ASTRA Headless Browser")
-                .setContentText("Headless Chrome / CDP :9222")
+                .setContentTitle("ASTRA Browser Agent")
+                .setContentText("Ready — waiting for a video request")
                 .setSmallIcon(android.R.drawable.ic_menu_view)
                 .setOngoing(true)
                 .build();

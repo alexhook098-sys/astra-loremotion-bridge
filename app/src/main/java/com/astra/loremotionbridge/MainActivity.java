@@ -54,6 +54,7 @@ public class MainActivity extends Activity {
                 startService(service);
             }
             HeadlessBrowserRuntime.startAsync(getApplicationContext());
+            WebViewBrowserController.ensureHost(this);
             handler.removeCallbacks(statusPoll);
             handler.post(statusPoll);
         });

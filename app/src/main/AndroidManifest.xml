@@ -18,6 +18,8 @@
         android:name=".MainApplication"
         android:theme="@style/AppTheme"
         android:label="ASTRA Browser Control"
+        android:icon="@drawable/astra_app_icon"
+        android:roundIcon="@drawable/astra_app_icon"
         android:allowBackup="false"
         android:usesCleartextTraffic="true"
         android:supportsRtl="true">
@@ -40,6 +42,8 @@
             android:name=".WebViewBrowserActivity"
             android:exported="false"
             android:launchMode="singleTask"
+            android:taskAffinity="com.astra.loremotionbridge.webview"
+            android:excludeFromRecents="true"
             android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
             android:hardwareAccelerated="true" />
 

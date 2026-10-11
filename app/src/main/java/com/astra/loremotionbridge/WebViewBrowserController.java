@@ -6,14 +6,33 @@ import android.content.Intent;
 public final class WebViewBrowserController {
     private WebViewBrowserController() {}
 
-    public static String start(Context context, String url) {
+    public static String ensureHost(Context context) {
+        if (WebViewBrowserActivity.getInstance() != null) return "{\"ok\":true,\"action\":\"webview-host-ready\"}";
         try {
             Intent i = new Intent(context, WebViewBrowserActivity.class);
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            i.putExtra("url", url);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_MULTIPLE_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            i.putExtra("url", "about:blank");
+            i.putExtra("background", true);
             context.startActivity(i);
-            return "{\"ok\":true,\"action\":\"webview-start\",\"url\":\"" +
-                    esc(url) + "\"}";
+            return "{\"ok\":true,\"action\":\"webview-host-start-requested\"}";
+        } catch (Exception e) {
+            return "{\"ok\":false,\"error\":\"" + esc(String.valueOf(e)) + "\"}";
+        }
+    }
+
+    public static String start(Context context, String url) {
+        WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
+        if (a != null) {
+            a.openUrl(url);
+            return "{\"ok\":true,\"action\":\"webview-open-requested\",\"url\":\"" + esc(url) + "\"}";
+        }
+        try {
+            Intent i = new Intent(context, WebViewBrowserActivity.class);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_MULTIPLE_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            i.putExtra("url", url);
+            i.putExtra("background", true);
+            context.startActivity(i);
+            return "{\"ok\":true,\"action\":\"webview-start-requested\",\"url\":\"" + esc(url) + "\"}";
         } catch (Exception e) {
             return "{\"ok\":false,\"error\":\"" + esc(String.valueOf(e)) + "\"}";
         }

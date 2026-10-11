@@ -47,9 +47,22 @@ public class WebViewBrowserActivity extends Activity {
         configure(webView);
 
         String initial = getIntent().getStringExtra("url");
-        if (initial == null || initial.isEmpty())
-            initial = "https://loremotion.com/generate/";
+        if (initial == null || initial.isEmpty()) initial = "about:blank";
         webView.loadUrl(initial);
+        if (getIntent().getBooleanExtra("background", false)
+                && !getIntent().getBooleanExtra("show", false)) sendToBackSoon();
+    }
+
+    @Override protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        String url = intent.getStringExtra("url");
+        if (url != null && !url.isEmpty() && webView != null && !"about:blank".equals(url)) openUrl(url);
+        if (intent.getBooleanExtra("background", false) && !intent.getBooleanExtra("show", false)) sendToBackSoon();
+    }
+
+    private void sendToBackSoon() {
+        main.postDelayed(() -> { if (!isFinishing()) { try { moveTaskToBack(true); } catch (Exception ignored) {} } }, 250L);
     }
 
     private void configure(WebView wv) {
