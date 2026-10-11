@@ -149,9 +149,38 @@ public class WebViewBrowserActivity extends Activity {
     public String statusJson() {
         if (webView == null)
             return "{\"ok\":false,\"ready\":false,\"state\":\"stopped\"}";
-        return String.format(Locale.US,
-                "{\"ok\":true,\"ready\":true,\"url\":\"%s\",\"title\":\"%s\"}",
-                esc(webView.getUrl()), esc(webView.getTitle()));
+
+        final Object lock = new Object();
+        final String[] result = new String[1];
+
+        main.post(() -> {
+            try {
+                if (webView == null) {
+                    result[0] = "{\"ok\":false,\"ready\":false,\"state\":\"stopped\"}";
+                } else {
+                    result[0] = String.format(Locale.US,
+                            "{\"ok\":true,\"ready\":true,\"url\":\"%s\",\"title\":\"%s\"}",
+                            esc(webView.getUrl()), esc(webView.getTitle()));
+                }
+            } finally {
+                synchronized (lock) {
+                    lock.notifyAll();
+                }
+            }
+        });
+
+        synchronized (lock) {
+            try {
+                if (result[0] == null) lock.wait(3000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return "{\"ok\":false,\"error\":\"interrupted\"}";
+            }
+        }
+
+        return result[0] != null
+                ? result[0]
+                : "{\"ok\":false,\"error\":\"status_timeout\"}";
     }
 
     private void updateStatus() {
