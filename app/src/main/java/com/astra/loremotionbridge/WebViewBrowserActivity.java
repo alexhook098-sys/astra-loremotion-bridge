@@ -41,6 +41,9 @@ public class WebViewBrowserActivity extends Activity {
         root.addView(status);
 
         webView = new WebView(this);
+        webView.setFocusable(true);
+        webView.setFocusableInTouchMode(true);
+        webView.requestFocus();
         root.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1f));
         setContentView(root);
 
