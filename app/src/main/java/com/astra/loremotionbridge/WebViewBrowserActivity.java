@@ -49,7 +49,6 @@ public class WebViewBrowserActivity extends Activity {
         String initial = getIntent().getStringExtra("url");
         if (initial == null || initial.isEmpty()) initial = "about:blank";
         webView.loadUrl(initial);
-        if (getIntent().getBooleanExtra("background", false)
     }
 
     @Override protected void onNewIntent(android.content.Intent intent) {
