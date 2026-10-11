@@ -50,7 +50,6 @@ public class WebViewBrowserActivity extends Activity {
         if (initial == null || initial.isEmpty()) initial = "about:blank";
         webView.loadUrl(initial);
         if (getIntent().getBooleanExtra("background", false)
-                && !getIntent().getBooleanExtra("show", false)) sendToBackSoon();
     }
 
     @Override protected void onNewIntent(android.content.Intent intent) {
@@ -58,7 +57,6 @@ public class WebViewBrowserActivity extends Activity {
         setIntent(intent);
         String url = intent.getStringExtra("url");
         if (url != null && !url.isEmpty() && webView != null && !"about:blank".equals(url)) openUrl(url);
-        if (intent.getBooleanExtra("background", false) && !intent.getBooleanExtra("show", false)) sendToBackSoon();
     }
 
     private void sendToBackSoon() {
