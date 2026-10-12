@@ -6,6 +6,8 @@ import android.util.Log;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.net.ServerSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -101,37 +103,156 @@ public class LocalBridgeServer {
 
     private static void handle(Socket s) {
         try (Socket sock = s) {
-            sock.setSoTimeout(10000);
-            BufferedReader r = new BufferedReader(new InputStreamReader(sock.getInputStream(), StandardCharsets.UTF_8));
-            String line = r.readLine();
-            if (line == null) return;
-            String[] parts = line.split(" ", 3);
+            sock.setSoTimeout(15000);
+
+            java.io.InputStream input = sock.getInputStream();
+
+            StringBuilder headerText = new StringBuilder();
+            int previous = -1;
+            int current;
+
+            while ((current = input.read()) != -1) {
+                headerText.append((char) current);
+                if (previous == '\r' && current == '\n') {
+                    int len = headerText.length();
+                    if (len >= 4 &&
+                            headerText.charAt(len - 4) == '\r' &&
+                            headerText.charAt(len - 3) == '\n') {
+                        break;
+                    }
+                }
+                previous = current;
+            }
+
+            String headersText = headerText.toString();
+            String[] headerLines = headersText.split("\r\n");
+            if (headerLines.length == 0) return;
+
+            String[] parts = headerLines[0].split(" ", 3);
             if (parts.length < 2) return;
+
+            String method = parts[0];
             String target = parts[1];
-            boolean binary = "/control/screen.png".equals(target.split("\\?", 2)[0]);
+
+            int contentLength = 0;
+
+            for (int i = 1; i < headerLines.length; i++) {
+                String h = headerLines[i];
+                int colon = h.indexOf(':');
+                if (colon < 0) continue;
+
+                String name = h.substring(0, colon).trim();
+                String value = h.substring(colon + 1).trim();
+
+                if ("Content-Length".equalsIgnoreCase(name)) {
+                    contentLength = Integer.parseInt(value);
+                }
+            }
+
+            if ("POST".equalsIgnoreCase(method) &&
+                    "/webview/upload".equals(target.split("\\?", 2)[0])) {
+
+                if (contentLength <= 0 || contentLength > 20 * 1024 * 1024) {
+                    sendResponse(sock,
+                            "{\"ok\":false,\"error\":\"invalid_upload_size\"}",
+                            "application/json; charset=utf-8");
+                    return;
+                }
+
+                byte[] data = new byte[contentLength];
+                int offset = 0;
+
+                while (offset < contentLength) {
+                    int n = input.read(data, offset, contentLength - offset);
+                    if (n < 0) break;
+                    offset += n;
+                }
+
+                if (offset != contentLength) {
+                    sendResponse(sock,
+                            "{\"ok\":false,\"error\":\"upload_body_incomplete\"}",
+                            "application/json; charset=utf-8");
+                    return;
+                }
+
+                File uploadDir = new File(
+                        MainApplication.context().getCacheDir(),
+                        "uploads");
+
+                if (!uploadDir.exists() && !uploadDir.mkdirs()) {
+                    sendResponse(sock,
+                            "{\"ok\":false,\"error\":\"upload_cache_create_failed\"}",
+                            "application/json; charset=utf-8");
+                    return;
+                }
+
+                File targetFile = new File(
+                        uploadDir,
+                        "telegram-" + System.currentTimeMillis() + ".jpg");
+
+                try (FileOutputStream out = new FileOutputStream(targetFile)) {
+                    out.write(data);
+                }
+
+                String result = WebViewBrowserController.upload(
+                        targetFile.getAbsolutePath());
+
+                sendResponse(sock, result,
+                        "application/json; charset=utf-8");
+                return;
+            }
+
+            boolean binary =
+                    "/control/screen.png".equals(target.split("\\?", 2)[0]);
+
             byte[] body;
             String contentType;
+
             if (binary) {
                 body = AstraControl.screenPng();
                 contentType = "image/png";
+
                 if (body == null) {
-                    body = "{\"ok\":false,\"error\":\"screen frame unavailable\",\"hint\":\"Call /control/screen-status first\"}".getBytes(StandardCharsets.UTF_8);
+                    body = "{\"ok\":false,\"error\":\"screen frame unavailable\",\"hint\":\"Call /control/screen-status first\"}"
+                            .getBytes(StandardCharsets.UTF_8);
                     contentType = "application/json; charset=utf-8";
                 }
             } else {
                 body = route(target).getBytes(StandardCharsets.UTF_8);
                 contentType = "application/json; charset=utf-8";
             }
-            OutputStream o = sock.getOutputStream();
-            String headers = "HTTP/1.1 200 OK\r\nContent-Type: " + contentType
-                    + "\r\nContent-Length: " + body.length
-                    + "\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n";
-            o.write(headers.getBytes(StandardCharsets.UTF_8));
-            o.write(body);
-            o.flush();
+
+            sendResponse(sock, body, contentType);
+
         } catch (Exception e) {
             Log.e(TAG, "HTTP request failed", e);
         }
+    }
+
+    private static void sendResponse(
+            Socket sock,
+            String body,
+            String contentType) throws Exception {
+        sendResponse(sock, body.getBytes(StandardCharsets.UTF_8), contentType);
+    }
+
+    private static void sendResponse(
+            Socket sock,
+            byte[] body,
+            String contentType) throws Exception {
+
+        OutputStream o = sock.getOutputStream();
+
+        String headers =
+                "HTTP/1.1 200 OK\r\n" +
+                "Content-Type: " + contentType + "\r\n" +
+                "Content-Length: " + body.length + "\r\n" +
+                "Cache-Control: no-store\r\n" +
+                "Connection: close\r\n\r\n";
+
+        o.write(headers.getBytes(StandardCharsets.UTF_8));
+        o.write(body);
+        o.flush();
     }
 
     private static String route(String path) {
@@ -160,6 +281,9 @@ public class LocalBridgeServer {
                     m.getOrDefault("url", "https://loremotion.com/generate/"));
             if ("/webview/eval".equals(p)) return WebViewBrowserController.evaluate(
                     m.getOrDefault("script", "document.title"));
+            if ("/webview/upload".equals(p)) return WebViewBrowserController.upload(
+                    m.getOrDefault("path", ""));
+
 
             if ("/control/observe".equals(p)) return AstraControl.observe();
             if ("/control/status".equals(p)) return AstraControl.status();

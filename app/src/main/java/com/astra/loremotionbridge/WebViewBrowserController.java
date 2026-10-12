@@ -67,6 +67,20 @@ public final class WebViewBrowserController {
         }
     }
 
+    public static String upload(String path) {
+        WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
+        if (a == null)
+            return "{\"ok\":false,\"error\":\"webview_not_started\"}";
+
+        if (path == null || path.isEmpty())
+            return "{\"ok\":false,\"error\":\"upload_path_empty\"}";
+
+        a.setPendingUpload(path);
+
+        return "{\"ok\":true,\"action\":\"upload-ready\",\"path\":\"" +
+                esc(path) + "\"}";
+    }
+
     public static String open(String url) {
         WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
         if (a == null)

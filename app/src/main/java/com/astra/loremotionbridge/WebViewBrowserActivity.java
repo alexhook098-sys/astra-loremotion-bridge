@@ -3,7 +3,9 @@ package com.astra.loremotionbridge;
 import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.Context;
+import android.content.Intent;
 import android.net.Uri;
+import android.webkit.ValueCallback;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -18,12 +20,18 @@ import android.webkit.WebViewClient;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.Locale;
 
 public class WebViewBrowserActivity extends Activity {
     private static volatile WebViewBrowserActivity instance;
     private WebView webView;
     private TextView status;
+    private ValueCallback<Uri[]> pendingFileCallback;
+    private String pendingUploadPath;
     private final Handler main = new Handler(Looper.getMainLooper());
 
     public static WebViewBrowserActivity getInstance() { return instance; }
@@ -83,7 +91,26 @@ public class WebViewBrowserActivity extends Activity {
         cookies.setAcceptCookie(true);
         cookies.setAcceptThirdPartyCookies(wv, true);
 
-        wv.setWebChromeClient(new WebChromeClient());
+        wv.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(
+                    WebView webView,
+                    ValueCallback<Uri[]> filePathCallback,
+                    FileChooserParams fileChooserParams) {
+
+                if (pendingFileCallback != null) {
+                    pendingFileCallback.onReceiveValue(null);
+                }
+
+                pendingFileCallback = filePathCallback;
+
+                if (pendingUploadPath != null && !pendingUploadPath.isEmpty()) {
+                    deliverPendingUpload();
+                }
+
+                return true;
+            }
+        });
         wv.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(
                     WebView view, WebResourceRequest request) {
@@ -126,6 +153,72 @@ public class WebViewBrowserActivity extends Activity {
                     setStatus("Download error: " + e.getMessage());
                 }
             }
+        });
+    }
+
+    private void deliverPendingUpload() {
+        if (pendingFileCallback == null) return;
+
+        final String sourcePath = pendingUploadPath;
+        final ValueCallback<Uri[]> callback = pendingFileCallback;
+
+        pendingFileCallback = null;
+        pendingUploadPath = null;
+
+        if (sourcePath == null || sourcePath.isEmpty()) {
+            callback.onReceiveValue(null);
+            return;
+        }
+
+        main.post(() -> {
+            try {
+                File source = new File(sourcePath);
+                if (!source.isFile()) {
+                    setStatus("Upload error: file not found");
+                    callback.onReceiveValue(null);
+                    return;
+                }
+
+                File uploadDir = new File(getCacheDir(), "uploads");
+                if (!uploadDir.exists() && !uploadDir.mkdirs()) {
+                    setStatus("Upload error: cannot create cache directory");
+                    callback.onReceiveValue(null);
+                    return;
+                }
+
+                File target = new File(
+                        uploadDir,
+                        "upload-" + System.currentTimeMillis() + ".jpg");
+
+                try (FileInputStream in = new FileInputStream(source);
+                     FileOutputStream out = new FileOutputStream(target)) {
+
+                    byte[] buffer = new byte[8192];
+                    int count;
+                    while ((count = in.read(buffer)) != -1) {
+                        out.write(buffer, 0, count);
+                    }
+                }
+
+                Uri uri = androidx.core.content.FileProvider.getUriForFile(
+                        this,
+                        getPackageName() + ".fileprovider",
+                        target);
+
+                callback.onReceiveValue(new Uri[]{uri});
+                setStatus("Upload prepared: " + target.getName());
+
+            } catch (Exception e) {
+                setStatus("Upload error: " + e.getMessage());
+                callback.onReceiveValue(null);
+            }
+        });
+    }
+
+    public void setPendingUpload(final String path) {
+        main.post(() -> {
+            pendingUploadPath = path;
+            setStatus("Upload waiting for file chooser");
         });
     }
 
