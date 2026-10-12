@@ -7,13 +7,16 @@ public final class WebViewBrowserController {
     private WebViewBrowserController() {}
 
     public static String ensureHost(Context context) {
-        if (WebViewBrowserActivity.getInstance() != null) return "{\"ok\":true,\"action\":\"webview-host-ready\"}";
+        if (WebViewBrowserActivity.getInstance() != null)
+            return "{\"ok\":true,\"action\":\"webview-host-ready\"}";
+
         try {
             Intent i = new Intent(context, WebViewBrowserActivity.class);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             i.putExtra("url", "about:blank");
             i.putExtra("background", true);
             context.startActivity(i);
+
             return "{\"ok\":true,\"action\":\"webview-host-start-requested\"}";
         } catch (Exception e) {
             return "{\"ok\":false,\"error\":\"" + esc(String.valueOf(e)) + "\"}";
@@ -22,9 +25,12 @@ public final class WebViewBrowserController {
 
     public static String start(Context context, String url) {
         WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
+
         if (a != null) {
             a.openUrl(url);
-            return "{\"ok\":true,\"action\":\"webview-open-requested\",\"url\":\"" + esc(url) + "\"}";
+
+            return "{\"ok\":true,\"action\":\"webview-open-requested\",\"url\":\"" +
+                    esc(url) + "\"}";
         }
 
         try {
@@ -43,7 +49,10 @@ public final class WebViewBrowserController {
             context.startActivity(i);
 
             return "{\"ok\":true,\"action\":\"webview-start-requested\",\"resolved\":true,\"activity\":\"" +
-                    esc(String.valueOf(ri.activityInfo.name)) + "\",\"url\":\"" + esc(url) + "\"}";
+                    esc(String.valueOf(ri.activityInfo.name)) +
+                    "\",\"url\":\"" +
+                    esc(url) +
+                    "\"}";
         } catch (Exception e) {
             return "{\"ok\":false,\"error\":\"" + esc(String.valueOf(e)) + "\"}";
         }
@@ -51,24 +60,31 @@ public final class WebViewBrowserController {
 
     public static String bringToFront(Context context) {
         WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
+
         if (a == null)
             return "{\"ok\":false,\"error\":\"webview_not_started\"}";
 
         try {
             Intent i = new Intent(context, WebViewBrowserActivity.class);
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
+            i.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK |
                     Intent.FLAG_ACTIVITY_SINGLE_TOP |
-                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            );
+
             context.startActivity(i);
+
             return "{\"ok\":true,\"action\":\"webview-brought-to-front\"}";
         } catch (Exception e) {
             return "{\"ok\":false,\"error\":\"" +
-                    esc(String.valueOf(e)) + "\"}";
+                    esc(String.valueOf(e)) +
+                    "\"}";
         }
     }
 
     public static String upload(String path) {
         WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
+
         if (a == null)
             return "{\"ok\":false,\"error\":\"webview_not_started\"}";
 
@@ -78,20 +94,26 @@ public final class WebViewBrowserController {
         a.injectUploadFile(path);
 
         return "{\"ok\":true,\"action\":\"upload-inject-requested\",\"path\":\"" +
-                esc(path) + "\"}";
+                esc(path) +
+                "\"}";
     }
 
     public static String open(String url) {
         WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
+
         if (a == null)
             return "{\"ok\":false,\"error\":\"webview_not_started\"}";
+
         a.openUrl(url);
+
         return "{\"ok\":true,\"action\":\"webview-open\",\"url\":\"" +
-                esc(url) + "\"}";
+                esc(url) +
+                "\"}";
     }
 
     public static String status() {
         WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
+
         return a == null
                 ? "{\"ok\":true,\"ready\":false,\"state\":\"stopped\"}"
                 : a.statusJson();
@@ -99,6 +121,7 @@ public final class WebViewBrowserController {
 
     public static String evaluate(String script) {
         WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
+
         if (a == null)
             return "{\"ok\":false,\"error\":\"webview_not_started\"}";
 
@@ -118,7 +141,8 @@ public final class WebViewBrowserController {
 
         synchronized (lock) {
             try {
-                if (!done[0]) lock.wait(15000L);
+                if (!done[0])
+                    lock.wait(15000L);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return "{\"ok\":false,\"error\":\"interrupted\"}";
@@ -127,15 +151,32 @@ public final class WebViewBrowserController {
 
         if (!done[0])
             return "{\"ok\":false,\"error\":\"eval_timeout\"}";
+
         if (error[0] != null)
-            return "{\"ok\":false,\"error\":\"" + esc(error[0]) + "\"}";
+            return "{\"ok\":false,\"error\":\"" +
+                    esc(error[0]) +
+                    "\"}";
 
         return "{\"ok\":true,\"value\":" +
-                (result[0] == null ? "null" : result[0]) + "}";
+                (result[0] == null ? "null" : result[0]) +
+                "}";
+    }
+
+    public static String readyMp4() {
+        String script =
+                "(()=>{" +
+                "const s=document.documentElement.innerHTML;" +
+                "const urls=[...s.matchAll(/https:\\\\/\\\\/videos\\\\.loremotion\\\\.com\\\\/videos\\\\/[^\"\\\\\\\\]+\\\\.mp4/g)].map(x=>x[0]);" +
+                "return JSON.stringify([...new Set(urls)]);" +
+                "})()";
+
+        return evaluate(script);
     }
 
     private static String esc(String s) {
-        if (s == null) return "";
+        if (s == null)
+            return "";
+
         return s.replace("\\", "\\\\")
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")

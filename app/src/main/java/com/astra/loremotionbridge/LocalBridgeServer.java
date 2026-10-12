@@ -281,6 +281,7 @@ public class LocalBridgeServer {
                     m.getOrDefault("url", "https://loremotion.com/generate/"));
             if ("/webview/eval".equals(p)) return WebViewBrowserController.evaluate(
                     m.getOrDefault("script", "document.title"));
+            if ("/webview/ready-mp4".equals(p)) return WebViewBrowserController.readyMp4();
             if ("/webview/upload".equals(p)) return WebViewBrowserController.upload(
                     m.getOrDefault("path", ""));
 
