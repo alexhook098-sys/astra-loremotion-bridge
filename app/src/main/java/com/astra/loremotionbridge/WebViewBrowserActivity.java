@@ -222,6 +222,55 @@ public class WebViewBrowserActivity extends Activity {
         });
     }
 
+    public void injectUploadFile(final String path) {
+        main.post(() -> {
+            try {
+                File source = new File(path);
+                if (!source.isFile()) {
+                    setStatus("Upload inject error: file not found");
+                    return;
+                }
+
+                FileInputStream in = new FileInputStream(source);
+                byte[] bytes = new byte[(int) source.length()];
+                int offset = 0;
+                int count;
+                while (offset < bytes.length &&
+                        (count = in.read(bytes, offset, bytes.length - offset)) != -1) {
+                    offset += count;
+                }
+                in.close();
+
+                String base64 = android.util.Base64.encodeToString(
+                        bytes, android.util.Base64.NO_WRAP);
+
+                String safeBase64 = org.json.JSONObject.quote(base64);
+                String safeName = org.json.JSONObject.quote(source.getName());
+
+                String js =
+                        "(()=>{" +
+                        "const i=document.querySelector('input[type=file]');" +
+                        "if(!i)return 'NO_FILE_INPUT';" +
+                        "const b=atob(" + safeBase64 + ");" +
+                        "const a=new Uint8Array(b.length);" +
+                        "for(let n=0;n<b.length;n++)a[n]=b.charCodeAt(n);" +
+                        "const f=new File([a]," + safeName + ",{type:'image/jpeg'});" +
+                        "const d=new DataTransfer();" +
+                        "d.items.add(f);" +
+                        "i.files=d.files;" +
+                        "i.dispatchEvent(new Event('input',{bubbles:true}));" +
+                        "i.dispatchEvent(new Event('change',{bubbles:true}));" +
+                        "return JSON.stringify({count:i.files.length,name:i.files[0]?.name||'',size:i.files[0]?.size||0});" +
+                        "})()";
+                webView.evaluateJavascript(js, value ->
+                        setStatus("Upload inject result: " + value));
+
+            } catch (Exception e) {
+                setStatus("Upload inject error: " + e.getMessage());
+            }
+        });
+    }
+
     public void openUrl(final String url) {
         main.post(() -> {
             if (webView != null) webView.loadUrl(url);

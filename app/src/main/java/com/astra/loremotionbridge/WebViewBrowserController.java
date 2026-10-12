@@ -75,9 +75,9 @@ public final class WebViewBrowserController {
         if (path == null || path.isEmpty())
             return "{\"ok\":false,\"error\":\"upload_path_empty\"}";
 
-        a.setPendingUpload(path);
+        a.injectUploadFile(path);
 
-        return "{\"ok\":true,\"action\":\"upload-ready\",\"path\":\"" +
+        return "{\"ok\":true,\"action\":\"upload-inject-requested\",\"path\":\"" +
                 esc(path) + "\"}";
     }
 
