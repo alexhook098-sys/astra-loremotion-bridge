@@ -19,9 +19,9 @@ public final class WebViewBrowserController {
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             i.putExtra("url", loginUrl);
             context.startActivity(i);
-            return "{\\"ok\\":true,\\"action\\":\\"webview-login-page-requested\\"}";
+            return "{\"ok\":true,\"action\":\"webview-login-page-requested\"}";
         } catch (Exception e) {
-            return "{\\"ok\\":false,\\"error\\":\\"" + esc(String.valueOf(e)) + "\\"}";
+            return "{\"ok\":false,\"error\":\"" + esc(String.valueOf(e)) + "\"}";
         }
     }
 
