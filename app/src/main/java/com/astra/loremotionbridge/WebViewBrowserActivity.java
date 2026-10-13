@@ -298,8 +298,60 @@ public class WebViewBrowserActivity extends Activity {
                 callback.onResult(null, "webview_not_ready");
                 return;
             }
-            webView.evaluateJavascript(
-                    script, value -> callback.onResult(value, null));
+
+            final String key = "__astraEval_" + System.nanoTime();
+            final String safeKey = org.json.JSONObject.quote(key);
+            final String safeScript = org.json.JSONObject.quote(script == null ? "" : script);
+            final String start = "(function(){var k=" + safeKey
+                    + ";try{Promise.resolve((0,eval)(" + safeScript
+                    + ")).then(function(v){try{var j=JSON.stringify(v===undefined?null:v);"
+                    + "window[k]=j===undefined?'null':j;}catch(e){window[k]='!'+String(e);}},"
+                    + "function(e){window[k]='!'+String(e);});}"
+                    + "catch(e){window[k]='!'+String(e);}return true;})()";
+
+            final int[] waited = {0};
+            final Runnable[] poll = new Runnable[1];
+
+            poll[0] = () -> {
+                if (webView == null) {
+                    callback.onResult(null, "webview_not_ready");
+                    return;
+                }
+
+                String check = "(function(){var k=" + safeKey
+                        + ";var v=window[k];if(v!==undefined){delete window[k];return v;}"
+                        + "return null;})()";
+
+                webView.evaluateJavascript(check, raw -> {
+                    Object decoded = null;
+                    try {
+                        if (raw != null)
+                            decoded = new org.json.JSONTokener(raw).nextValue();
+                    } catch (Exception ignored) {}
+
+                    if (decoded instanceof String) {
+                        String value = (String) decoded;
+                        if (value.startsWith("!"))
+                            callback.onResult(null, value.substring(1));
+                        else
+                            callback.onResult(value, null);
+                        return;
+                    }
+
+                    if (waited[0] >= 12000) {
+                        webView.evaluateJavascript(
+                                "(function(){delete window[" + safeKey + "];return true;})()",
+                                null);
+                        callback.onResult(null, "promise_timeout");
+                        return;
+                    }
+
+                    waited[0] += 100;
+                    main.postDelayed(poll[0], 100L);
+                });
+            };
+
+            webView.evaluateJavascript(start, ignored -> poll[0].run());
         });
     }
 
