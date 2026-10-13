@@ -7,19 +7,21 @@ public final class WebViewBrowserController {
     private WebViewBrowserController() {}
 
     public static String ensureHost(Context context) {
-        if (WebViewBrowserActivity.getInstance() != null)
-            return "{\"ok\":true,\"action\":\"webview-host-ready\"}";
+        final String loginUrl = "https://loremotion.com/generate/";
+        WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
+
+        if (a != null) {
+            return bringToFront(context);
+        }
 
         try {
             Intent i = new Intent(context, WebViewBrowserActivity.class);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
-            i.putExtra("url", "about:blank");
-            i.putExtra("background", true);
+            i.putExtra("url", loginUrl);
             context.startActivity(i);
-
-            return "{\"ok\":true,\"action\":\"webview-host-start-requested\"}";
+            return "{\\"ok\\":true,\\"action\\":\\"webview-login-page-requested\\"}";
         } catch (Exception e) {
-            return "{\"ok\":false,\"error\":\"" + esc(String.valueOf(e)) + "\"}";
+            return "{\\"ok\\":false,\\"error\\":\\"" + esc(String.valueOf(e)) + "\\"}";
         }
     }
 
@@ -27,7 +29,7 @@ public final class WebViewBrowserController {
         WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
 
         if (a != null) {
-            a.openUrl(url);
+            a.openUrlInBackground(url);
 
             return "{\"ok\":true,\"action\":\"webview-open-requested\",\"url\":\"" +
                     esc(url) + "\"}";
@@ -104,7 +106,7 @@ public final class WebViewBrowserController {
         if (a == null)
             return "{\"ok\":false,\"error\":\"webview_not_started\"}";
 
-        a.openUrl(url);
+        a.openUrlInBackground(url);
 
         return "{\"ok\":true,\"action\":\"webview-open\",\"url\":\"" +
                 esc(url) +

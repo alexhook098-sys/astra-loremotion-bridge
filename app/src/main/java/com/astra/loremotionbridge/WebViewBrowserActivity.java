@@ -29,6 +29,7 @@ import java.util.Locale;
 public class WebViewBrowserActivity extends Activity {
     private static volatile WebViewBrowserActivity instance;
     private WebView webView;
+    private boolean hideAfterPageLoad;
     private TextView status;
     private ValueCallback<Uri[]> pendingFileCallback;
     private String pendingUploadPath;
@@ -59,6 +60,7 @@ public class WebViewBrowserActivity extends Activity {
 
         String initial = getIntent().getStringExtra("url");
         if (initial == null || initial.isEmpty()) initial = "about:blank";
+        hideAfterPageLoad = getIntent().getBooleanExtra("background", false);
         webView.loadUrl(initial);
     }
 
@@ -119,6 +121,10 @@ public class WebViewBrowserActivity extends Activity {
 
             @Override public void onPageFinished(WebView view, String url) {
                 updateStatus();
+                if (hideAfterPageLoad) {
+                    hideAfterPageLoad = false;
+                    sendToBackSoon();
+                }
             }
         });
 
@@ -267,6 +273,15 @@ public class WebViewBrowserActivity extends Activity {
 
             } catch (Exception e) {
                 setStatus("Upload inject error: " + e.getMessage());
+            }
+        });
+    }
+
+    public void openUrlInBackground(final String url) {
+        main.post(() -> {
+            if (webView != null) {
+                hideAfterPageLoad = true;
+                webView.loadUrl(url);
             }
         });
     }

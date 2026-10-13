@@ -32,8 +32,7 @@ public class BrowserBridgeService extends Service {
                 startForeground(NOTIFICATION_ID, notification);
             }
             LocalBridgeServer.start();
-            HeadlessBrowserRuntime.startAsync(this);
-            Log.i(TAG, "Bridge and headless runtime requested");
+            Log.i(TAG, "Bridge started; WebView backend available");
         } catch (Exception e) {
             Log.e(TAG, "FAILED TO START BROWSER BRIDGE", e);
             stopSelf();
@@ -42,7 +41,6 @@ public class BrowserBridgeService extends Service {
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         LocalBridgeServer.start();
-        HeadlessBrowserRuntime.startAsync(this);
         return START_STICKY;
     }
 

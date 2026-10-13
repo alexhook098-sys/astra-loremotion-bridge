@@ -23,12 +23,10 @@ public class MainActivity extends Activity {
     private final Runnable statusPoll = new Runnable() {
         @Override public void run() {
             if (statusText == null) return;
-            statusText.setText("ASTRA Headless Browser\n\n" + HeadlessBrowserRuntime.getSummary()
-                    + "\n\nПодробный журнал: http://127.0.0.1:18765/headless/log");
-            String state = HeadlessBrowserRuntime.getState();
-            if (!"ONLINE".equals(state) && !"FAILED".equals(state) && !"STOPPED".equals(state)) {
-                handler.postDelayed(this, 1500L);
-            }
+            statusText.setText("ASTRA LoreMotion Bridge\n\n"
+                    + "Фоновый сервер: HTTP 18765\n"
+                    + "Браузер: Android WebView\n"
+                    + "Вход в аккаунт: кнопка «ПОКАЗАТЬ WEBVIEW».");
         }
     };
 
@@ -57,14 +55,14 @@ public class MainActivity extends Activity {
         Button start = new Button(this);
         start.setText("ЗАПУСТИТЬ ASTRA BROWSER");
         start.setOnClickListener(v -> {
-            statusText.setText("ASTRA Browser Runtime запускается. Первый запуск скачает Chrome и установит его системные библиотеки. Не закрывай приложение, пока статус не изменится.");
+            statusText.setText("Запускаю фоновый мост. Для входа в аккаунт открой WebView кнопкой ниже.");
             Intent service = new Intent(this, BrowserBridgeService.class);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(service);
             } else {
                 startService(service);
             }
-            HeadlessBrowserRuntime.startAsync(getApplicationContext());
+
             WebViewBrowserController.ensureHost(this);
             handler.removeCallbacks(statusPoll);
             handler.post(statusPoll);
