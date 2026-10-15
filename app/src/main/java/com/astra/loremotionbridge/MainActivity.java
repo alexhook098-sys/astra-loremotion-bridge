@@ -24,9 +24,10 @@ public class MainActivity extends Activity {
         @Override public void run() {
             if (statusText == null) return;
             statusText.setText("ASTRA LoreMotion Bridge\n\n"
-                    + "Фоновый сервер: HTTP 18765\n"
-                    + "Браузер: Android WebView\n"
-                    + "Вход в аккаунт: кнопка «ПОКАЗАТЬ WEBVIEW».");
+                    + "HTTP-мост: " + (LocalBridgeServer.isRunning() ? "РАБОТАЕТ" : "НЕ ЗАПУЩЕН") + "\n"
+                    + "WebView: Android WebView\n"
+                    + (LocalBridgeServer.getLastError() == null ? "" : "Ошибка: " + LocalBridgeServer.getLastError() + "\n")
+                    + "Вход: кнопка «ПОКАЗАТЬ WEBVIEW».");
         }
     };
 
