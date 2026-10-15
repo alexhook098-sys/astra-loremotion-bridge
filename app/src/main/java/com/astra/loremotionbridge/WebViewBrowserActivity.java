@@ -286,6 +286,40 @@ public class WebViewBrowserActivity extends Activity {
         });
     }
 
+    /** Reload a known page in the background. Call only after the current job is saved. */
+    public void reloadInBackground(final String url) {
+        main.post(() -> {
+            if (webView == null) return;
+
+            String target = url;
+            if (target == null || target.isEmpty()) target = webView.getUrl();
+            if (target == null || target.isEmpty() || "about:blank".equals(target)) {
+                target = "https://loremotion.com/generate/";
+            }
+
+            hideAfterPageLoad = true;
+            if (target.equals(webView.getUrl())) {
+                webView.reload();
+            } else {
+                webView.loadUrl(target);
+            }
+        });
+    }
+
+    /** Finish the WebView task and flush cookies without stopping the bridge service. */
+    public void closeFromController() {
+        main.post(() -> {
+            if (pendingFileCallback != null) {
+                try { pendingFileCallback.onReceiveValue(null); } catch (Exception ignored) {}
+                pendingFileCallback = null;
+            }
+            pendingUploadPath = null;
+            if (webView != null) webView.stopLoading();
+            try { CookieManager.getInstance().flush(); } catch (Exception ignored) {}
+            if (!isFinishing()) finishAndRemoveTask();
+        });
+    }
+
     public void openUrl(final String url) {
         main.post(() -> {
             if (webView != null) webView.loadUrl(url);
@@ -405,6 +439,7 @@ public class WebViewBrowserActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        try { CookieManager.getInstance().flush(); } catch (Exception ignored) {}
         if (webView != null) {
             webView.stopLoading();
             webView.destroy();

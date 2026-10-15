@@ -53,9 +53,9 @@ public class MainActivity extends Activity {
         layout.addView(statusText);
 
         Button start = new Button(this);
-        start.setText("ЗАПУСТИТЬ ASTRA BROWSER");
+        start.setText("ЗАПУСТИТЬ ASTRA BRIDGE");
         start.setOnClickListener(v -> {
-            statusText.setText("Запускаю фоновый мост. Для входа в аккаунт открой WebView кнопкой ниже.");
+            statusText.setText("Запускаю фоновый мост. WebView будет открыт по запросу ASTRA; для входа нажми кнопку ниже.");
             Intent service = new Intent(this, BrowserBridgeService.class);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(service);
@@ -63,7 +63,6 @@ public class MainActivity extends Activity {
                 startService(service);
             }
 
-            WebViewBrowserController.ensureHost(this);
             handler.removeCallbacks(statusPoll);
             handler.post(statusPoll);
         });
@@ -72,7 +71,7 @@ public class MainActivity extends Activity {
         Button showWebView = new Button(this);
         showWebView.setText("ПОКАЗАТЬ WEBVIEW");
         showWebView.setOnClickListener(v -> {
-            String result = WebViewBrowserController.bringToFront(this);
+            String result = WebViewBrowserController.ensureHost(this);
             statusText.setText("WebView: " + result);
         });
         layout.addView(showWebView);
