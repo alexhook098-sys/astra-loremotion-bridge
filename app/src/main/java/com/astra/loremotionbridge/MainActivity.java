@@ -19,15 +19,28 @@ import android.widget.TextView;
 public class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private TextView statusText;
+    private boolean startupPending = false;
+    private long startupDeadline = 0L;
 
     private final Runnable statusPoll = new Runnable() {
         @Override public void run() {
             if (statusText == null) return;
+
+            boolean running = LocalBridgeServer.isRunning();
+            String error = LocalBridgeServer.getLastError();
+
+            if (startupPending && !running && error == null
+                    && System.currentTimeMillis() < startupDeadline) {
+                statusText.setText("Ожидаю подтверждения запуска HTTP-моста…");
+                handler.postDelayed(this, 300L);
+                return;
+            }
+
+            startupPending = false;
             statusText.setText("ASTRA LoreMotion Bridge\n\n"
-                    + "HTTP-мост: " + (LocalBridgeServer.isRunning() ? "РАБОТАЕТ" : "НЕ ЗАПУЩЕН") + "\n"
-                    + "WebView: Android WebView\n"
-                    + (LocalBridgeServer.getLastError() == null ? "" : "Ошибка: " + LocalBridgeServer.getLastError() + "\n")
-                    + "Вход: кнопка «ПОКАЗАТЬ WEBVIEW».");
+                    + "HTTP-мост: " + (running ? "РАБОТАЕТ" : "НЕ ЗАПУЩЕН") + "\n"
+                    + (error == null ? "" : "Ошибка: " + error + "\n")
+                    + "WebView запускается отдельно, по запросу ASTRA.");
         }
     };
 
@@ -56,16 +69,25 @@ public class MainActivity extends Activity {
         Button start = new Button(this);
         start.setText("ЗАПУСТИТЬ ASTRA BRIDGE");
         start.setOnClickListener(v -> {
-            statusText.setText("Запускаю фоновый мост. WebView будет открыт по запросу ASTRA; для входа нажми кнопку ниже.");
-            Intent service = new Intent(this, BrowserBridgeService.class);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(service);
-            } else {
-                startService(service);
-            }
-
             handler.removeCallbacks(statusPoll);
-            handler.post(statusPoll);
+            startupPending = true;
+            startupDeadline = System.currentTimeMillis() + 10000L;
+            statusText.setText("Запускаю фоновый мост…");
+
+            try {
+                Intent service = new Intent(this, BrowserBridgeService.class);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(service);
+                } else {
+                    startService(service);
+                }
+                handler.post(statusPoll);
+            } catch (Exception e) {
+                startupPending = false;
+                statusText.setText("ОШИБКА ЗАПУСКА: "
+                        + e.getClass().getSimpleName() + "\n"
+                        + String.valueOf(e.getMessage()));
+            }
         });
         layout.addView(start);
 
