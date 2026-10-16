@@ -1,5 +1,7 @@
 package com.astra.loremotionbridge;
 
+import android.util.Log;
+
 import android.content.Context;
 import android.content.Intent;
 
@@ -48,7 +50,9 @@ public final class WebViewBrowserController {
                 return "{\"ok\":false,\"error\":\"webview_activity_not_resolvable\"}";
             }
 
+            Log.i("ASTRA-WV-DIAG", "start(): calling startActivity url=" + url + " context=" + context.getClass().getName());
             context.startActivity(i);
+            Log.i("ASTRA-WV-DIAG", "start(): startActivity returned normally");
 
             return "{\"ok\":true,\"action\":\"webview-start-requested\",\"resolved\":true,\"activity\":\"" +
                     esc(String.valueOf(ri.activityInfo.name)) +
@@ -56,6 +60,7 @@ public final class WebViewBrowserController {
                     esc(url) +
                     "\"}";
         } catch (Exception e) {
+            Log.e("ASTRA-WV-DIAG", "start(): startActivity failed", e);
             return "{\"ok\":false,\"error\":\"" + esc(String.valueOf(e)) + "\"}";
         }
     }

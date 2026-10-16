@@ -1,5 +1,7 @@
 package com.astra.loremotionbridge;
 
+import android.util.Log;
+
 import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.Context;
@@ -38,6 +40,7 @@ public class WebViewBrowserActivity extends Activity {
     public static WebViewBrowserActivity getInstance() { return instance; }
 
     @Override protected void onCreate(Bundle state) {
+        Log.i("ASTRA-WV-DIAG", "Activity onCreate entered");
         super.onCreate(state);
         instance = this;
 
@@ -61,6 +64,7 @@ public class WebViewBrowserActivity extends Activity {
         String initial = getIntent().getStringExtra("url");
         if (initial == null || initial.isEmpty()) initial = "about:blank";
         hideAfterPageLoad = getIntent().getBooleanExtra("background", false);
+        Log.i("ASTRA-WV-DIAG", "Activity loading URL=" + initial + " background=" + hideAfterPageLoad);
         webView.loadUrl(initial);
     }
 
@@ -120,6 +124,7 @@ public class WebViewBrowserActivity extends Activity {
             }
 
             @Override public void onPageFinished(WebView view, String url) {
+                Log.i("ASTRA-WV-DIAG", "onPageFinished url=" + url);
                 updateStatus();
                 if (hideAfterPageLoad) {
                     hideAfterPageLoad = false;
@@ -405,6 +410,7 @@ public class WebViewBrowserActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        Log.i("ASTRA-WV-DIAG", "Activity onDestroy entered");
         if (webView != null) {
             webView.stopLoading();
             webView.destroy();
