@@ -20,6 +20,7 @@ import java.util.Map;
 public class LocalBridgeServer {
     private static final String TAG = "ASTRA-LocalBridge";
     private static volatile boolean running = false;
+    private static volatile boolean starting = false;
     private static volatile String lastError = null;
     private static ServerSocket server;
 
@@ -27,7 +28,8 @@ public class LocalBridgeServer {
     public static String getLastError() { return lastError; }
 
     public static synchronized void start() {
-        if (running) return;
+        if (running || starting) return;
+        starting = true;
         Thread t = new Thread(() -> {
             try {
                 server = new ServerSocket();
@@ -45,6 +47,8 @@ public class LocalBridgeServer {
                 lastError = e.getClass().getName() + ": " + String.valueOf(e.getMessage());
                 Log.e(TAG, "HTTP server FAILED", e);
                 try { if (server != null) server.close(); } catch (Exception ignored) {}
+            } finally {
+                starting = false;
             }
         }, "ASTRA-Bridge");
         t.setDaemon(true);
@@ -279,6 +283,10 @@ public class LocalBridgeServer {
                     m.getOrDefault("url", "https://loremotion.com/generate/"));
             if ("/webview/open".equals(p)) return WebViewBrowserController.open(
                     m.getOrDefault("url", "https://loremotion.com/generate/"));
+            if ("/webview/refresh".equals(p)) return WebViewBrowserController.refresh(
+                    MainApplication.context(),
+                    m.getOrDefault("url", "https://loremotion.com/generate/"));
+            if ("/webview/close".equals(p)) return WebViewBrowserController.close();
             if ("/webview/eval".equals(p)) return WebViewBrowserController.evaluate(
                     m.getOrDefault("script", "document.title"));
             if ("/webview/ready-mp4".equals(p)) return WebViewBrowserController.readyMp4();

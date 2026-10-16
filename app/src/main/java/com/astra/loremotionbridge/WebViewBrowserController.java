@@ -60,6 +60,50 @@ public final class WebViewBrowserController {
         }
     }
 
+    /** Reload the generator page after a completed task, or start it if stopped. */
+    public static String refresh(Context context, String url) {
+        String target = url;
+        if (target == null || target.isEmpty()) {
+            target = "https://loremotion.com/generate/";
+        }
+        if (!(target.startsWith("https://") || target.startsWith("http://"))) {
+            return "{\"ok\":false,\"error\":\"Only http/https URLs are allowed\"}";
+        }
+
+        WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
+        if (a == null) {
+            return start(context, target);
+        }
+
+        a.reloadInBackground(target);
+        return "{\"ok\":true,\"action\":\"webview-refresh-requested\",\"url\":\"" +
+                esc(target) + "\"}";
+    }
+
+    /** Close only the WebView activity; the local bridge service remains running. */
+    public static String close() {
+        WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
+        if (a == null) {
+            return "{\"ok\":true,\"state\":\"stopped\",\"alreadyStopped\":true}";
+        }
+
+        a.closeFromController();
+        long deadline = System.currentTimeMillis() + 3000L;
+        while (WebViewBrowserActivity.getInstance() != null &&
+                System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(25L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return "{\"ok\":false,\"error\":\"interrupted\"}";
+            }
+        }
+
+        return WebViewBrowserActivity.getInstance() == null
+                ? "{\"ok\":true,\"state\":\"stopped\"}"
+                : "{\"ok\":true,\"action\":\"webview-close-requested\"}";
+    }
+
     public static String bringToFront(Context context) {
         WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
 

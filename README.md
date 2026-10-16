@@ -2,11 +2,12 @@
 
 This Android app runs a local bridge plus a Linux ARM64 Chrome Headless Shell inside the bundled Ubuntu/Proroot rootfs.
 
-## Start
+## Start the bridge
 
 1. Open **ASTRA Browser Control**.
-2. Tap **ЗАПУСТИТЬ ASTRA BROWSER**. The first launch downloads the official Chrome for Testing ARM64 archive, extracts it into the app's private Ubuntu rootfs, and installs Chrome's shared-library dependencies. This first setup can take several minutes. Leave the app open until it reports `ONLINE`.
-3. The local bridge is at `http://127.0.0.1:18765`; the Chrome DevTools Protocol endpoint is `http://127.0.0.1:9222/json/version`.
+2. Tap **ЗАПУСТИТЬ ASTRA BRIDGE**. This starts the local HTTP bridge at `http://127.0.0.1:18765`. It does not open WebView automatically.
+3. To sign in interactively, tap **ПОКАЗАТЬ WEBVIEW**. The WebView session uses Android's persistent cookies and DOM storage.
+4. The separate headless Chrome runtime is optional. Start it explicitly through `/headless/start`; its CDP endpoint is `http://127.0.0.1:9222/json/version`. First-time setup can take several minutes.
 
 ## Termux checks
 
@@ -19,6 +20,26 @@ curl -sS http://127.0.0.1:9222/json/version
 ```
 
 `/headless/log` exposes the full tail of the runtime log so startup failures can be diagnosed from Termux without relying on the Android status card, which can truncate long output.
+
+## On-demand WebView lifecycle
+
+ASTRA should start the WebView only when a task needs LoreMotion. The bridge service can remain online while the WebView Activity is stopped.
+
+```sh
+# Open the generator in the background (creates the WebView if needed).
+curl -sS 'http://127.0.0.1:18765/webview/start?url=https%3A%2F%2Floremotion.com%2Fgenerate%2F'
+
+# After the MP4 has been downloaded and verified, close the WebView.
+curl -sS 'http://127.0.0.1:18765/webview/close'
+
+# Alternative: reload the generator page after a saved task instead of closing.
+curl -sS 'http://127.0.0.1:18765/webview/refresh?url=https%3A%2F%2Floremotion.com%2Fgenerate%2F'
+
+# Verify that close completed.
+curl -sS 'http://127.0.0.1:18765/webview/status'
+```
+
+`/webview/close` closes only the WebView Activity, not the HTTP bridge foreground service. It flushes cookies before destruction. A later `/webview/start` creates a fresh WebView and reloads LoreMotion while retaining persisted site data. Always call close/refresh only after ASTRA has fully saved and verified the MP4; reloading during generation would cancel the task.
 
 ## Rootfs DNS and package setup
 
