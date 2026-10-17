@@ -369,13 +369,25 @@ public class WebViewBrowserActivity extends Activity {
             }
 
             final String js =
-                "(()=>({" +
-                "title:document.title," +
-                "url:location.href," +
-                "textInputs:document.querySelectorAll('input:not([type=hidden]),textarea,[contenteditable=true]').length," +
-                "buttons:document.querySelectorAll('button,[role=button]').length" +
-                "}))()";
-
+                    "(()=>({" +
+                    "title:document.title," +
+                    "url:location.href," +
+                    "fields:Array.from(document.querySelectorAll('input:not([type=hidden]),textarea,[contenteditable=true]')).slice(0,12).map(e=>({" +
+                    "tag:e.tagName," +
+                    "type:e.getAttribute('type')||''," +
+                    "placeholder:e.getAttribute('placeholder')||''," +
+                    "ariaLabel:e.getAttribute('aria-label')||''," +
+                    "role:e.getAttribute('role')||''," +
+                    "name:e.getAttribute('name')||''," +
+                    "visible:!!(e.getClientRects().length)" +
+                    "})), " +
+                    "buttons:Array.from(document.querySelectorAll('button,[role=button]')).slice(0,30).map(e=>({" +
+                    "text:(e.innerText||e.getAttribute('aria-label')||'').trim().slice(0,100)," +
+                    "ariaLabel:e.getAttribute('aria-label')||''," +
+                    "disabled:!!e.disabled," +
+                    "visible:!!(e.getClientRects().length)" +
+                    "}))" +
+                    "}))()";
             webView.evaluateJavascript(js, value -> {
                 if (value == null || "null".equals(value)) {
                     callback.onResult(null, "empty_inspection_result");
