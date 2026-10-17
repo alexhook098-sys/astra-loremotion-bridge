@@ -360,6 +360,32 @@ public class WebViewBrowserActivity extends Activity {
         });
     }
 
+
+    public void inspectBing(final EvalCallback callback) {
+        main.post(() -> {
+            if (webView == null) {
+                callback.onResult(null, "webview_not_ready");
+                return;
+            }
+
+            final String js =
+                "(()=>({" +
+                "title:document.title," +
+                "url:location.href," +
+                "textInputs:document.querySelectorAll('input:not([type=hidden]),textarea,[contenteditable=true]').length," +
+                "buttons:document.querySelectorAll('button,[role=button]').length" +
+                "}))()";
+
+            webView.evaluateJavascript(js, value -> {
+                if (value == null || "null".equals(value)) {
+                    callback.onResult(null, "empty_inspection_result");
+                } else {
+                    callback.onResult(value, null);
+                }
+            });
+        });
+    }
+
     public String statusJson() {
         if (webView == null)
             return "{\"ok\":false,\"ready\":false,\"state\":\"stopped\"}";

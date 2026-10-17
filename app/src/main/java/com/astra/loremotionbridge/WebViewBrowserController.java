@@ -178,6 +178,44 @@ public final class WebViewBrowserController {
                 "}";
     }
 
+
+    public static String inspectBing() {
+        WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
+        if (a == null)
+            return "{\"ok\":false,\"error\":\"webview_not_started\"}";
+
+        final Object lock = new Object();
+        final String[] result = new String[1];
+        final String[] error = new String[1];
+        final boolean[] done = new boolean[1];
+
+        a.inspectBing((value, err) -> {
+            synchronized (lock) {
+                result[0] = value;
+                error[0] = err;
+                done[0] = true;
+                lock.notifyAll();
+            }
+        });
+
+        synchronized (lock) {
+            try {
+                if (!done[0]) lock.wait(10000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return "{\"ok\":false,\"error\":\"interrupted\"}";
+            }
+        }
+
+        if (!done[0])
+            return "{\"ok\":false,\"error\":\"inspect_timeout\"}";
+        if (error[0] != null)
+            return "{\"ok\":false,\"error\":\"" + esc(error[0]) + "\"}";
+
+        return "{\"ok\":true,\"value\":" +
+                (result[0] == null ? "null" : result[0]) + "}";
+    }
+
     public static String readyMp4() {
         String script =
                 "(()=>{" +
