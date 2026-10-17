@@ -367,27 +367,40 @@ public class WebViewBrowserActivity extends Activity {
                 callback.onResult(null, "webview_not_ready");
                 return;
             }
-
             final String js =
-                    "(()=>({" +
-                    "title:document.title," +
-                    "url:location.href," +
-                    "fields:Array.from(document.querySelectorAll('input:not([type=hidden]),textarea,[contenteditable=true]')).slice(0,12).map(e=>({" +
-                    "tag:e.tagName," +
-                    "type:e.getAttribute('type')||''," +
-                    "placeholder:e.getAttribute('placeholder')||''," +
-                    "ariaLabel:e.getAttribute('aria-label')||''," +
-                    "role:e.getAttribute('role')||''," +
-                    "name:e.getAttribute('name')||''," +
-                    "visible:!!(e.getClientRects().length)" +
-                    "})), " +
-                    "buttons:Array.from(document.querySelectorAll('button,[role=button]')).slice(0,30).map(e=>({" +
-                    "text:(e.innerText||e.getAttribute('aria-label')||'').trim().slice(0,100)," +
-                    "ariaLabel:e.getAttribute('aria-label')||''," +
-                    "disabled:!!e.disabled," +
-                    "visible:!!(e.getClientRects().length)" +
-                    "}))" +
-                    "}))()";
+                "(()=>({" +
+                "title:document.title," +
+                "url:location.href," +
+                "fields:Array.from(document.querySelectorAll('input:not([type=hidden]),textarea,[contenteditable=true]')).slice(0,12).map(e=>({" +
+                "tag:e.tagName," +
+                "type:e.getAttribute('type')||''," +
+                "placeholder:e.getAttribute('placeholder')||''," +
+                "ariaLabel:e.getAttribute('aria-label')||''," +
+                "role:e.getAttribute('role')||''," +
+                "name:e.getAttribute('name')||''," +
+                "visible:!!(e.getClientRects().length)" +
+                "})), " +
+                "buttons:Array.from(document.querySelectorAll('button,[role=button]')).slice(0,30).map(e=>({" +
+                "text:(e.innerText||e.getAttribute('aria-label')||'').trim().slice(0,100)," +
+                "ariaLabel:e.getAttribute('aria-label')||''," +
+                "disabled:!!e.disabled," +
+                "visible:!!(e.getClientRects().length)" +
+                "})), " +
+                "images:Array.from(document.images).filter(e=>e.getClientRects().length).slice(0,40).map(e=>({" +
+                "src:e.currentSrc||e.src||''," +
+                "protocol:(()=>{try{return new URL(e.currentSrc||e.src,location.href).protocol}catch(_){return 'unknown'}})()," +
+                "alt:e.alt||''," +
+                "width:e.naturalWidth||e.width||0," +
+                "height:e.naturalHeight||e.height||0," +
+                "complete:!!e.complete," +
+                "visible:!!e.getClientRects().length" +
+                "})), " +
+                "imageLinks:Array.from(document.querySelectorAll('a[href]')).filter(a=>a.getClientRects().length && (/images|create|download/i.test(a.href)||a.querySelector('img'))).slice(0,30).map(a=>({" +
+                "href:a.href," +
+                "text:(a.innerText||a.getAttribute('aria-label')||'').trim().slice(0,80)," +
+                "hasImage:!!a.querySelector('img')" +
+                "}))" +
+                "}))()";
             webView.evaluateJavascript(js, value -> {
                 if (value == null || "null".equals(value)) {
                     callback.onResult(null, "empty_inspection_result");
