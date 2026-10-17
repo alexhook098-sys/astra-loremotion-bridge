@@ -1,5 +1,7 @@
 package com.astra.loremotionbridge;
 
+import org.json.JSONObject;
+
 import android.content.Intent;
 import android.net.Uri;
 import android.util.Log;
@@ -163,6 +165,49 @@ public class LocalBridgeServer {
                 }
             }
 
+            // ASTRA_BING_POST_JSON_PATCH_V2: only these adapter routes accept JSON.
+            Map<String,String> postParams = null;
+            String routeOnlyPath = target.split("\\?", 2)[0];
+            boolean jsonAdapterRoute =
+                    "/webview/start".equals(routeOnlyPath) ||
+                    "/webview/open".equals(routeOnlyPath) ||
+                    "/webview/eval".equals(routeOnlyPath);
+            if ("POST".equalsIgnoreCase(method) && jsonAdapterRoute) {
+                if (contentLength <= 0 || contentLength > 1024 * 1024) {
+                    sendResponse(sock, "{\"ok\":false,\"error\":\"invalid_json_body_size\"}",
+                            "application/json; charset=utf-8");
+                    return;
+                }
+                byte[] jsonBytes = new byte[contentLength];
+                int jsonOffset = 0;
+                while (jsonOffset < contentLength) {
+                    int n = input.read(jsonBytes, jsonOffset, contentLength - jsonOffset);
+                    if (n < 0) break;
+                    jsonOffset += n;
+                }
+                if (jsonOffset != contentLength) {
+                    sendResponse(sock, "{\"ok\":false,\"error\":\"json_body_incomplete\"}",
+                            "application/json; charset=utf-8");
+                    return;
+                }
+                try {
+                    JSONObject json = new JSONObject(new String(jsonBytes, StandardCharsets.UTF_8));
+                    postParams = new HashMap<>();
+                    java.util.Iterator<String> keys = json.keys();
+                    while (keys.hasNext()) {
+                        String key = keys.next();
+                        Object value = json.get(key);
+                        if (value != JSONObject.NULL && value != null) {
+                            postParams.put(key, String.valueOf(value));
+                        }
+                    }
+                } catch (Exception jsonError) {
+                    sendResponse(sock, "{\"ok\":false,\"error\":\"invalid_json_body\"}",
+                            "application/json; charset=utf-8");
+                    return;
+                }
+            }
+
             if ("POST".equalsIgnoreCase(method) &&
                     "/webview/upload".equals(target.split("\\?", 2)[0])) {
 
@@ -232,7 +277,7 @@ public class LocalBridgeServer {
                     contentType = "application/json; charset=utf-8";
                 }
             } else {
-                body = route(target).getBytes(StandardCharsets.UTF_8);
+                body = route(target, postParams).getBytes(StandardCharsets.UTF_8);
                 contentType = "application/json; charset=utf-8";
             }
 
@@ -270,6 +315,11 @@ public class LocalBridgeServer {
     }
 
     private static String route(String path) {
+        return route(path, null);
+    }
+
+    // ASTRA_BING_POST_JSON_PATCH_V2: merge JSON POST fields with legacy query parameters.
+    private static String route(String path, Map<String,String> postParams) {
         try {
             int q = path.indexOf('?');
             String p = q >= 0 ? path.substring(0, q) : path;
@@ -280,6 +330,7 @@ public class LocalBridgeServer {
                     if (kv.length == 2) m.put(URLDecoder.decode(kv[0],"UTF-8"), URLDecoder.decode(kv[1],"UTF-8"));
                 }
             }
+            if (postParams != null) m.putAll(postParams);
             if ("/headless/status".equals(p)) return HeadlessBrowserRuntime.statusJson();
             if ("/headless/log".equals(p)) return HeadlessBrowserRuntime.logJson();
             if ("/headless/start".equals(p)) {
