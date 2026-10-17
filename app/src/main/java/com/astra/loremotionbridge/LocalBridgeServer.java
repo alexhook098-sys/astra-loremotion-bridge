@@ -171,7 +171,8 @@ public class LocalBridgeServer {
             boolean jsonAdapterRoute =
                     "/webview/start".equals(routeOnlyPath) ||
                     "/webview/open".equals(routeOnlyPath) ||
-                    "/webview/eval".equals(routeOnlyPath);
+                    "/webview/eval".equals(routeOnlyPath) ||
+                "/webview/bing-save-image".equals(routeOnlyPath);
             if ("POST".equalsIgnoreCase(method) && jsonAdapterRoute) {
                 if (contentLength <= 0 || contentLength > 1024 * 1024) {
                     sendResponse(sock, "{\"ok\":false,\"error\":\"invalid_json_body_size\"}",
@@ -345,6 +346,11 @@ public class LocalBridgeServer {
                     m.getOrDefault("url", "https://loremotion.com/generate/"));
             if ("/webview/open".equals(p)) return WebViewBrowserController.open(
                     m.getOrDefault("url", "https://loremotion.com/generate/"));
+            if ("/webview/bing-save-image".equals(p)) return WebViewBrowserController.saveBingImage(
+                    m.getOrDefault("url", ""));
+            if ("/webview/bing-image-chunk".equals(p)) return WebViewBrowserController.readBingImageChunk(
+                    m.getOrDefault("id", ""), m.getOrDefault("offset", "0"),
+                    m.getOrDefault("length", "32768"));
             if ("/webview/bing-inspect".equals(p)) return WebViewBrowserController.inspectBing();
             if ("/webview/eval".equals(p)) return WebViewBrowserController.evaluate(
                     m.getOrDefault("script", "document.title"));

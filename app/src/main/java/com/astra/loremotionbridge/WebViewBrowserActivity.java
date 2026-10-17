@@ -361,6 +361,206 @@ public class WebViewBrowserActivity extends Activity {
     }
 
 
+
+    // ASTRA_BING_BLOB_SAVE_V1: fetches a Bing-owned blob in WebView context and streams it to app cache.
+    public void saveBingImage(final String url, final EvalCallback callback) {
+        main.post(() -> {
+            if (webView == null) {
+                callback.onResult(null, "webview_not_ready");
+                return;
+            }
+            if (url == null || !url.startsWith("blob:https://www.bing.com/")) {
+                callback.onResult(null, "unsupported_blob_origin");
+                return;
+            }
+            new BingSaveJob(url, callback).start();
+        });
+    }
+
+    private final class BingSaveJob {
+        private final String url;
+        private final EvalCallback callback;
+        private final String id = java.util.UUID.randomUUID().toString().replace("-", "");
+        private final String blobKey = "__astraBingBlob_" + id;
+        private final String metaKey = "__astraBingMeta_" + id;
+        private final String chunkKey = "__astraBingChunk_" + id;
+        private File file;
+        private String mime;
+        private long size;
+        private boolean finished;
+
+        BingSaveJob(String url, EvalCallback callback) {
+            this.url = url;
+            this.callback = callback;
+        }
+
+        void start() {
+            String js = "(function(){var u=" + org.json.JSONObject.quote(url)
+                    + ",b=" + org.json.JSONObject.quote(blobKey)
+                    + ",m=" + org.json.JSONObject.quote(metaKey)
+                    + ";try{fetch(u).then(function(r){if(!r.ok)throw Error('fetch_'+r.status);return r.blob();})"
+                    + ".then(function(x){if(!/^image\\/(png|jpeg|webp)$/.test(x.type))throw Error('unsupported_mime:'+x.type);"
+                    + "if(x.size<1||x.size>20971520)throw Error('invalid_size:'+x.size);"
+                    + "window[b]=x;window[m]=JSON.stringify({size:x.size,type:x.type});})"
+                    + ".catch(function(e){window[m]='!'+String(e);});}"
+                    + "catch(e){window[m]='!'+String(e);}return true;})()";
+            webView.evaluateJavascript(js, ignored -> pollMeta(0));
+        }
+
+        private Object decode(String raw) {
+            try {
+                return raw == null ? null : new org.json.JSONTokener(raw).nextValue();
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        private void pollMeta(int tries) {
+            if (finished) return;
+            if (webView == null) { fail("webview_not_ready"); return; }
+            String check = "(function(){var v=window[" + org.json.JSONObject.quote(metaKey)
+                    + "];return v===undefined?null:v;})()";
+            webView.evaluateJavascript(check, raw -> {
+                Object decoded = decode(raw);
+                if (decoded instanceof String) {
+                    String value = (String) decoded;
+                    if (value.startsWith("!")) { fail(value.substring(1)); return; }
+                    try {
+                        org.json.JSONObject meta = new org.json.JSONObject(value);
+                        size = meta.getLong("size");
+                        mime = meta.getString("type");
+                        if (size < 1 || size > 20971520L) { fail("invalid_size"); return; }
+                        String ext = "image/png".equals(mime) ? ".png"
+                                : "image/jpeg".equals(mime) ? ".jpg"
+                                : "image/webp".equals(mime) ? ".webp" : null;
+                        if (ext == null) { fail("unsupported_mime"); return; }
+                        File dir = new File(getCacheDir(), "bing_images");
+                        if (!dir.exists() && !dir.mkdirs()) { fail("cache_dir_failed"); return; }
+                        file = new File(dir, id + ext);
+                        if (file.exists() && !file.delete()) { fail("cache_file_reset_failed"); return; }
+                        writeNext(0L);
+                    } catch (Exception e) {
+                        fail("invalid_blob_metadata");
+                    }
+                    return;
+                }
+                if (tries >= 300) { fail("blob_fetch_timeout"); return; }
+                main.postDelayed(() -> pollMeta(tries + 1), 50L);
+            });
+        }
+
+        private void writeNext(long offset) {
+            if (finished) return;
+            if (webView == null) { fail("webview_not_ready"); return; }
+            if (offset >= size) {
+                finishSuccess();
+                return;
+            }
+            String js = "(function(){var b=window[" + org.json.JSONObject.quote(blobKey)
+                    + "],k=" + org.json.JSONObject.quote(chunkKey) + ";delete window[k];"
+                    + "if(!b){window[k]='!blob_missing';return true;}"
+                    + "b.slice(" + offset + "," + Math.min(offset + 32768L, size)
+                    + ").arrayBuffer().then(function(buf){var a=new Uint8Array(buf),s='';"
+                    + "for(var i=0;i<a.length;i++)s+=String.fromCharCode(a[i]);window[k]=btoa(s);"
+                    + "}).catch(function(e){window[k]='!'+String(e);});return true;})()";
+            webView.evaluateJavascript(js, ignored -> pollChunk(offset, 0));
+        }
+
+        private void pollChunk(long offset, int tries) {
+            if (finished) return;
+            if (webView == null) { fail("webview_not_ready"); return; }
+            String check = "(function(){var v=window[" + org.json.JSONObject.quote(chunkKey)
+                    + "];if(v!==undefined){delete window[" + org.json.JSONObject.quote(chunkKey)
+                    + "];return v;}return null;})()";
+            webView.evaluateJavascript(check, raw -> {
+                Object decoded = decode(raw);
+                if (decoded instanceof String) {
+                    String encoded = (String) decoded;
+                    if (encoded.startsWith("!")) { fail(encoded.substring(1)); return; }
+                    try {
+                        byte[] bytes = android.util.Base64.decode(encoded, android.util.Base64.DEFAULT);
+                        if (bytes.length == 0 || offset + bytes.length > size) {
+                            fail("invalid_chunk_length");
+                            return;
+                        }
+                        try (FileOutputStream out = new FileOutputStream(file, offset > 0)) {
+                            out.write(bytes);
+                        }
+                        writeNext(offset + bytes.length);
+                    } catch (Exception e) {
+                        fail("chunk_write_failed");
+                    }
+                    return;
+                }
+                if (tries >= 100) { fail("blob_chunk_timeout"); return; }
+                main.postDelayed(() -> pollChunk(offset, tries + 1), 50L);
+            });
+        }
+
+        private void clearJs() {
+            if (webView == null) return;
+            String js = "(function(){delete window[" + org.json.JSONObject.quote(blobKey)
+                    + "];delete window[" + org.json.JSONObject.quote(metaKey)
+                    + "];delete window[" + org.json.JSONObject.quote(chunkKey) + "];return true;})()";
+            webView.evaluateJavascript(js, null);
+        }
+
+        private void finishSuccess() {
+            if (finished) return;
+            finished = true;
+            clearJs();
+            try {
+                org.json.JSONObject result = new org.json.JSONObject();
+                result.put("id", id);
+                result.put("size", size);
+                result.put("type", mime);
+                result.put("name", file.getName());
+                callback.onResult(result.toString(), null);
+            } catch (Exception e) {
+                callback.onResult(null, "result_json_failed");
+            }
+        }
+
+        private void fail(String error) {
+            if (finished) return;
+            finished = true;
+            clearJs();
+            if (file != null && file.exists()) file.delete();
+            callback.onResult(null, error == null ? "bing_blob_save_failed" : error);
+        }
+    }
+
+    // Reads only files created by BingSaveJob; id and chunk size are strictly bounded.
+    public static String readBingImageChunk(String id, int offset, int length) {
+        if (id == null || !id.matches("[0-9a-f]{32}") || offset < 0
+                || length < 1 || length > 32768) {
+            return "{\"ok\":false,\"error\":\"invalid_chunk_request\"}";
+        }
+        Context context = MainApplication.context();
+        if (context == null) return "{\"ok\":false,\"error\":\"context_unavailable\"}";
+        File dir = new File(context.getCacheDir(), "bing_images");
+        File file = null;
+        for (String ext : new String[]{".png", ".jpg", ".webp"}) {
+            File candidate = new File(dir, id + ext);
+            if (candidate.isFile()) { file = candidate; break; }
+        }
+        if (file == null) return "{\"ok\":false,\"error\":\"image_not_found\"}";
+        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(file, "r")) {
+            long size = raf.length();
+            if (offset > size) return "{\"ok\":false,\"error\":\"offset_out_of_range\"}";
+            int count = (int) Math.min((long) length, size - offset);
+            byte[] bytes = new byte[count];
+            raf.seek(offset);
+            raf.readFully(bytes);
+            String data = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP);
+            boolean eof = offset + count >= size;
+            return "{\"ok\":true,\"id\":\"" + id + "\",\"offset\":" + offset
+                    + ",\"size\":" + size + ",\"data\":\"" + data + "\",\"eof\":" + eof + "}";
+        } catch (Exception e) {
+            return "{\"ok\":false,\"error\":\"chunk_read_failed\"}";
+        }
+    }
+
     public void inspectBing(final EvalCallback callback) {
         main.post(() -> {
             if (webView == null) {
