@@ -362,6 +362,26 @@ public class WebViewBrowserActivity extends Activity {
 
 
 
+    // ASTRA_BING_EVAL_V1: execute scripts directly, without eval(), for Bing CSP.
+    public void evaluateBing(final String script, final EvalCallback callback) {
+        main.post(() -> {
+            if (webView == null) {
+                callback.onResult(null, "webview_not_ready");
+                return;
+            }
+            webView.evaluateJavascript(script == null ? "null" : script, raw -> {
+                try {
+                    Object decoded = raw == null
+                            ? null : new org.json.JSONTokener(raw).nextValue();
+                    callback.onResult(
+                            decoded == null ? "null" : String.valueOf(decoded), null);
+                } catch (Exception e) {
+                    callback.onResult(null, "bing_eval_decode_error");
+                }
+            });
+        });
+    }
+
     // ASTRA_BING_BLOB_SAVE_V1: fetches a Bing-owned blob in WebView context and streams it to app cache.
     public void saveBingImage(final String url, final EvalCallback callback) {
         main.post(() -> {

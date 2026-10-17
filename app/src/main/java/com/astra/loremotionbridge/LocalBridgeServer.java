@@ -352,6 +352,8 @@ public class LocalBridgeServer {
                     m.getOrDefault("id", ""), m.getOrDefault("offset", "0"),
                     m.getOrDefault("length", "32768"));
             if ("/webview/bing-inspect".equals(p)) return WebViewBrowserController.inspectBing();
+            if ("/webview/bing-eval".equals(p)) return WebViewBrowserController.evaluateBing(
+                    m.getOrDefault("script", "document.title"));
             if ("/webview/eval".equals(p)) return WebViewBrowserController.evaluate(
                     m.getOrDefault("script", "document.title"));
             if ("/webview/ready-mp4".equals(p)) return WebViewBrowserController.readyMp4();
