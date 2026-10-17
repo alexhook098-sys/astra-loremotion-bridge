@@ -20,31 +20,45 @@ import java.util.Map;
 public class LocalBridgeServer {
     private static final String TAG = "ASTRA-LocalBridge";
     private static volatile boolean running = false;
+    private static volatile boolean starting = false;
     private static volatile String lastError = null;
     private static ServerSocket server;
 
     public static boolean isRunning() { return running; }
+    public static boolean isStarting() { return starting; }
     public static String getLastError() { return lastError; }
 
     public static synchronized void start() {
-        if (running) return;
+        if (running || starting) {
+            Log.i(TAG, "start() ignored; running=" + running + ", starting=" + starting);
+            return;
+        }
+        starting = true;
         Thread t = new Thread(() -> {
+            ServerSocket localServer = null;
             try {
-                server = new ServerSocket();
-                server.setReuseAddress(true);
-                server.bind(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 18765));
+                localServer = new ServerSocket();
+                localServer.setReuseAddress(true);
+                localServer.bind(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 18765));
+                server = localServer;
                 running = true;
                 lastError = null;
                 Log.i(TAG, "HTTP server listening on 127.0.0.1:18765");
                 while (running) {
-                    final Socket s = server.accept();
+                    final Socket s = localServer.accept();
                     new Thread(() -> handle(s), "ASTRA-HTTP").start();
                 }
             } catch (Exception e) {
                 running = false;
                 lastError = e.getClass().getName() + ": " + String.valueOf(e.getMessage());
                 Log.e(TAG, "HTTP server FAILED", e);
-                try { if (server != null) server.close(); } catch (Exception ignored) {}
+                try {
+                    if (localServer != null) localServer.close();
+                } catch (Exception ignored) {}
+            } finally {
+                running = false;
+                starting = false;
+                if (server == localServer) server = null;
             }
         }, "ASTRA-Bridge");
         t.setDaemon(true);
@@ -273,6 +287,7 @@ public class LocalBridgeServer {
                 return "{\"ok\":true,\"state\":\"STARTING\"}";
             }
             if ("/headless/open".equals(p)) return HeadlessBrowserRuntime.openUrl(m.getOrDefault("url", "https://loremotion.com/generate/"));
+            if ("/webview/close".equals(p)) return WebViewBrowserController.close();
             if ("/webview/status".equals(p)) return WebViewBrowserController.status();
             if ("/webview/start".equals(p)) return WebViewBrowserController.start(
                     MainApplication.context(),

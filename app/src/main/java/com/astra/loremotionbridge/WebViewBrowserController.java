@@ -118,6 +118,15 @@ public final class WebViewBrowserController {
                 "\"}";
     }
 
+    public static String close() {
+        WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
+        if (a == null) {
+            return "{\"ok\":true,\"action\":\"webview-already-closed\"}";
+        }
+        a.runOnUiThread(() -> a.finish());
+        return "{\"ok\":true,\"action\":\"webview-close-requested\"}";
+    }
+
     public static String status() {
         WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
 

@@ -23,8 +23,11 @@ public class MainActivity extends Activity {
     private final Runnable statusPoll = new Runnable() {
         @Override public void run() {
             if (statusText == null) return;
+            String bridgeError = LocalBridgeServer.getLastError();
             statusText.setText("ASTRA LoreMotion Bridge\n\n"
                     + "Фоновый сервер: HTTP 18765\n"
+                    + "Состояние: " + (LocalBridgeServer.isRunning() ? "РАБОТАЕТ" : LocalBridgeServer.isStarting() ? "ЗАПУСКАЕТСЯ" : "НЕ ЗАПУЩЕН") + "\n"
+                    + "Ошибка сервера: " + (bridgeError == null ? "пока нет данных" : bridgeError) + "\n"
                     + "Браузер: Android WebView\n"
                     + "Вход в аккаунт: кнопка «ПОКАЗАТЬ WEBVIEW».");
         }
