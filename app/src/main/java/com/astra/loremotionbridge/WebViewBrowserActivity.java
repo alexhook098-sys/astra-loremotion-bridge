@@ -503,7 +503,7 @@ public class WebViewBrowserActivity extends Activity {
                         try {
                             org.json.JSONObject result =
                                     new org.json.JSONObject((String) decoded);
-                            String error = result.optString("error", "");
+                            String error = result.isNull("error") ? "" : result.optString("error", "");
                             if (!error.isEmpty()) {
                                 callback.onResult(null, error);
                             } else {
