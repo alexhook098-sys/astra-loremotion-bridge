@@ -141,8 +141,8 @@ public class WebViewBrowserActivity extends Activity {
             @Override public void onDownloadStart(
                     String url, String userAgent, String contentDisposition,
                     String mimeType, long contentLength) {
-                // ASTRA_BING_DOWNLOAD_LISTENER_V1: handle only Bing blob images.
-                if (url != null && url.startsWith("blob:https://www.bing.com/")) {
+                // ASTRA_BING_DOWNLOAD_LISTENER_V1: handle Bing blob and HTTPS image URLs.
+                if (url != null && (url.startsWith("blob:https://www.bing.com/") || url.startsWith("https://th.bing.com/th/id/"))) {
                     setStatus("Saving Bing image...");
                     saveBingImage(url, (value, error) -> {
                         if (error != null) {
@@ -539,8 +539,20 @@ public class WebViewBrowserActivity extends Activity {
                 callback.onResult(null, "webview_not_ready");
                 return;
             }
-            if (url == null || !url.startsWith("blob:https://www.bing.com/")) {
-                callback.onResult(null, "unsupported_blob_origin");
+            boolean bingBlob = url != null && url.startsWith("blob:https://www.bing.com/");
+            boolean bingHttps = false;
+            try {
+                java.net.URI uri = url == null ? null : java.net.URI.create(url);
+                bingHttps = uri != null
+                        && "https".equalsIgnoreCase(uri.getScheme())
+                        && "th.bing.com".equalsIgnoreCase(uri.getHost())
+                        && uri.getPath() != null
+                        && uri.getPath().startsWith("/th/id/");
+            } catch (Exception ignored) {
+                bingHttps = false;
+            }
+            if (!bingBlob && !bingHttps) {
+                callback.onResult(null, "unsupported_bing_image_url");
                 return;
             }
             new BingSaveJob(url, callback).start();
@@ -565,6 +577,10 @@ public class WebViewBrowserActivity extends Activity {
         }
 
         void start() {
+            if (url != null && url.startsWith("https://th.bing.com/th/id/")) {
+                startHttpsDownload();
+                return;
+            }
             String js = "(function(){var u=" + org.json.JSONObject.quote(url)
                     + ",b=" + org.json.JSONObject.quote(blobKey)
                     + ",m=" + org.json.JSONObject.quote(metaKey)
@@ -577,6 +593,106 @@ public class WebViewBrowserActivity extends Activity {
             webView.evaluateJavascript(js, ignored -> pollMeta(0));
         }
 
+
+        private boolean isTrustedBingHttpsUrl(String value) {
+            try {
+                java.net.URI uri = java.net.URI.create(value);
+                return "https".equalsIgnoreCase(uri.getScheme())
+                    && "th.bing.com".equalsIgnoreCase(uri.getHost());
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        private void startHttpsDownload() {
+            new Thread(() -> {
+                java.net.HttpURLConnection conn = null;
+                try {
+                    String current = url;
+                    for (int redirects = 0; redirects <= 5; redirects++) {
+                        if (!isTrustedBingHttpsUrl(current)) {
+                            throw new java.io.IOException("bing_redirect_host_rejected");
+                        }
+
+                        java.net.URL requestUrl = new java.net.URL(current);
+                        conn = (java.net.HttpURLConnection) requestUrl.openConnection();
+                        conn.setInstanceFollowRedirects(false);
+                        conn.setConnectTimeout(15000);
+                        conn.setReadTimeout(30000);
+                        conn.setRequestMethod("GET");
+                        conn.setRequestProperty("User-Agent",
+                            "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36");
+                        conn.setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
+                        conn.setRequestProperty("Referer", "https://www.bing.com/");
+
+                        int code = conn.getResponseCode();
+                        if (code == 301 || code == 302 || code == 303
+                                || code == 307 || code == 308) {
+                            String location = conn.getHeaderField("Location");
+                            conn.disconnect();
+                            conn = null;
+                            if (location == null || redirects == 5) {
+                                throw new java.io.IOException("bing_redirect_limit_or_missing_location");
+                            }
+                            current = new java.net.URL(requestUrl, location).toString();
+                            continue;
+                        }
+                        if (code < 200 || code >= 300) {
+                            throw new java.io.IOException("bing_http_status_" + code);
+                        }
+
+                        String responseMime = conn.getContentType();
+                        if (responseMime != null && responseMime.contains(";")) {
+                            responseMime = responseMime.substring(0, responseMime.indexOf(';')).trim();
+                        }
+                        if (responseMime != null) responseMime = responseMime.toLowerCase(java.util.Locale.ROOT);
+
+                        final String ext;
+                        if ("image/png".equals(responseMime)) ext = ".png";
+                        else if ("image/jpeg".equals(responseMime)) ext = ".jpg";
+                        else if ("image/webp".equals(responseMime)) ext = ".webp";
+                        else throw new java.io.IOException("unsupported_mime:" + responseMime);
+
+                        int declaredLength = conn.getContentLength();
+                        if (declaredLength > 20971520) {
+                            throw new java.io.IOException("bing_image_too_large");
+                        }
+
+                        File dir = new File(getCacheDir(), "bing_images");
+                        if (!dir.exists() && !dir.mkdirs()) {
+                            throw new java.io.IOException("cache_dir_failed");
+                        }
+                        file = new File(dir, id + ext);
+                        long total = 0;
+                        try (java.io.InputStream in = new java.io.BufferedInputStream(conn.getInputStream());
+                             java.io.OutputStream out = new java.io.BufferedOutputStream(new FileOutputStream(file))) {
+                            byte[] buffer = new byte[16384];
+                            int count;
+                            while ((count = in.read(buffer)) != -1) {
+                                total += count;
+                                if (total > 20971520L) {
+                                    throw new java.io.IOException("bing_image_too_large");
+                                }
+                                out.write(buffer, 0, count);
+                            }
+                        }
+
+                        if (total < 1) throw new java.io.IOException("bing_image_empty");
+                        size = total;
+                        mime = responseMime;
+                        main.post(() -> finishSuccess());
+                        return;
+                    }
+                    throw new java.io.IOException("bing_redirect_limit");
+                } catch (Exception e) {
+                    final String message = (e.getMessage() == null || e.getMessage().isEmpty())
+                        ? "bing_https_download_failed" : e.getMessage();
+                    main.post(() -> fail(message));
+                } finally {
+                    if (conn != null) conn.disconnect();
+                }
+            }, "ASTRA-Bing-HTTPS-download").start();
+        }
         private Object decode(String raw) {
             try {
                 return raw == null ? null : new org.json.JSONTokener(raw).nextValue();
@@ -687,6 +803,7 @@ public class WebViewBrowserActivity extends Activity {
                 result.put("name", file.getName());
                 callback.onResult(result.toString(), null);
             } catch (Exception e) {
+                if (file != null && file.exists()) file.delete();
                 callback.onResult(null, "result_json_failed");
             }
         }

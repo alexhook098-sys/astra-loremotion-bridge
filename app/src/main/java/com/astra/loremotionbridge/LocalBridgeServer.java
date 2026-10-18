@@ -173,7 +173,8 @@ public class LocalBridgeServer {
                     "/webview/open".equals(routeOnlyPath) ||
                     "/webview/eval".equals(routeOnlyPath) ||
                     "/webview/bing-eval".equals(routeOnlyPath) ||
-                "/webview/bing-save-image".equals(routeOnlyPath);
+                "/webview/bing-save-image".equals(routeOnlyPath) ||
+                    "/webview/bing-image-chunk".equals(routeOnlyPath);
             if ("POST".equalsIgnoreCase(method) && jsonAdapterRoute) {
                 if (contentLength <= 0 || contentLength > 1024 * 1024) {
                     sendResponse(sock, "{\"ok\":false,\"error\":\"invalid_json_body_size\"}",
