@@ -362,23 +362,81 @@ public class WebViewBrowserActivity extends Activity {
 
 
 
-    // ASTRA_BING_EVAL_V1: execute scripts directly, without eval(), for Bing CSP.
+    // ASTRA_BING_EVAL_V3: await direct expressions without eval(), for Bing CSP.
     public void evaluateBing(final String script, final EvalCallback callback) {
         main.post(() -> {
             if (webView == null) {
                 callback.onResult(null, "webview_not_ready");
                 return;
             }
-            webView.evaluateJavascript(script == null ? "null" : script, raw -> {
-                try {
-                    Object decoded = raw == null
-                            ? null : new org.json.JSONTokener(raw).nextValue();
-                    callback.onResult(
-                            decoded == null ? "null" : String.valueOf(decoded), null);
-                } catch (Exception e) {
-                    callback.onResult(null, "bing_eval_decode_error");
+
+            final String key = "__astraBingEval_" + System.nanoTime();
+            final String safeKey = org.json.JSONObject.quote(key);
+            final String expression = (script == null || script.trim().isEmpty())
+                    ? "null" : script;
+
+            final String start =
+                    "(function(){var k=" + safeKey + ";var s=window[k]={done:false,value:null,error:null};" +
+                    "function finish(v,e){s.value=v;s.error=e===null?null:String(e);s.done=true;}" +
+                    "try{Promise.resolve((" + expression + ")).then(function(v){" +
+                    "try{var j=JSON.stringify(v===undefined?null:v);" +
+                    "finish(j===undefined?'null':j,null);" +
+                    "}catch(e){finish(null,e);}" +
+                    "},function(e){finish(null,e);});" +
+                    "}catch(e){finish(null,e);}return true;})()";
+
+            final int[] waited = {0};
+            final Runnable[] poll = new Runnable[1];
+
+            poll[0] = () -> {
+                if (webView == null) {
+                    callback.onResult(null, "webview_not_ready");
+                    return;
                 }
-            });
+
+                String check = "(function(){var k=" + safeKey +
+                        ";var s=window[k];if(s&&s.done){delete window[k];" +
+                        "return JSON.stringify({done:true,value:s.value,error:s.error});}" +
+                        "return null;})()";
+
+                webView.evaluateJavascript(check, raw -> {
+                    Object decoded = null;
+                    try {
+                        if (raw != null) {
+                            decoded = new org.json.JSONTokener(raw).nextValue();
+                        }
+                    } catch (Exception ignored) {}
+
+                    if (decoded instanceof String) {
+                        try {
+                            org.json.JSONObject result =
+                                    new org.json.JSONObject((String) decoded);
+                            String error = result.optString("error", "");
+                            if (!error.isEmpty()) {
+                                callback.onResult(null, error);
+                            } else {
+                                callback.onResult(result.optString("value", "null"), null);
+                            }
+                        } catch (Exception e) {
+                            callback.onResult(null, "bing_eval_decode_error");
+                        }
+                        return;
+                    }
+
+                    if (waited[0] >= 12000) {
+                        webView.evaluateJavascript(
+                                "(function(){delete window[" + safeKey + "];return true;})()",
+                                null);
+                        callback.onResult(null, "promise_timeout");
+                        return;
+                    }
+
+                    waited[0] += 100;
+                    main.postDelayed(poll[0], 100L);
+                });
+            };
+
+            webView.evaluateJavascript(start, ignored -> poll[0].run());
         });
     }
 
