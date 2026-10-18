@@ -5,10 +5,12 @@ import android.util.Log;
 import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.Context;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.net.Uri;
 import android.webkit.ValueCallback;
 import android.os.Bundle;
+import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
@@ -25,6 +27,8 @@ import android.widget.TextView;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.IOException;
 import java.util.Locale;
 
@@ -137,6 +141,32 @@ public class WebViewBrowserActivity extends Activity {
             @Override public void onDownloadStart(
                     String url, String userAgent, String contentDisposition,
                     String mimeType, long contentLength) {
+                // ASTRA_BING_DOWNLOAD_LISTENER_V1: handle only Bing blob images.
+                if (url != null && url.startsWith("blob:https://www.bing.com/")) {
+                    setStatus("Saving Bing image...");
+                    saveBingImage(url, (value, error) -> {
+                        if (error != null) {
+                            setStatus("Bing image save error: " + error);
+                            return;
+                        }
+                        try {
+                            org.json.JSONObject info = new org.json.JSONObject(value);
+                            String name = info.getString("name");
+                            String mime = info.getString("type");
+                            if (!name.matches("[0-9a-f]{32}\\.(png|jpg|webp)")) {
+                                throw new IOException("invalid_bing_cache_name");
+                            }
+                            File cacheDir = new File(getCacheDir(), "bing_images");
+                            File source = new File(cacheDir, name);
+                            String saved = publishBingImageToDownloads(source, mime);
+                            setStatus("Bing image saved to Downloads: " + new File(saved).getName());
+                        } catch (Exception e) {
+                            setStatus("Bing image download error: " + e.getMessage());
+                        }
+                    });
+                    return;
+                }
+                // Existing non-Bing downloads, including LoreMotion, remain unchanged.
                 try {
                     String cookie = CookieManager.getInstance().getCookie(url);
                     DownloadManager.Request req =
@@ -165,6 +195,68 @@ public class WebViewBrowserActivity extends Activity {
                 }
             }
         });
+    }
+
+    // Publishes a validated Bing image from the private cache into public Downloads.
+    private String publishBingImageToDownloads(File source, String mime) throws IOException {
+        if (source == null || !source.isFile() || source.length() < 1) {
+            throw new IOException("bing_image_file_missing");
+        }
+
+        final String ext;
+        if ("image/png".equals(mime)) ext = ".png";
+        else if ("image/jpeg".equals(mime)) ext = ".jpg";
+        else if ("image/webp".equals(mime)) ext = ".webp";
+        else throw new IOException("unsupported_bing_image_type");
+
+        String displayName = "bing-image-" + System.currentTimeMillis() + ext;
+
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            android.content.ContentValues values = new android.content.ContentValues();
+            values.put(android.provider.MediaStore.Downloads.DISPLAY_NAME, displayName);
+            values.put(android.provider.MediaStore.Downloads.MIME_TYPE, mime);
+            values.put(android.provider.MediaStore.Downloads.RELATIVE_PATH,
+                    Environment.DIRECTORY_DOWNLOADS);
+            values.put(android.provider.MediaStore.Downloads.IS_PENDING, 1);
+
+            Uri destination = getContentResolver().insert(
+                    android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            if (destination == null) throw new IOException("downloads_insert_failed");
+
+            try (FileInputStream in = new FileInputStream(source);
+                 java.io.OutputStream out = getContentResolver().openOutputStream(destination)) {
+                if (out == null) throw new IOException("downloads_output_stream_unavailable");
+                byte[] buffer = new byte[16384];
+                int count;
+                while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+            } catch (IOException e) {
+                getContentResolver().delete(destination, null, null);
+                throw e;
+            }
+
+            android.content.ContentValues ready = new android.content.ContentValues();
+            ready.put(android.provider.MediaStore.Downloads.IS_PENDING, 0);
+            if (getContentResolver().update(destination, ready, null, null) <= 0) {
+                getContentResolver().delete(destination, null, null);
+                throw new IOException("downloads_publish_failed");
+            }
+            return displayName;
+        }
+
+        File dir = Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_DOWNLOADS);
+        if (!dir.exists() && !dir.mkdirs()) throw new IOException("downloads_dir_failed");
+        File target = new File(dir, displayName);
+        try (FileInputStream in = new FileInputStream(source);
+             FileOutputStream out = new FileOutputStream(target)) {
+            byte[] buffer = new byte[16384];
+            int count;
+            while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+        } catch (IOException e) {
+            target.delete();
+            throw e;
+        }
+        return target.getAbsolutePath();
     }
 
     private void deliverPendingUpload() {
