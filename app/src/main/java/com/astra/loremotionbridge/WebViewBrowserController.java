@@ -33,12 +33,7 @@ public final class WebViewBrowserController {
         WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
 
         if (a != null) {
-            if (bing) {
-                bringToFront(context);
-                a.openUrl(url);
-            } else {
-                a.openUrlInBackground(url);
-            }
+            a.openUrlInBackground(url);
 
             return "{\"ok\":true,\"action\":\"webview-open-requested\",\"url\":\"" +
                     esc(url) + "\"}";
@@ -48,7 +43,7 @@ public final class WebViewBrowserController {
             Intent i = new Intent(context, WebViewBrowserActivity.class);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             i.putExtra("url", url);
-            i.putExtra("background", !bing);
+            i.putExtra("background", true);
 
             android.content.pm.ResolveInfo ri =
                     context.getPackageManager().resolveActivity(i, 0);

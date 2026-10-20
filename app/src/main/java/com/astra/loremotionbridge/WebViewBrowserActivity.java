@@ -70,6 +70,10 @@ public class WebViewBrowserActivity extends Activity {
         hideAfterPageLoad = getIntent().getBooleanExtra("background", false);
         Log.i("ASTRA-WV-DIAG", "Activity loading URL=" + initial + " background=" + hideAfterPageLoad);
         webView.loadUrl(initial);
+        if (hideAfterPageLoad) {
+            hideAfterPageLoad = false;
+            sendToBackSoon();
+        }
     }
 
     @Override protected void onNewIntent(android.content.Intent intent) {
@@ -377,8 +381,9 @@ public class WebViewBrowserActivity extends Activity {
     public void openUrlInBackground(final String url) {
         main.post(() -> {
             if (webView != null) {
-                hideAfterPageLoad = true;
+                hideAfterPageLoad = false;
                 webView.loadUrl(url);
+                sendToBackSoon();
             }
         });
     }
