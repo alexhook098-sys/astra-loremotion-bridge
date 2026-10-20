@@ -20,6 +20,7 @@ public final class WebViewBrowserController {
             Intent i = new Intent(context, WebViewBrowserActivity.class);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             i.putExtra("url", loginUrl);
+            i.putExtra("background", true);
             context.startActivity(i);
             return "{\"ok\":true,\"action\":\"webview-login-page-requested\"}";
         } catch (Exception e) {
