@@ -520,7 +520,7 @@ public class WebViewBrowserActivity extends Activity {
                         return;
                     }
 
-                    if (waited[0] >= 12000) {
+                    if (waited[0] >= 25000) {
                         webView.evaluateJavascript(
                                 "(function(){delete window[" + safeKey + "];return true;})()",
                                 null);

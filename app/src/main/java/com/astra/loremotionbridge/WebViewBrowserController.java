@@ -203,7 +203,7 @@ public final class WebViewBrowserController {
 
         synchronized (lock) {
             try {
-                if (!done[0]) lock.wait(15000L);
+                if (!done[0]) lock.wait(28000L);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return "{\"ok\":false,\"error\":\"interrupted\"}";
