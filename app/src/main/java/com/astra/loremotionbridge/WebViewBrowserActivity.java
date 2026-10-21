@@ -878,7 +878,8 @@ public class WebViewBrowserActivity extends Activity {
                 "disabled:!!e.disabled," +
                 "visible:!!(e.getClientRects().length)" +
                 "})), " +
-                "images:Array.from(document.images).filter(e=>e.getClientRects().length).slice(0,40).map(e=>({" +
+                "imageCount:Array.from(document.images).filter(e=>e.getClientRects().length).length," +
+                "images:Array.from(document.images).filter(e=>e.getClientRects().length).map(e=>({" +
                 "src:e.currentSrc||e.src||''," +
                 "protocol:(()=>{try{return new URL(e.currentSrc||e.src,location.href).protocol}catch(_){return 'unknown'}})()," +
                 "alt:e.alt||''," +
