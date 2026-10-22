@@ -378,6 +378,24 @@ public class WebViewBrowserActivity extends Activity {
         });
     }
 
+    public void removeBingTask() {
+        main.post(() -> {
+            Log.i("ASTRA-WV-DIAG", "Bing task cleanup requested");
+            try {
+                if (webView != null) {
+                    webView.stopLoading();
+                }
+            } catch (Exception e) {
+                Log.w("ASTRA-WV-DIAG", "Bing WebView stop failed", e);
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                finishAndRemoveTask();
+            } else {
+                finish();
+            }
+        });
+    }
+
     public void openUrlInBackground(final String url) {
         main.post(() -> {
             if (webView != null) {

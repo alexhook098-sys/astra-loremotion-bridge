@@ -341,6 +341,7 @@ public class LocalBridgeServer {
                 return "{\"ok\":true,\"state\":\"STARTING\"}";
             }
             if ("/headless/open".equals(p)) return HeadlessBrowserRuntime.openUrl(m.getOrDefault("url", "https://loremotion.com/generate/"));
+            if ("/webview/bing-close".equals(p)) return WebViewBrowserController.closeBing();
             if ("/webview/close".equals(p)) return WebViewBrowserController.close();
             if ("/webview/status".equals(p)) return WebViewBrowserController.status();
             if ("/webview/start".equals(p)) return WebViewBrowserController.start(

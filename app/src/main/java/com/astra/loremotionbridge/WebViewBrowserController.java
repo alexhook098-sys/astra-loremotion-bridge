@@ -129,6 +129,15 @@ public final class WebViewBrowserController {
         return "{\"ok\":true,\"action\":\"webview-close-requested\"}";
     }
 
+    public static String closeBing() {
+        WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
+        if (a == null) {
+            return "{\"ok\":true,\"action\":\"bing-task-already-closed\"}";
+        }
+        a.removeBingTask();
+        return "{\"ok\":true,\"action\":\"bing-task-removal-requested\"}";
+    }
+
     public static String status() {
         WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
 
