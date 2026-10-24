@@ -125,8 +125,8 @@ public final class WebViewBrowserController {
         if (a == null) {
             return "{\"ok\":true,\"action\":\"webview-already-closed\"}";
         }
-        a.runOnUiThread(() -> a.finish());
-        return "{\"ok\":true,\"action\":\"webview-close-requested\"}";
+        a.removeBingTask();
+        return "{\"ok\":true,\"action\":\"webview-task-removal-requested\"}";
     }
 
     public static String closeBing() {
