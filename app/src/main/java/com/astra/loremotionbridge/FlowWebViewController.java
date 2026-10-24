@@ -11,11 +11,18 @@ public final class FlowWebViewController {
 
     public static String start(Context context, String url) {
         if (url == null || url.isEmpty()) url = PROJECT_URL;
+        FlowWebViewActivity activity = FlowWebViewActivity.getInstance();
+        if (activity != null) {
+            activity.openUrlInBackground(url);
+            return "{\"ok\":true,\"action\":\"flow-start-reused\",\"url\":\""
+                    + esc(url) + "\"}";
+        }
         try {
             Intent intent = new Intent(context, FlowWebViewActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                     | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             intent.putExtra("url", url);
+            intent.putExtra("background", true);
             context.startActivity(intent);
             return "{\"ok\":true,\"action\":\"flow-start-requested\",\"url\":\""
                     + esc(url) + "\"}";
@@ -23,7 +30,6 @@ public final class FlowWebViewController {
             return "{\"ok\":false,\"error\":\"" + esc(String.valueOf(e)) + "\"}";
         }
     }
-
     public static String open(Context context, String url) {
         if (url == null || url.isEmpty()) url = PROJECT_URL;
         FlowWebViewActivity activity = FlowWebViewActivity.getInstance();

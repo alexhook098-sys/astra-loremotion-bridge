@@ -17,6 +17,7 @@ public final class FlowWebViewActivity extends Activity {
     private static volatile FlowWebViewActivity instance;
     private WebView webView;
     private TextView status;
+    private boolean hideAfterPageLoad;
     private final Handler main = new Handler(Looper.getMainLooper());
 
     public static FlowWebViewActivity getInstance() {
@@ -37,6 +38,9 @@ public final class FlowWebViewActivity extends Activity {
         root.addView(status);
 
         webView = new WebView(this);
+        webView.setFocusable(true);
+        webView.setFocusableInTouchMode(true);
+        webView.requestFocus();
         root.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1f));
         setContentView(root);
 
@@ -60,6 +64,15 @@ public final class FlowWebViewActivity extends Activity {
                 super.onPageFinished(view, url);
                 status.setText("ASTRA Flow: " + url);
                 Log.i("ASTRA-FLOW", "Page finished: " + url);
+                if (hideAfterPageLoad) {
+                    hideAfterPageLoad = false;
+                    main.postDelayed(() -> {
+                        if (!isFinishing() && !isDestroyed()) {
+                            moveTaskToBack(true);
+                            Log.i("ASTRA-FLOW", "Background mode: moved task to back after page load");
+                        }
+                    }, 250L);
+                }
             }
         });
 
@@ -67,6 +80,7 @@ public final class FlowWebViewActivity extends Activity {
         if (url == null || url.isEmpty()) {
             url = "https://flow.google.com/project/f40f4fe3-b63d-4e8a-82cd-4afb2e30558d";
         }
+        hideAfterPageLoad = getIntent().getBooleanExtra("background", false);
         webView.loadUrl(url);
     }
 
@@ -83,6 +97,15 @@ public final class FlowWebViewActivity extends Activity {
     public void openUrl(String url) {
         main.post(() -> {
             if (webView != null && url != null && !url.isEmpty()) {
+                webView.loadUrl(url);
+            }
+        });
+    }
+
+    public void openUrlInBackground(String url) {
+        main.post(() -> {
+            if (webView != null && url != null && !url.isEmpty()) {
+                hideAfterPageLoad = true;
                 webView.loadUrl(url);
             }
         });
