@@ -135,6 +135,10 @@ public final class FlowWebViewActivity extends Activity {
                 + ",\"url\":\"" + esc(url) + "\",\"title\":\"" + esc(title) + "\"}";
     }
 
+    public void minimizeFlow() {
+        main.post(() -> moveTaskToBack(true));
+    }
+
     public void closeFlow() {
         main.post(this::finish);
     }

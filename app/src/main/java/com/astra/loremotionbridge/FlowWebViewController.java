@@ -42,6 +42,15 @@ public final class FlowWebViewController {
                 : activity.statusJson();
     }
 
+    public static String minimize() {
+        FlowWebViewActivity activity = FlowWebViewActivity.getInstance();
+        if (activity == null) {
+            return "{\"ok\":false,\"error\":\"flow_not_started\"}";
+        }
+        activity.minimizeFlow();
+        return "{\"ok\":true,\"action\":\"flow-minimize-requested\"}";
+    }
+
     public static String close() {
         FlowWebViewActivity activity = FlowWebViewActivity.getInstance();
         if (activity == null) {

@@ -353,6 +353,7 @@ public class LocalBridgeServer {
             if ("/flow/status".equals(p)) return FlowWebViewController.status();
             if ("/flow/eval".equals(p)) return FlowWebViewController.evaluate(
                     m.getOrDefault("script", "document.title"));
+            if ("/flow/minimize".equals(p)) return FlowWebViewController.minimize();
             if ("/flow/close".equals(p)) return FlowWebViewController.close();
             if ("/webview/bing-close".equals(p)) return WebViewBrowserController.closeBing();
             if ("/webview/close".equals(p)) return WebViewBrowserController.close();
