@@ -76,7 +76,7 @@ public final class FlowWebViewActivity extends Activity {
         setIntent(intent);
         String url = intent.getStringExtra("url");
         if (url != null && !url.isEmpty() && webView != null) {
-            webView.loadUrl(url);
+            openUrl(url);
         }
     }
 
@@ -99,6 +99,33 @@ public final class FlowWebViewActivity extends Activity {
     }
 
     public String statusJson() {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return statusJsonOnMain();
+        }
+        final Object lock = new Object();
+        final String[] result = new String[1];
+        final boolean[] done = new boolean[1];
+        main.post(() -> {
+            String json = statusJsonOnMain();
+            synchronized (lock) {
+                result[0] = json;
+                done[0] = true;
+                lock.notifyAll();
+            }
+        });
+        synchronized (lock) {
+            try {
+                if (!done[0]) lock.wait(3000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return "{\"ok\":false,\"error\":\"interrupted\"}";
+            }
+        }
+        return done[0] ? result[0]
+                : "{\"ok\":false,\"error\":\"flow_status_timeout\"}";
+    }
+
+    private String statusJsonOnMain() {
         if (webView == null) {
             return "{\"ok\":true,\"ready\":false,\"state\":\"stopped\"}";
         }
