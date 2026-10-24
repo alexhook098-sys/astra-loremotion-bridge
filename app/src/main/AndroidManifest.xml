@@ -60,6 +60,15 @@
             </intent-filter>
 
         </activity>
+        <activity
+            android:name=".FlowWebViewActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.astra.loremotionbridge.flow"
+            android:excludeFromRecents="false"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize" />
 
         <service
             android:name=".BrowserBridgeService"

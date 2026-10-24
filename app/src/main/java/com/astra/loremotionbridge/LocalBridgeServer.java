@@ -174,7 +174,10 @@ public class LocalBridgeServer {
                     "/webview/eval".equals(routeOnlyPath) ||
                     "/webview/bing-eval".equals(routeOnlyPath) ||
                 "/webview/bing-save-image".equals(routeOnlyPath) ||
-                    "/webview/bing-image-chunk".equals(routeOnlyPath);
+                    "/webview/bing-image-chunk".equals(routeOnlyPath) ||
+                    "/flow/start".equals(routeOnlyPath) ||
+                    "/flow/open".equals(routeOnlyPath) ||
+                    "/flow/eval".equals(routeOnlyPath);
             if ("POST".equalsIgnoreCase(method) && jsonAdapterRoute) {
                 if (contentLength <= 0 || contentLength > 1024 * 1024) {
                     sendResponse(sock, "{\"ok\":false,\"error\":\"invalid_json_body_size\"}",
@@ -341,6 +344,16 @@ public class LocalBridgeServer {
                 return "{\"ok\":true,\"state\":\"STARTING\"}";
             }
             if ("/headless/open".equals(p)) return HeadlessBrowserRuntime.openUrl(m.getOrDefault("url", "https://loremotion.com/generate/"));
+            if ("/flow/start".equals(p)) return FlowWebViewController.start(
+                    MainApplication.context(),
+                    m.getOrDefault("url", "https://flow.google.com/project/f40f4fe3-b63d-4e8a-82cd-4afb2e30558d"));
+            if ("/flow/open".equals(p)) return FlowWebViewController.open(
+                    MainApplication.context(),
+                    m.getOrDefault("url", "https://flow.google.com/project/f40f4fe3-b63d-4e8a-82cd-4afb2e30558d"));
+            if ("/flow/status".equals(p)) return FlowWebViewController.status();
+            if ("/flow/eval".equals(p)) return FlowWebViewController.evaluate(
+                    m.getOrDefault("script", "document.title"));
+            if ("/flow/close".equals(p)) return FlowWebViewController.close();
             if ("/webview/bing-close".equals(p)) return WebViewBrowserController.closeBing();
             if ("/webview/close".equals(p)) return WebViewBrowserController.close();
             if ("/webview/status".equals(p)) return WebViewBrowserController.status();
