@@ -50,6 +50,12 @@ public final class FlowWebViewActivity extends Activity {
         root.addView(status);
 
         webView = new WebView(this);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            webView.setRendererPriorityPolicy(
+                WebView.RENDERER_PRIORITY_IMPORTANT, false
+            );
+            Log.i("ASTRA-FLOW", "Renderer priority set to IMPORTANT; waivedWhenNotVisible=false");
+        }
         webView.setFocusable(true);
         webView.setFocusableInTouchMode(true);
         webView.requestFocus();
