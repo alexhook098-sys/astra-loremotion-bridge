@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.util.Log;
 import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
@@ -16,6 +17,7 @@ import android.widget.TextView;
 public final class FlowWebViewActivity extends Activity {
     private static volatile FlowWebViewActivity instance;
     private WebView webView;
+    private PowerManager.WakeLock flowWakeLock;
     private TextView status;
     private boolean hideAfterPageLoad;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -28,6 +30,16 @@ public final class FlowWebViewActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         instance = this;
+
+        PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
+        if (powerManager != null) {
+            flowWakeLock = powerManager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK, "ASTRA:FlowGeneration"
+            );
+            flowWakeLock.setReferenceCounted(false);
+            flowWakeLock.acquire();
+            Log.i("ASTRA-FLOW", "Partial WakeLock acquired");
+        }
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -188,10 +200,25 @@ public final class FlowWebViewActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        if (webView != null) {
+            webView.onResume();
+            webView.resumeTimers();
+            Log.i("ASTRA-FLOW", "WebView resumed");
+        }
+    }
+
+    @Override
     protected void onDestroy() {
         if (instance == this) {
             instance = null;
         }
+        if (flowWakeLock != null && flowWakeLock.isHeld()) {
+            flowWakeLock.release();
+            Log.i("ASTRA-FLOW", "Partial WakeLock released");
+        }
+        flowWakeLock = null;
         if (webView != null) {
             webView.stopLoading();
             webView.destroy();
