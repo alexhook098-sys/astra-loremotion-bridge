@@ -206,6 +206,22 @@ public final class FlowWebViewActivity extends Activity {
     }
 
     @Override
+    protected void onPause() {
+        Log.i("ASTRA-FLOW", "Lifecycle onPause: url="
+                + (webView != null ? webView.getUrl() : "null")
+                + ", isFinishing=" + isFinishing());
+        super.onPause();
+    }
+
+    @Override
+    protected void onStop() {
+        Log.i("ASTRA-FLOW", "Lifecycle onStop: url="
+                + (webView != null ? webView.getUrl() : "null")
+                + ", isFinishing=" + isFinishing());
+        super.onStop();
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
         if (webView != null) {
