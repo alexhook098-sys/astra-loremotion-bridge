@@ -177,7 +177,8 @@ public class LocalBridgeServer {
                     "/webview/bing-image-chunk".equals(routeOnlyPath) ||
                     "/flow/start".equals(routeOnlyPath) ||
                     "/flow/open".equals(routeOnlyPath) ||
-                    "/flow/eval".equals(routeOnlyPath);
+                    "/flow/eval".equals(routeOnlyPath) ||
+                    "/flow/front".equals(routeOnlyPath);
             if ("POST".equalsIgnoreCase(method) && jsonAdapterRoute) {
                 if (contentLength <= 0 || contentLength > 1024 * 1024) {
                     sendResponse(sock, "{\"ok\":false,\"error\":\"invalid_json_body_size\"}",
@@ -355,6 +356,7 @@ public class LocalBridgeServer {
                     m.getOrDefault("script", "document.title"));
             if ("/flow/minimize".equals(p)) return FlowWebViewController.minimize();
             if ("/flow/close".equals(p)) return FlowWebViewController.close();
+            if ("/flow/front".equals(p)) return FlowWebViewController.bringToFront(MainApplication.context());
             if ("/webview/bing-close".equals(p)) return WebViewBrowserController.closeBing();
             if ("/webview/close".equals(p)) return WebViewBrowserController.close();
             if ("/webview/status".equals(p)) return WebViewBrowserController.status();
