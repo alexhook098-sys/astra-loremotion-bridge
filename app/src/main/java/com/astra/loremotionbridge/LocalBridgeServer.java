@@ -273,6 +273,13 @@ public class LocalBridgeServer {
                 return "{\"ok\":true,\"state\":\"STARTING\"}";
             }
             if ("/headless/open".equals(p)) return HeadlessBrowserRuntime.openUrl(m.getOrDefault("url", "https://loremotion.com/generate/"));
+            if ("/motion16/status".equals(p)) return Motion16Controller.status();
+            if ("/motion16/start".equals(p)) return Motion16Controller.start(
+                    MainApplication.context(),
+                    m.getOrDefault("url", Motion16Activity.PROJECT_URL));
+            if ("/motion16/open".equals(p)) return Motion16Controller.open(
+                    m.getOrDefault("url", Motion16Activity.PROJECT_URL));
+            if ("/motion16/close".equals(p)) return Motion16Controller.close();
             if ("/webview/status".equals(p)) return WebViewBrowserController.status();
             if ("/webview/start".equals(p)) return WebViewBrowserController.start(
                     MainApplication.context(),

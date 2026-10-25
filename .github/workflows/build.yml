@@ -2,7 +2,7 @@ name: Build APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, 'feature/motion16-webview' ]
 jobs:
   build:
     runs-on: ubuntu-latest
