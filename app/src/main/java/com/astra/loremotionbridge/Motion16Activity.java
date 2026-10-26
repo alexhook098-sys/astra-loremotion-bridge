@@ -1,6 +1,10 @@
 package com.astra.loremotionbridge;
 
 import android.app.Activity;
+import android.app.DownloadManager;
+import android.content.Context;
+import android.os.Environment;
+import android.webkit.DownloadListener;
 import android.content.Intent;
 import android.net.Uri;
 import android.webkit.ValueCallback;
@@ -85,6 +89,62 @@ public class Motion16Activity extends Activity {
                     if (status != null) status.setText("Motion16: cannot open image picker");
                 }
                 return true;
+            }
+        });
+
+        webView.setDownloadListener(new DownloadListener() {
+            @Override
+            public void onDownloadStart(String url, String userAgent,
+                                        String contentDisposition, String mimeType,
+                                        long contentLength) {
+                android.util.Log.i("ASTRA-MOTION16-DL",
+                    "Download callback: url=" + url + ", mime=" + mimeType
+                    + ", size=" + contentLength);
+
+                if (url == null || url.startsWith("blob:")) {
+                    if (status != null) {
+                        status.setText("Motion16 download requires blob handling; see log ASTRA-MOTION16-DL");
+                    }
+                    return;
+                }
+
+                if (!url.startsWith("https://")) {
+                    if (status != null) status.setText("Motion16: unsupported download URL");
+                    return;
+                }
+
+                try {
+                    DownloadManager.Request request =
+                        new DownloadManager.Request(Uri.parse(url));
+                    String cookie = CookieManager.getInstance().getCookie(url);
+                    if (userAgent != null && !userAgent.isEmpty()) {
+                        request.addRequestHeader("User-Agent", userAgent);
+                    }
+                    if (cookie != null && !cookie.isEmpty()) {
+                        request.addRequestHeader("Cookie", cookie);
+                    }
+                    request.setMimeType(mimeType != null ? mimeType : "video/mp4");
+                    request.setTitle("ASTRA Motion16 video");
+                    request.setDescription("Downloading generated video");
+                    request.setNotificationVisibility(
+                        DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                    request.setAllowedOverMetered(true);
+                    request.setAllowedOverRoaming(true);
+                    request.setDestinationInExternalPublicDir(
+                        Environment.DIRECTORY_DOWNLOADS,
+                        "ASTRA_Motion16_" + System.currentTimeMillis() + ".mp4");
+
+                    DownloadManager manager =
+                        (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                    if (manager == null) throw new IllegalStateException("DownloadManager unavailable");
+                    long id = manager.enqueue(request);
+                    if (status != null) status.setText(
+                        "Motion16 download queued (id " + id + "). Check Android Downloads.");
+                    android.util.Log.i("ASTRA-MOTION16-DL", "Download queued id=" + id);
+                } catch (Exception e) {
+                    android.util.Log.e("ASTRA-MOTION16-DL", "Download enqueue failed", e);
+                    if (status != null) status.setText("Motion16 download error: " + e.getMessage());
+                }
             }
         });
 
