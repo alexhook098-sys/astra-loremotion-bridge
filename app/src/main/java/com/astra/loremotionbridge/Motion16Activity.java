@@ -1,13 +1,19 @@
 package com.astra.loremotionbridge;
 
 import android.app.Activity;
+import android.content.Intent;
+import android.net.Uri;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import java.util.ArrayList;
+import java.util.List;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.webkit.CookieManager;
 import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -19,6 +25,7 @@ public class Motion16Activity extends Activity {
 
     private static volatile Motion16Activity instance;
     private WebView webView;
+    private ValueCallback<Uri[]> pendingFileCallback;
     private TextView status;
     private final Handler main = new Handler(Looper.getMainLooper());
 
@@ -54,6 +61,33 @@ public class Motion16Activity extends Activity {
         cookies.setAcceptCookie(true);
         cookies.setAcceptThirdPartyCookies(webView, true);
 
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(
+                    WebView view,
+                    ValueCallback<Uri[]> filePathCallback,
+                    FileChooserParams fileChooserParams) {
+                if (pendingFileCallback != null) {
+                    pendingFileCallback.onReceiveValue(null);
+                }
+                pendingFileCallback = filePathCallback;
+
+                try {
+                    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType("image/*");
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    startActivityForResult(intent, 16016);
+                } catch (Exception e) {
+                    ValueCallback<Uri[]> callback = pendingFileCallback;
+                    pendingFileCallback = null;
+                    if (callback != null) callback.onReceiveValue(null);
+                    if (status != null) status.setText("Motion16: cannot open image picker");
+                }
+                return true;
+            }
+        });
+
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) {
                 updateStatus();
@@ -63,6 +97,22 @@ public class Motion16Activity extends Activity {
         String url = getIntent().getStringExtra("url");
         if (url == null || url.isEmpty()) url = PROJECT_URL;
         webView.loadUrl(url);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != 16016) return;
+
+        ValueCallback<Uri[]> callback = pendingFileCallback;
+        pendingFileCallback = null;
+        if (callback == null) return;
+
+        Uri[] result = null;
+        if (resultCode == Activity.RESULT_OK && data != null && data.getData() != null) {
+            result = new Uri[]{data.getData()};
+        }
+        callback.onReceiveValue(result);
     }
 
     @Override protected void onNewIntent(android.content.Intent intent) {
@@ -154,6 +204,10 @@ public class Motion16Activity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        if (pendingFileCallback != null) {
+            pendingFileCallback.onReceiveValue(null);
+            pendingFileCallback = null;
+        }
         try { CookieManager.getInstance().flush(); } catch (Exception ignored) {}
         if (webView != null) {
             webView.stopLoading();
