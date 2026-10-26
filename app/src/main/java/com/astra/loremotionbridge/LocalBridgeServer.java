@@ -178,7 +178,10 @@ public class LocalBridgeServer {
                     "/flow/start".equals(routeOnlyPath) ||
                     "/flow/open".equals(routeOnlyPath) ||
                     "/flow/eval".equals(routeOnlyPath) ||
-                    "/flow/front".equals(routeOnlyPath);
+                    "/flow/front".equals(routeOnlyPath) ||
+                    "/motion16/start".equals(routeOnlyPath) ||
+                    "/motion16/open".equals(routeOnlyPath) ||
+                    "/motion16/eval".equals(routeOnlyPath);
             if ("POST".equalsIgnoreCase(method) && jsonAdapterRoute) {
                 if (contentLength <= 0 || contentLength > 1024 * 1024) {
                     sendResponse(sock, "{\"ok\":false,\"error\":\"invalid_json_body_size\"}",
