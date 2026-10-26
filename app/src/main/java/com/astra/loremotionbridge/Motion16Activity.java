@@ -31,7 +31,7 @@ import java.util.Locale;
 
 public class Motion16Activity extends Activity {
     public static final String PROJECT_URL =
-        "https://motion16.com/dashboard/p/ew4AMl3PrSuuuXj_gzrgH?media=media-ew4AMl3PrSuuuXj_gzrgH-workspace-result-RuRJR5ub2Gc1y1OU74jJR-4b6a5f9d-27b3-463a-ac16-9cab2b12b17b";
+        "https://motion16.com/dashboard/p/7UyLDqQzp7q9Zr1qkNIRv?media=media-7UyLDqQzp7q9Zr1qkNIRv-workspace-result-RghPn_i1SjmT9-mh__9Io-96d1ff84-5500-43f9-8550-0b6277b0c7a2";
 
     private static volatile Motion16Activity instance;
     private WebView webView;
