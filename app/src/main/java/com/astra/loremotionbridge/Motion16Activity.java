@@ -2,6 +2,7 @@ package com.astra.loremotionbridge;
 
 import android.app.Activity;
 import android.app.DownloadManager;
+import android.database.Cursor;
 import android.content.Context;
 import android.content.ContentValues;
 import android.provider.MediaStore;
@@ -37,6 +38,9 @@ public class Motion16Activity extends Activity {
     private ValueCallback<Uri[]> pendingFileCallback;
     private TextView status;
     private boolean hideAfterPageLoad;
+    private long lastMotion16DownloadId = -1L;
+    private String lastMotion16DownloadState = "idle";
+    private int lastMotion16DownloadReason = 0;
     private final Handler main = new Handler(Looper.getMainLooper());
 
     public static Motion16Activity getInstance() { return instance; }
@@ -147,6 +151,7 @@ public class Motion16Activity extends Activity {
                         (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
                     if (manager == null) throw new IllegalStateException("DownloadManager unavailable");
                     long id = manager.enqueue(request);
+                    trackMotion16Download(id);
                     if (status != null) status.setText(
                         "Motion16 download queued (id " + id + "). Check Android Downloads.");
                     android.util.Log.i("ASTRA-MOTION16-DL", "Download queued id=" + id);
@@ -392,13 +397,15 @@ public class Motion16Activity extends Activity {
 
             String script = "(function(){"
                 + "const out=[];const seen=new Set();"
-                + "function add(u,t){if(u&&!seen.has(u)){seen.add(u);out.push({url:u,type:t||'video/mp4'});}}"
+                + "function add(u,t){if(!u||seen.has(u))return;seen.add(u);"
+                + "const blob=u.startsWith('blob:');const mp4=/\\.mp4(?:[?#]|$)/i.test(u);"
+                + "out.push({url:u,type:t||'video/mp4',priority:blob?3:(mp4?0:1)});}"
                 + "document.querySelectorAll('video').forEach(v=>{"
                 + "add(v.currentSrc,v.getAttribute('type'));add(v.src,v.getAttribute('type'));"
                 + "v.querySelectorAll('source').forEach(x=>add(x.src,x.type));});"
                 + "document.querySelectorAll('a[href]').forEach(a=>{"
-                + "const u=a.href;if(u.startsWith('blob:')||/\\.mp4(?:[?#]|$)/i.test(u))add(u,a.type);});"
-                + "return JSON.stringify(out);"
+                + "const u=a.href;if(u.startsWith('https://')&&/\\.mp4(?:[?#]|$)/i.test(u))add(u,a.type);});"
+                + "out.sort((a,b)=>a.priority-b.priority);return JSON.stringify(out);"
                 + "})()";
 
             webView.evaluateJavascript(script, value -> {
@@ -442,6 +449,7 @@ public class Motion16Activity extends Activity {
                                 if (manager == null) throw new IllegalStateException("DownloadManager unavailable");
 
                                 long id = manager.enqueue(request);
+                                trackMotion16Download(id);
                                 if (status != null) status.setText(
                                     "Motion16 download queued (id " + id + "). Check Android Downloads.");
                                 android.util.Log.i("ASTRA-MOTION16-DL", "Ready video queued id=" + id);
@@ -542,9 +550,80 @@ public class Motion16Activity extends Activity {
         if (webView == null)
             return "{\"ok\":true,\"ready\":false,\"state\":\"stopped\"}";
 
+        refreshMotion16DownloadStatus();
         return String.format(Locale.US,
-            "{\"ok\":true,\"ready\":true,\"url\":\"%s\",\"title\":\"%s\"}",
-            esc(webView.getUrl()), esc(webView.getTitle()));
+            "{\"ok\":true,\"ready\":true,\"url\":\"%s\",\"title\":\"%s\","
+                + "\"downloadId\":%d,\"downloadState\":\"%s\",\"downloadReason\":%d}",
+            esc(webView.getUrl()), esc(webView.getTitle()),
+            lastMotion16DownloadId, esc(lastMotion16DownloadState),
+            lastMotion16DownloadReason);
+    }
+
+    private void trackMotion16Download(long id) {
+        lastMotion16DownloadId = id;
+        lastMotion16DownloadState = "pending";
+        lastMotion16DownloadReason = 0;
+        refreshMotion16DownloadStatus();
+    }
+
+    private void refreshMotion16DownloadStatus() {
+        if (lastMotion16DownloadId < 0L) return;
+
+        DownloadManager manager =
+            (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+        if (manager == null) {
+            lastMotion16DownloadState = "manager_unavailable";
+            return;
+        }
+
+        Cursor cursor = null;
+        try {
+            cursor = manager.query(
+                new DownloadManager.Query().setFilterById(lastMotion16DownloadId));
+            if (cursor == null || !cursor.moveToFirst()) {
+                lastMotion16DownloadState = "not_found";
+                lastMotion16DownloadReason = 0;
+                return;
+            }
+
+            int statusColumn = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS);
+            int reasonColumn = cursor.getColumnIndex(DownloadManager.COLUMN_REASON);
+            if (statusColumn < 0) {
+                lastMotion16DownloadState = "unknown";
+                return;
+            }
+
+            int downloadStatus = cursor.getInt(statusColumn);
+            lastMotion16DownloadReason =
+                reasonColumn >= 0 ? cursor.getInt(reasonColumn) : 0;
+
+            switch (downloadStatus) {
+                case DownloadManager.STATUS_PENDING:
+                    lastMotion16DownloadState = "pending";
+                    break;
+                case DownloadManager.STATUS_RUNNING:
+                    lastMotion16DownloadState = "running";
+                    break;
+                case DownloadManager.STATUS_PAUSED:
+                    lastMotion16DownloadState = "paused";
+                    break;
+                case DownloadManager.STATUS_SUCCESSFUL:
+                    lastMotion16DownloadState = "successful";
+                    break;
+                case DownloadManager.STATUS_FAILED:
+                    lastMotion16DownloadState = "failed";
+                    break;
+                default:
+                    lastMotion16DownloadState = "unknown";
+                    break;
+            }
+        } catch (Exception e) {
+            lastMotion16DownloadState = "query_error";
+            android.util.Log.e("ASTRA-MOTION16-DL",
+                "Could not query download status", e);
+        } finally {
+            if (cursor != null) cursor.close();
+        }
     }
 
     private void updateStatus() {
