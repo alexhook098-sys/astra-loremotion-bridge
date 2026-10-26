@@ -367,6 +367,7 @@ public class LocalBridgeServer {
                     m.getOrDefault("url", Motion16Activity.PROJECT_URL));
             if ("/motion16/open".equals(p)) return Motion16Controller.open(
                     m.getOrDefault("url", Motion16Activity.PROJECT_URL));
+            if ("/motion16/minimize".equals(p)) return Motion16Controller.minimize();
             if ("/motion16/close".equals(p)) return Motion16Controller.close();
 
             if ("/webview/status".equals(p)) return WebViewBrowserController.status();

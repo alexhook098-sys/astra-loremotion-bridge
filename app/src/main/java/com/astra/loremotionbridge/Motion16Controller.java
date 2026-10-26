@@ -76,6 +76,15 @@ public final class Motion16Controller {
             : current.statusJson();
     }
 
+    public static String minimize() {
+        Motion16Activity current = Motion16Activity.getInstance();
+        if (current == null) {
+            return "{\"ok\":false,\"error\":\"motion16_not_started\"}";
+        }
+        current.minimizeMotion16();
+        return "{\"ok\":true,\"action\":\"motion16-minimize-requested\"}";
+    }
+
     public static String close() {
         Motion16Activity current = Motion16Activity.getInstance();
         if (current == null)

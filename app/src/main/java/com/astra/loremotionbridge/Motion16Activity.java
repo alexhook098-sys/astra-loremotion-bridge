@@ -90,7 +90,49 @@ public class Motion16Activity extends Activity {
         });
     }
 
+    public void minimizeMotion16() {
+        main.post(() -> {
+            if (!isFinishing()) moveTaskToBack(true);
+        });
+    }
+
     public String statusJson() {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return statusJsonOnMain();
+        }
+
+        final Object lock = new Object();
+        final String[] result = new String[1];
+        final boolean[] done = new boolean[1];
+
+        main.post(() -> {
+            String value = statusJsonOnMain();
+            synchronized (lock) {
+                result[0] = value;
+                done[0] = true;
+                lock.notifyAll();
+            }
+        });
+
+        synchronized (lock) {
+            long deadline = System.currentTimeMillis() + 3000L;
+            while (!done[0]) {
+                long remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 0L) break;
+                try {
+                    lock.wait(remaining);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return "{\"ok\":false,\"error\":\"status_interrupted\"}";
+                }
+            }
+        }
+
+        return done[0] ? result[0]
+            : "{\"ok\":false,\"error\":\"status_timeout\"}";
+    }
+
+    private String statusJsonOnMain() {
         if (webView == null)
             return "{\"ok\":true,\"ready\":false,\"state\":\"stopped\"}";
 
