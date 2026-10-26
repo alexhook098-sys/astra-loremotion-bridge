@@ -360,6 +360,8 @@ public class LocalBridgeServer {
             if ("/webview/bing-close".equals(p)) return WebViewBrowserController.closeBing();
             if ("/webview/close".equals(p)) return WebViewBrowserController.close();
             if ("/motion16/status".equals(p)) return Motion16Controller.status();
+            if ("/motion16/eval".equals(p)) return Motion16Controller.evaluate(
+                    m.getOrDefault("script", "document.title"));
             if ("/motion16/start".equals(p)) return Motion16Controller.start(
                     MainApplication.context(),
                     m.getOrDefault("url", Motion16Activity.PROJECT_URL));

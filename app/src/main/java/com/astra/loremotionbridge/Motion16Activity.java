@@ -74,6 +74,16 @@ public class Motion16Activity extends Activity {
         }
     }
 
+    public void evaluateScript(String script, android.webkit.ValueCallback<String> callback) {
+        main.post(() -> {
+            if (webView == null) {
+                if (callback != null) callback.onReceiveValue("\"WEBVIEW_NOT_READY\"");
+                return;
+            }
+            webView.evaluateJavascript(script, callback);
+        });
+    }
+
     public void openUrl(String url) {
         main.post(() -> {
             if (webView != null) webView.loadUrl(url);

@@ -31,6 +31,44 @@ public final class Motion16Controller {
         return "{\"ok\":true,\"action\":\"motion16-open-requested\"}";
     }
 
+    public static String evaluate(String script) {
+        Motion16Activity activity = Motion16Activity.getInstance();
+        if (activity == null) {
+            return "{\"ok\":false,\"error\":\"motion16_not_started\"}";
+        }
+
+        final Object lock = new Object();
+        final String[] result = new String[1];
+        final boolean[] done = new boolean[1];
+
+        activity.evaluateScript(
+            script == null ? "document.title" : script,
+            value -> {
+                synchronized (lock) {
+                    result[0] = value;
+                    done[0] = true;
+                    lock.notifyAll();
+                }
+            }
+        );
+
+        synchronized (lock) {
+            try {
+                if (!done[0]) lock.wait(15000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return "{\"ok\":false,\"error\":\"interrupted\"}";
+            }
+        }
+
+        if (!done[0]) {
+            return "{\"ok\":false,\"error\":\"motion16_eval_timeout\"}";
+        }
+
+        return "{\"ok\":true,\"value\":"
+            + (result[0] == null ? "null" : result[0]) + "}";
+    }
+
     public static String status() {
         Motion16Activity current = Motion16Activity.getInstance();
         return current == null
