@@ -7,6 +7,10 @@ public final class Motion16Controller {
     private Motion16Controller() {}
 
     public static String start(Context context, String url) {
+        return start(context, url, false);
+    }
+
+    public static String start(Context context, String url, boolean background) {
         if (url == null || url.isEmpty()) url = Motion16Activity.PROJECT_URL;
         Motion16Activity current = Motion16Activity.getInstance();
 
@@ -16,6 +20,7 @@ public final class Motion16Controller {
                             Intent.FLAG_ACTIVITY_SINGLE_TOP |
                             Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
             intent.putExtra("url", url);
+            intent.putExtra("background", background);
             context.startActivity(intent);
             return "{\"ok\":true,\"action\":\"motion16-start-requested\"}";
         } catch (Exception e) {
@@ -67,6 +72,15 @@ public final class Motion16Controller {
 
         return "{\"ok\":true,\"value\":"
             + (result[0] == null ? "null" : result[0]) + "}";
+    }
+
+    public static String download() {
+        Motion16Activity current = Motion16Activity.getInstance();
+        if (current == null) {
+            return "{\"ok\":false,\"error\":\"motion16_not_started\"}";
+        }
+        current.downloadReadyVideo();
+        return "{\"ok\":true,\"action\":\"motion16-download-requested\"}";
     }
 
     public static String status() {

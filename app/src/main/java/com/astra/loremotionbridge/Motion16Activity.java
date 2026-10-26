@@ -36,6 +36,7 @@ public class Motion16Activity extends Activity {
     private WebView webView;
     private ValueCallback<Uri[]> pendingFileCallback;
     private TextView status;
+    private boolean hideAfterPageLoad;
     private final Handler main = new Handler(Looper.getMainLooper());
 
     public static Motion16Activity getInstance() { return instance; }
@@ -43,6 +44,7 @@ public class Motion16Activity extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         instance = this;
+        hideAfterPageLoad = getIntent().getBooleanExtra("background", false);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -158,6 +160,12 @@ public class Motion16Activity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) {
                 updateStatus();
+                if (hideAfterPageLoad) {
+                    hideAfterPageLoad = false;
+                    main.postDelayed(() -> {
+                        if (!isFinishing()) moveTaskToBack(true);
+                    }, 700);
+                }
             }
         });
 
@@ -375,12 +383,100 @@ public class Motion16Activity extends Activity {
         callback.onReceiveValue(result);
     }
 
+    public void downloadReadyVideo() {
+        main.post(() -> {
+            if (webView == null) {
+                if (status != null) status.setText("Motion16: WebView not ready");
+                return;
+            }
+
+            String script = "(function(){"
+                + "const out=[];const seen=new Set();"
+                + "function add(u,t){if(u&&!seen.has(u)){seen.add(u);out.push({url:u,type:t||'video/mp4'});}}"
+                + "document.querySelectorAll('video').forEach(v=>{"
+                + "add(v.currentSrc,v.getAttribute('type'));add(v.src,v.getAttribute('type'));"
+                + "v.querySelectorAll('source').forEach(x=>add(x.src,x.type));});"
+                + "document.querySelectorAll('a[href]').forEach(a=>{"
+                + "const u=a.href;if(u.startsWith('blob:')||/\\.mp4(?:[?#]|$)/i.test(u))add(u,a.type);});"
+                + "return JSON.stringify(out);"
+                + "})()";
+
+            webView.evaluateJavascript(script, value -> {
+                String json = jsString(value);
+                try {
+                    org.json.JSONArray urls = new org.json.JSONArray(json == null ? "[]" : json);
+                    for (int i = 0; i < urls.length(); i++) {
+                        org.json.JSONObject item = urls.getJSONObject(i);
+                        String url = item.optString("url", "");
+                        String mime = item.optString("type", "video/mp4");
+
+                        if (url.startsWith("blob:https://motion16.com/")
+                                || url.startsWith("blob:https://www.motion16.com/")) {
+                            startMotion16BlobDownload(url, mime);
+                            return;
+                        }
+
+                        if (url.startsWith("https://")) {
+                            try {
+                                DownloadManager.Request request =
+                                    new DownloadManager.Request(Uri.parse(url));
+                                String cookie = CookieManager.getInstance().getCookie(url);
+                                String ua = webView.getSettings().getUserAgentString();
+
+                                if (ua != null && !ua.isEmpty()) request.addRequestHeader("User-Agent", ua);
+                                if (cookie != null && !cookie.isEmpty()) request.addRequestHeader("Cookie", cookie);
+
+                                request.setMimeType(mime.isEmpty() ? "video/mp4" : mime);
+                                request.setTitle("ASTRA Motion16 video");
+                                request.setDescription("Downloading generated video");
+                                request.setNotificationVisibility(
+                                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                                request.setAllowedOverMetered(true);
+                                request.setAllowedOverRoaming(true);
+                                request.setDestinationInExternalPublicDir(
+                                    Environment.DIRECTORY_DOWNLOADS,
+                                    "ASTRA_Motion16_" + System.currentTimeMillis() + ".mp4");
+
+                                DownloadManager manager =
+                                    (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                                if (manager == null) throw new IllegalStateException("DownloadManager unavailable");
+
+                                long id = manager.enqueue(request);
+                                if (status != null) status.setText(
+                                    "Motion16 download queued (id " + id + "). Check Android Downloads.");
+                                android.util.Log.i("ASTRA-MOTION16-DL", "Ready video queued id=" + id);
+                                return;
+                            } catch (Exception e) {
+                                android.util.Log.e("ASTRA-MOTION16-DL", "Ready video enqueue failed", e);
+                                if (status != null) status.setText("Motion16 download error: " + e.getMessage());
+                                return;
+                            }
+                        }
+                    }
+
+                    if (status != null) status.setText(
+                        "Motion16: no downloadable video URL found in page DOM");
+                    android.util.Log.w("ASTRA-MOTION16-DL", "No downloadable video URL found in DOM");
+                } catch (Exception e) {
+                    android.util.Log.e("ASTRA-MOTION16-DL", "Could not inspect page video URLs", e);
+                    if (status != null) status.setText("Motion16: could not inspect video URLs");
+                }
+            });
+        });
+    }
+
     @Override protected void onNewIntent(android.content.Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        hideAfterPageLoad = intent.getBooleanExtra("background", false);
         String url = intent.getStringExtra("url");
         if (url != null && !url.isEmpty() && webView != null) {
             webView.loadUrl(url);
+        } else if (hideAfterPageLoad && webView != null) {
+            hideAfterPageLoad = false;
+            main.postDelayed(() -> {
+                if (!isFinishing()) moveTaskToBack(true);
+            }, 700);
         }
     }
 

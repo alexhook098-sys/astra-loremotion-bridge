@@ -181,7 +181,8 @@ public class LocalBridgeServer {
                     "/flow/front".equals(routeOnlyPath) ||
                     "/motion16/start".equals(routeOnlyPath) ||
                     "/motion16/open".equals(routeOnlyPath) ||
-                    "/motion16/eval".equals(routeOnlyPath);
+                    "/motion16/eval".equals(routeOnlyPath) ||
+                    "/motion16/download".equals(routeOnlyPath);
             if ("POST".equalsIgnoreCase(method) && jsonAdapterRoute) {
                 if (contentLength <= 0 || contentLength > 1024 * 1024) {
                     sendResponse(sock, "{\"ok\":false,\"error\":\"invalid_json_body_size\"}",
@@ -367,7 +368,9 @@ public class LocalBridgeServer {
                     m.getOrDefault("script", "document.title"));
             if ("/motion16/start".equals(p)) return Motion16Controller.start(
                     MainApplication.context(),
-                    m.getOrDefault("url", Motion16Activity.PROJECT_URL));
+                    m.getOrDefault("url", Motion16Activity.PROJECT_URL),
+                    Boolean.parseBoolean(m.getOrDefault("background", "false")));
+            if ("/motion16/download".equals(p)) return Motion16Controller.download();
             if ("/motion16/open".equals(p)) return Motion16Controller.open(
                     m.getOrDefault("url", Motion16Activity.PROJECT_URL));
             if ("/motion16/minimize".equals(p)) return Motion16Controller.minimize();
