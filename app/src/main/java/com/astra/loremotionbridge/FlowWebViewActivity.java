@@ -96,7 +96,7 @@ public final class FlowWebViewActivity extends Activity {
 
         String url = getIntent().getStringExtra("url");
         if (url == null || url.isEmpty()) {
-            url = "https://flow.google.com/project/f40f4fe3-b63d-4e8a-82cd-4afb2e30558d";
+            url = "https://flow.google.com/project/54203513-938c-412e-9974-9ddf842bd7d5";
         }
         hideAfterPageLoad = getIntent().getBooleanExtra("background", false);
         webView.loadUrl(url);
