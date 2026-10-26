@@ -175,22 +175,48 @@ public class Motion16Activity extends Activity {
             android.util.Log.w("ASTRA-MOTION16-DL", "Blocked blob URL origin");
             return;
         }
-        String init = "(async()=>{try{const u=" +
-            org.json.JSONObject.quote(blobUrl) +
-            ";const r=await fetch(u);if(!r.ok)throw new Error('blob fetch failed');" +
+
+        String init = "window.__astraMotion16BlobInitResult='';" +
+            "(async()=>{try{" +
+            "const u=" + org.json.JSONObject.quote(blobUrl) + ";" +
+            "const r=await fetch(u);if(!r.ok)throw new Error('blob fetch failed');" +
             "const b=await r.blob();if(!b.size)throw new Error('empty blob');" +
             "if(b.size>1073741824)throw new Error('video exceeds 1 GiB safety limit');" +
             "window.__astraMotion16Blob={blob:b,size:b.size,type:b.type||'video/mp4'};" +
-            "return 'OK|'+b.size+'|'+encodeURIComponent(b.type||'video/mp4');" +
-            "}catch(e){return 'ERR|'+String(e&&e.message||e)}})()";
+            "window.__astraMotion16BlobInitResult='OK|'+b.size+'|'+encodeURIComponent(b.type||'video/mp4');" +
+            "}catch(e){window.__astraMotion16BlobInitResult='ERR|'+String(e&&e.message||e)}}" +
+            ")();'STARTED'";
+
         main.post(() -> {
             if (webView == null) return;
-            webView.evaluateJavascript(init, value -> {
+            long deadline = System.currentTimeMillis() + 30000L;
+            webView.evaluateJavascript(init, value ->
+                pollMotion16BlobInit(mimeType, deadline));
+        });
+    }
+
+    private void pollMotion16BlobInit(String mimeType, long deadline) {
+        if (webView == null) {
+            if (status != null) status.setText("Motion16 blob error: WebView closed");
+            return;
+        }
+        webView.evaluateJavascript(
+            "window.__astraMotion16BlobInitResult || ''", value -> {
                 String result = jsString(value);
-                if (result == null || !result.startsWith("OK|")) {
-                    if (status != null) status.setText("Motion16 blob error: " +
-                        (result == null ? "no response" : result.replace("ERR|", "")));
-                    android.util.Log.e("ASTRA-MOTION16-DL", "Blob init failed: " + result);
+                if (result == null || result.isEmpty()) {
+                    if (System.currentTimeMillis() >= deadline) {
+                        if (status != null) status.setText("Motion16 blob error: preparation timed out");
+                        android.util.Log.e("ASTRA-MOTION16-DL", "Blob init timed out");
+                    } else {
+                        main.postDelayed(() -> pollMotion16BlobInit(mimeType, deadline), 100);
+                    }
+                    return;
+                }
+                if (!result.startsWith("OK|")) {
+                    String reason = result.startsWith("ERR|")
+                        ? result.substring(4) : result;
+                    if (status != null) status.setText("Motion16 blob error: " + reason);
+                    android.util.Log.e("ASTRA-MOTION16-DL", "Blob init failed: " + reason);
                     return;
                 }
                 try {
@@ -204,7 +230,6 @@ public class Motion16Activity extends Activity {
                     android.util.Log.e("ASTRA-MOTION16-DL", "Bad blob metadata", e);
                 }
             });
-        });
     }
 
     private void beginMotion16BlobWrite(long size, String mimeType) {
@@ -245,7 +270,10 @@ public class Motion16Activity extends Activity {
                 ContentValues done = new ContentValues();
                 done.put(MediaStore.MediaColumns.IS_PENDING, 0);
                 getContentResolver().update(target, done, null, null);
-                if (webView != null) webView.evaluateJavascript("delete window.__astraMotion16Blob", null);
+                if (webView != null) webView.evaluateJavascript(
+                    "delete window.__astraMotion16Blob;" +
+                    "delete window.__astraMotion16BlobInitResult;" +
+                    "delete window.__astraMotion16ChunkResult", null);
                 if (status != null) status.setText("Motion16 video saved to Downloads.");
                 android.util.Log.i("ASTRA-MOTION16-DL", "Blob saved, bytes=" + size);
             } catch (Exception e) {
@@ -254,24 +282,56 @@ public class Motion16Activity extends Activity {
             }
             return;
         }
-        String js = "(async()=>{try{const x=window.__astraMotion16Blob;" +
-            "if(!x)throw new Error('blob state missing');const a=await x.blob.slice(" +
-            offset + "," + Math.min(size, offset + chunkSize) + ").arrayBuffer();" +
-            "let s='';const u=new Uint8Array(a);for(let i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);" +
-            "return 'CHUNK|'+btoa(s)}catch(e){return 'ERR|'+String(e&&e.message||e)}})()";
+
+        String js = "window.__astraMotion16ChunkResult='';" +
+            "(async()=>{try{const x=window.__astraMotion16Blob;" +
+            "if(!x)throw new Error('blob state missing');" +
+            "const a=await x.blob.slice(" + offset + "," +
+            Math.min(size, offset + chunkSize) + ").arrayBuffer();" +
+            "let s='';const u=new Uint8Array(a);" +
+            "for(let i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);" +
+            "window.__astraMotion16ChunkResult='CHUNK|'+btoa(s)" +
+            "}catch(e){window.__astraMotion16ChunkResult='ERR|'+String(e&&e.message||e)}}" +
+            ")();'STARTED'";
+
         main.post(() -> {
             if (webView == null) {
                 failMotion16Blob(target, out, "WebView closed during blob export");
                 return;
             }
-            webView.evaluateJavascript(js, value -> {
+            long deadline = System.currentTimeMillis() + 15000L;
+            webView.evaluateJavascript(js, value ->
+                pollMotion16BlobChunk(target, out, size, offset, deadline));
+        });
+    }
+
+    private void pollMotion16BlobChunk(
+            Uri target, OutputStream out, long size, long offset, long deadline) {
+        if (webView == null) {
+            failMotion16Blob(target, out, "WebView closed during blob export");
+            return;
+        }
+        webView.evaluateJavascript(
+            "window.__astraMotion16ChunkResult || ''", value -> {
                 String chunk = jsString(value);
-                if (chunk == null || !chunk.startsWith("CHUNK|")) {
-                    failMotion16Blob(target, out, chunk == null ? "empty chunk response" : chunk.replace("ERR|", ""));
+                if (chunk == null || chunk.isEmpty()) {
+                    if (System.currentTimeMillis() >= deadline) {
+                        failMotion16Blob(target, out, "chunk read timed out");
+                    } else {
+                        main.postDelayed(() ->
+                            pollMotion16BlobChunk(target, out, size, offset, deadline), 100);
+                    }
+                    return;
+                }
+                if (!chunk.startsWith("CHUNK|")) {
+                    String reason = chunk.startsWith("ERR|")
+                        ? chunk.substring(4) : chunk;
+                    failMotion16Blob(target, out, reason);
                     return;
                 }
                 try {
-                    byte[] bytes = android.util.Base64.decode(chunk.substring(6), android.util.Base64.DEFAULT);
+                    byte[] bytes = android.util.Base64.decode(
+                        chunk.substring(6), android.util.Base64.DEFAULT);
                     if (bytes.length == 0) throw new IOException("zero-length chunk");
                     out.write(bytes);
                     pumpMotion16BlobChunk(target, out, size, offset + bytes.length);
@@ -279,7 +339,6 @@ public class Motion16Activity extends Activity {
                     failMotion16Blob(target, out, "write failed: " + e.getMessage());
                 }
             });
-        });
     }
 
     private void failMotion16Blob(Uri target, OutputStream out, String reason) {
