@@ -22,6 +22,74 @@ public final class FlowWebViewActivity extends Activity {
     private boolean hideAfterPageLoad;
     private boolean reloadMoveToBackAfterLoad;
     private final Handler main = new Handler(Looper.getMainLooper());
+    private String lastLifecycleEvent = "created";
+    private String lastPageDiag = "";
+    private long lastDiagAt = 0L;
+    private int diagPollCount = 0;
+    private boolean diagRequestPending = false;
+
+    private final Runnable diagPoll = new Runnable() {
+        @Override public void run() {
+            if (webView == null || isFinishing() || isDestroyed()) return;
+            if (diagRequestPending) return;
+
+            diagRequestPending = true;
+            final long startedAt = android.os.SystemClock.elapsedRealtime();
+            final boolean[] completed = {false};
+
+            Runnable timeout = new Runnable() {
+                @Override public void run() {
+                    if (completed[0]) return;
+                    completed[0] = true;
+                    diagRequestPending = false;
+                    Log.w("ASTRA-FLOW-DIAG",
+                        "JavaScript diagnostic callback timeout");
+                    if (webView != null && !isFinishing() && !isDestroyed()) {
+                        main.postDelayed(diagPoll, 5000L);
+                    }
+                }
+            };
+
+            main.postDelayed(timeout, 3000L);
+
+            try {
+                webView.evaluateJavascript(
+                    "(function(){var d=document;var h=window.__astraFlowDiag||{};" +
+                    "var t=(d.body&&d.body.innerText)||'';" +
+                    "return JSON.stringify({visibility:d.visibilityState,hidden:d.hidden," +
+                    "ready:d.readyState,title:d.title,heartbeat:h.tick||0," +
+                    "heartbeatAt:h.at||0,tail:t.slice(-900)});})()",
+                    value -> {
+                        if (completed[0]) return;
+                        completed[0] = true;
+                        main.removeCallbacks(timeout);
+                        diagRequestPending = false;
+                        diagPollCount++;
+                        lastPageDiag = value == null ? "" : value;
+                        lastDiagAt = android.os.SystemClock.elapsedRealtime();
+
+                        Log.i("ASTRA-FLOW-DIAG",
+                            "poll=" + diagPollCount
+                            + " lifecycle=" + lastLifecycleEvent
+                            + " elapsedMs=" + (lastDiagAt - startedAt)
+                            + " page=" + lastPageDiag);
+
+                        if (webView != null && !isFinishing() && !isDestroyed()) {
+                            main.postDelayed(diagPoll, 5000L);
+                        }
+                    }
+                );
+            } catch (Exception e) {
+                main.removeCallbacks(timeout);
+                completed[0] = true;
+                diagRequestPending = false;
+                Log.e("ASTRA-FLOW-DIAG", "Diagnostic request failed", e);
+                if (webView != null && !isFinishing() && !isDestroyed()) {
+                    main.postDelayed(diagPoll, 5000L);
+                }
+            }
+        }
+    };
 
     public static FlowWebViewActivity getInstance() {
         return instance;
@@ -83,6 +151,16 @@ public final class FlowWebViewActivity extends Activity {
                 super.onPageFinished(view, url);
                 status.setText("ASTRA Flow: " + url);
                 Log.i("ASTRA-FLOW", "Page finished: " + url);
+                lastLifecycleEvent = "pageFinished";
+                view.evaluateJavascript(
+                    "(function(){if(window.__astraFlowDiag)clearInterval(window.__astraFlowDiag.timer);" +
+                    "var h=window.__astraFlowDiag={tick:0,at:Date.now(),timer:null};" +
+                    "h.timer=setInterval(function(){h.tick++;h.at=Date.now();},2000);" +
+                    "return 'heartbeat-installed';})()",
+                    value -> Log.i("ASTRA-FLOW-DIAG", "heartbeat setup=" + value)
+                );
+                main.removeCallbacks(diagPoll);
+                main.postDelayed(diagPoll, 2000L);
                 if (reloadMoveToBackAfterLoad
                         && url != null
                         && url.equals(view.getUrl())) {
@@ -211,10 +289,20 @@ public final class FlowWebViewActivity extends Activity {
         if (webView == null) {
             return "{\"ok\":true,\"ready\":false,\"state\":\"stopped\"}";
         }
+
         String url = webView.getUrl();
         String title = webView.getTitle();
-        return "{\"ok\":true,\"ready\":" + (url != null && !url.isEmpty() && !"about:blank".equals(url))
-                + ",\"url\":\"" + esc(url) + "\",\"title\":\"" + esc(title) + "\"}";
+        long diagAge = lastDiagAt == 0L ? -1L
+                : android.os.SystemClock.elapsedRealtime() - lastDiagAt;
+
+        return "{\"ok\":true,\"ready\":"
+                + (url != null && !url.isEmpty() && !"about:blank".equals(url))
+                + ",\"url\":\"" + esc(url)
+                + "\",\"title\":\"" + esc(title)
+                + "\",\"lifecycle\":\"" + esc(lastLifecycleEvent)
+                + "\",\"diagPollCount\":" + diagPollCount
+                + ",\"lastDiagAgeMs\":" + diagAge
+                + ",\"pageDiag\":\"" + esc(lastPageDiag) + "\"}";
     }
 
     public void minimizeFlow() {
@@ -233,6 +321,7 @@ public final class FlowWebViewActivity extends Activity {
 
     @Override
     protected void onPause() {
+        lastLifecycleEvent = "onPause";
         Log.i("ASTRA-FLOW", "Lifecycle onPause: url="
                 + (webView != null ? webView.getUrl() : "null")
                 + ", isFinishing=" + isFinishing());
@@ -241,6 +330,7 @@ public final class FlowWebViewActivity extends Activity {
 
     @Override
     protected void onStop() {
+        lastLifecycleEvent = "onStop";
         Log.i("ASTRA-FLOW", "Lifecycle onStop: url="
                 + (webView != null ? webView.getUrl() : "null")
                 + ", isFinishing=" + isFinishing());
@@ -249,6 +339,7 @@ public final class FlowWebViewActivity extends Activity {
 
     @Override
     protected void onResume() {
+        lastLifecycleEvent = "onResume";
         super.onResume();
         if (webView != null) {
             webView.onResume();
@@ -259,6 +350,8 @@ public final class FlowWebViewActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        lastLifecycleEvent = "onDestroy";
+        main.removeCallbacks(diagPoll);
         if (instance == this) {
             instance = null;
         }
