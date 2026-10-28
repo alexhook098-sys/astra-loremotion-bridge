@@ -72,6 +72,15 @@ public final class FlowWebViewController {
                 : activity.statusJson();
     }
 
+    public static String reload() {
+        FlowWebViewActivity activity = FlowWebViewActivity.getInstance();
+        if (activity == null) {
+            return "{\"ok\":false,\"error\":\"flow_not_started\"}";
+        }
+        activity.reloadInBackground();
+        return "{\"ok\":true,\"action\":\"flow-reload-requested\"}";
+    }
+
     public static String minimize() {
         FlowWebViewActivity activity = FlowWebViewActivity.getInstance();
         if (activity == null) {

@@ -20,6 +20,7 @@ public final class FlowWebViewActivity extends Activity {
     private PowerManager.WakeLock flowWakeLock;
     private TextView status;
     private boolean hideAfterPageLoad;
+    private boolean reloadMoveToBackAfterLoad;
     private final Handler main = new Handler(Looper.getMainLooper());
 
     public static FlowWebViewActivity getInstance() {
@@ -82,6 +83,18 @@ public final class FlowWebViewActivity extends Activity {
                 super.onPageFinished(view, url);
                 status.setText("ASTRA Flow: " + url);
                 Log.i("ASTRA-FLOW", "Page finished: " + url);
+                if (reloadMoveToBackAfterLoad
+                        && url != null
+                        && url.equals(view.getUrl())) {
+                    reloadMoveToBackAfterLoad = false;
+                    main.postDelayed(() -> {
+                        if (!isFinishing() && !isDestroyed()) {
+                            moveTaskToBack(true);
+                            Log.i("ASTRA-FLOW",
+                                    "Background mode restored after reload page finished");
+                        }
+                    }, 250L);
+                }
                 if (hideAfterPageLoad) {
                     hideAfterPageLoad = false;
                     main.postDelayed(() -> {
@@ -141,6 +154,19 @@ public final class FlowWebViewActivity extends Activity {
                     }
                 }, 250L);
             }
+        });
+    }
+
+    public void reloadInBackground() {
+        main.post(() -> {
+            if (webView == null || isFinishing() || isDestroyed()) {
+                Log.w("ASTRA-FLOW", "reloadInBackground: WebView unavailable");
+                return;
+            }
+
+            reloadMoveToBackAfterLoad = true;
+            Log.i("ASTRA-FLOW", "Background reload requested: url=" + webView.getUrl());
+            webView.reload();
         });
     }
 
