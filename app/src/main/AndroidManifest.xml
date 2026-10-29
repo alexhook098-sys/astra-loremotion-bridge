@@ -72,6 +72,16 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".LeonardoWebViewActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.astra.loremotionbridge.leonardo"
+            android:excludeFromRecents="false"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".Motion16Activity"
             android:exported="false"
             android:launchMode="singleTask"

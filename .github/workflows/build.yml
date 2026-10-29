@@ -2,7 +2,7 @@ name: Build APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main, feature/bing-blob-save-20261018, feature/motion16-webview, integration/motion16-cosmic ]
+    branches: [ main, feature/bing-blob-save-20261018, feature/motion16-webview, integration/motion16-cosmic, feature/leonardo-web ]
 jobs:
   build:
     runs-on: ubuntu-latest

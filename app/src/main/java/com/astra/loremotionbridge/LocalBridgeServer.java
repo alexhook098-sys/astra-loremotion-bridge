@@ -183,7 +183,11 @@ public class LocalBridgeServer {
                     "/motion16/start".equals(routeOnlyPath) ||
                     "/motion16/open".equals(routeOnlyPath) ||
                     "/motion16/eval".equals(routeOnlyPath) ||
-                    "/motion16/download".equals(routeOnlyPath);
+                    "/motion16/download".equals(routeOnlyPath) ||
+                    "/leonardo/start".equals(routeOnlyPath) ||
+                    "/leonardo/open".equals(routeOnlyPath) ||
+                    "/leonardo/eval".equals(routeOnlyPath) ||
+                    "/leonardo/download".equals(routeOnlyPath);
             if ("POST".equalsIgnoreCase(method) && jsonAdapterRoute) {
                 if (contentLength <= 0 || contentLength > 1024 * 1024) {
                     sendResponse(sock, "{\"ok\":false,\"error\":\"invalid_json_body_size\"}",
@@ -378,6 +382,18 @@ public class LocalBridgeServer {
                     m.getOrDefault("url", Motion16Activity.PROJECT_URL));
             if ("/motion16/minimize".equals(p)) return Motion16Controller.minimize();
             if ("/motion16/close".equals(p)) return Motion16Controller.close();
+
+            if ("/leonardo/status".equals(p)) return LeonardoWebViewController.status();
+            if ("/leonardo/start".equals(p)) return LeonardoWebViewController.start(
+                    MainApplication.context(), m.getOrDefault("url", LeonardoWebViewActivity.DEFAULT_URL));
+            if ("/leonardo/open".equals(p)) return LeonardoWebViewController.open(
+                    MainApplication.context(), m.getOrDefault("url", LeonardoWebViewActivity.DEFAULT_URL));
+            if ("/leonardo/eval".equals(p)) return LeonardoWebViewController.evaluate(
+                    m.getOrDefault("script", "document.title"));
+            if ("/leonardo/download".equals(p)) return LeonardoWebViewController.download();
+            if ("/leonardo/front".equals(p)) return LeonardoWebViewController.bringToFront(MainApplication.context());
+            if ("/leonardo/minimize".equals(p)) return LeonardoWebViewController.minimize();
+            if ("/leonardo/close".equals(p)) return LeonardoWebViewController.close();
 
             if ("/webview/status".equals(p)) return WebViewBrowserController.status();
             if ("/webview/start".equals(p)) return WebViewBrowserController.start(
