@@ -254,7 +254,7 @@ public final class LeonardoWebViewActivity extends Activity {
                     Thread.sleep(200L);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    return "{\\"ok\\":false,\\"error\\":\\"interrupted\\"}";
+                    return "{\"ok\":false,\"error\":\"interrupted\"}";
                 }
                 continue;
             }
