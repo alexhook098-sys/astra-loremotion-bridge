@@ -63,11 +63,11 @@ public final class LeonardoWebViewActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
                 lifecycle = "pageStarted";
-                status.setText("ASTRA Leonardo: loading " + url);
+                status.setText("ASTRA Leonardo: loading " + compactUrl(url));
             }
             @Override public void onPageFinished(WebView view, String url) {
                 lifecycle = "pageFinished";
-                status.setText("ASTRA Leonardo: " + url);
+                status.setText("ASTRA Leonardo: " + compactUrl(url));
                 Log.i("ASTRA-LEONARDO", "Page finished: " + url);
             }
         });
@@ -80,6 +80,19 @@ public final class LeonardoWebViewActivity extends Activity {
         String url = getIntent().getStringExtra("url");
         if (url == null || url.trim().isEmpty()) url = DEFAULT_URL;
         webView.loadUrl(url);
+    }
+
+    // Keep long OAuth URLs from expanding the activity header.
+    private static String compactUrl(String value) {
+        if (value == null || value.trim().isEmpty()) return "";
+        Uri uri = Uri.parse(value);
+        String host = uri.getHost();
+        if (host == null || host.isEmpty()) {
+            return value.length() > 100 ? value.substring(0, 100) + "…" : value;
+        }
+        String path = uri.getPath();
+        String label = host + ((path == null || path.isEmpty() || "/".equals(path)) ? "" : path);
+        return label.length() > 100 ? label.substring(0, 97) + "…" : label;
     }
 
     private void startDownload(String url, String userAgent, String disposition, String mime) {
