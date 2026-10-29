@@ -31,6 +31,21 @@ public final class LeonardoWebViewController {
         synchronized(lock){try{if(!done[0])lock.wait(15000L);}catch(InterruptedException e){Thread.currentThread().interrupt();return "{\"ok\":false,\"error\":\"interrupted\"}";}}
         return done[0] ? "{\"ok\":true,\"value\":"+(result[0]==null?"null":result[0])+"}" : "{\"ok\":false,\"error\":\"leonardo_eval_timeout\"}";
     }
+
+    public static String armOriginalWatch() {
+        LeonardoWebViewActivity a = LeonardoWebViewActivity.getInstance();
+        return a == null
+            ? "{\"ok\":false,\"error\":\"leonardo_not_started\"}"
+            : a.armOriginalVideoWatch();
+    }
+
+    public static String downloadOriginal(String url) {
+        LeonardoWebViewActivity a = LeonardoWebViewActivity.getInstance();
+        if (a == null) return "{\"ok\":false,\"error\":\"leonardo_not_started\"}";
+        return url == null || url.trim().isEmpty()
+            ? a.downloadOriginalVideoFromPage()
+            : a.downloadOriginalVideo(url);
+    }
     public static String download() {
         LeonardoWebViewActivity a=LeonardoWebViewActivity.getInstance();
         return a==null ? "{\"ok\":false,\"error\":\"leonardo_not_started\"}" : a.clickDownloadButton();

@@ -187,7 +187,9 @@ public class LocalBridgeServer {
                     "/leonardo/start".equals(routeOnlyPath) ||
                     "/leonardo/open".equals(routeOnlyPath) ||
                     "/leonardo/eval".equals(routeOnlyPath) ||
-                    "/leonardo/download".equals(routeOnlyPath);
+                    "/leonardo/download".equals(routeOnlyPath) ||
+                "/leonardo/download-original".equals(routeOnlyPath) ||
+                "/leonardo/original-watch/arm".equals(routeOnlyPath);
             if ("POST".equalsIgnoreCase(method) && jsonAdapterRoute) {
                 if (contentLength <= 0 || contentLength > 1024 * 1024) {
                     sendResponse(sock, "{\"ok\":false,\"error\":\"invalid_json_body_size\"}",
@@ -391,6 +393,8 @@ public class LocalBridgeServer {
             if ("/leonardo/eval".equals(p)) return LeonardoWebViewController.evaluate(
                     m.getOrDefault("script", "document.title"));
             if ("/leonardo/download".equals(p)) return LeonardoWebViewController.download();
+        if ("/leonardo/download-original".equals(p)) return LeonardoWebViewController.downloadOriginal(m.getOrDefault("url", ""));
+        if ("/leonardo/original-watch/arm".equals(p)) return LeonardoWebViewController.armOriginalWatch();
             if ("/leonardo/front".equals(p)) return LeonardoWebViewController.bringToFront(MainApplication.context());
             if ("/leonardo/minimize".equals(p)) return LeonardoWebViewController.minimize();
             if ("/leonardo/close".equals(p)) return LeonardoWebViewController.close();

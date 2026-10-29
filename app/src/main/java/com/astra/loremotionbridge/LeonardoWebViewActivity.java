@@ -149,6 +149,183 @@ public final class LeonardoWebViewActivity extends Activity {
             + ",\"state\":\"" + esc(lifecycle) + "\",\"url\":\"" + esc(url)
             + "\",\"title\":\"" + esc(title) + "\",\"lastDownload\":\"" + esc(lastDownload) + "\"}";
     }
+
+
+    public String armOriginalVideoWatch() {
+        final Object lock = new Object();
+        final String[] result = new String[1];
+        final boolean[] done = new boolean[1];
+
+        final String script =
+            "(function(){"
+            + "var urls=[].slice.call(document.querySelectorAll('video'))"
+            + ".map(function(v){return v.currentSrc||v.src||'';})"
+            + ".filter(Boolean);"
+            + "window.__astraLeonardoKnownVideoUrls=urls;"
+            + "return JSON.stringify({ok:true,count:urls.length});"
+            + "})()";
+
+        evaluate(script, value -> {
+            synchronized (lock) {
+                result[0] = value;
+                done[0] = true;
+                lock.notifyAll();
+            }
+        });
+
+        synchronized (lock) {
+            try {
+                final long waitDeadline = System.currentTimeMillis() + 5000L;
+                while (!done[0]) {
+                    long remaining = waitDeadline - System.currentTimeMillis();
+                    if (remaining <= 0) break;
+                    lock.wait(remaining);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return "{\"ok\":false,\"error\":\"interrupted\"}";
+            }
+        }
+
+        if (!done[0] || result[0] == null) {
+            return "{\"ok\":false,\"error\":\"video_baseline_timeout\"}";
+        }
+
+        try {
+            Object decoded = new org.json.JSONTokener(result[0]).nextValue();
+            if (!(decoded instanceof String)) {
+                return "{\"ok\":false,\"error\":\"video_baseline_invalid\"}";
+            }
+            Object payload = new org.json.JSONTokener((String) decoded).nextValue();
+            return payload instanceof org.json.JSONObject
+                ? payload.toString()
+                : "{\"ok\":false,\"error\":\"video_baseline_invalid\"}";
+        } catch (Exception e) {
+            return "{\"ok\":false,\"error\":\"video_baseline_decode_failed\"}";
+        }
+    }
+
+    public String downloadOriginalVideoFromPage() {
+        final String script =
+            "(function(){"
+            + "var known=window.__astraLeonardoKnownVideoUrls;"
+            + "if(!Array.isArray(known))return 'ASTRA_WATCH_NOT_ARMED';"
+            + "var vs=[].slice.call(document.querySelectorAll('video'));"
+            + "for(var i=vs.length-1;i>=0;i--){"
+            + "var u=vs[i].currentSrc||vs[i].src||'';"
+            + "if(u&&!known.includes(u)"
+            + "&&/cdn\\.leonardo\\.ai/i.test(u)"
+            + "&&/generations/i.test(u)"
+            + "&&/\\.mp4(?:$|[?#])/i.test(u))return u;"
+            + "}"
+            + "return '';"
+            + "})()";
+
+        final long deadline = System.currentTimeMillis() + 20000L;
+
+        while (System.currentTimeMillis() < deadline) {
+            final Object lock = new Object();
+            final String[] result = new String[1];
+            final boolean[] done = new boolean[1];
+
+            evaluate(script, value -> {
+                synchronized (lock) {
+                    result[0] = value;
+                    done[0] = true;
+                    lock.notifyAll();
+                }
+            });
+
+            synchronized (lock) {
+                try {
+                    long remaining = deadline - System.currentTimeMillis();
+                    if (!done[0] && remaining > 0) {
+                        lock.wait(Math.min(1000L, remaining));
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return "{\"ok\":false,\"error\":\"interrupted\"}";
+                }
+            }
+
+            if (!done[0] || result[0] == null) {
+                if (System.currentTimeMillis() >= deadline) break;
+                try {
+                    Thread.sleep(200L);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return "{\\"ok\\":false,\\"error\\":\\"interrupted\\"}";
+                }
+                continue;
+            }
+
+            try {
+                Object decoded = new org.json.JSONTokener(result[0]).nextValue();
+                String url = decoded instanceof String ? (String) decoded : "";
+
+                if ("ASTRA_WATCH_NOT_ARMED".equals(url)) {
+                    return "{\"ok\":false,\"error\":\"watch_not_armed\"}";
+                }
+                if (!url.isEmpty()) {
+                    return downloadOriginalVideo(url);
+                }
+            } catch (Exception e) {
+                return "{\"ok\":false,\"error\":\"video_url_decode_failed\"}";
+            }
+
+            long remaining = deadline - System.currentTimeMillis();
+            if (remaining > 0) {
+                try {
+                    Thread.sleep(Math.min(1000L, remaining));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return "{\"ok\":false,\"error\":\"interrupted\"}";
+                }
+            }
+        }
+
+        return "{\"ok\":false,\"error\":\"new_video_not_found\",\"waitSeconds\":20}";
+    }
+
+    public String downloadOriginalVideo(String candidateUrl) {
+        try {
+            if (candidateUrl == null || candidateUrl.trim().isEmpty()) {
+                return "{\"ok\":false,\"error\":\"original_video_url_missing\"}";
+            }
+            String url = candidateUrl.trim();
+
+            // Unwrap the known Cloudflare media proxy form, if present.
+            String marker = "/https://cdn.leonardo.ai/";
+            int markerAt = url.indexOf(marker);
+            if (url.startsWith("https://cdn.leonardo.ai/cdn-cgi/media/") && markerAt >= 0) {
+                url = url.substring(markerAt + 1);
+            }
+
+            Uri uri = Uri.parse(url);
+            String host = uri.getHost();
+            String path = uri.getPath();
+            if (!"https".equalsIgnoreCase(uri.getScheme())
+                    || !"cdn.leonardo.ai".equalsIgnoreCase(host)
+                    || path == null
+                    || !path.contains("/generations/")
+                    || !path.toLowerCase(java.util.Locale.ROOT).endsWith(".mp4")) {
+                return "{\"ok\":false,\"error\":\"invalid_original_video_url\"}";
+            }
+
+            startDownload(url, "", "attachment", "video/mp4");
+            String state = lastDownload;
+            if (state != null && state.startsWith("queued:")) {
+                return "{\"ok\":true,\"action\":\"original_download_queued\",\"download\":\""
+                    + esc(state) + "\"}";
+            }
+            return "{\"ok\":false,\"error\":\"original_download_not_queued\",\"detail\":\""
+                + esc(state) + "\"}";
+        } catch (Exception e) {
+            return "{\"ok\":false,\"error\":\"original_download_error\",\"detail\":\""
+                + esc(e.getClass().getSimpleName()) + "\"}";
+        }
+    }
+
     public String clickDownloadButton() {
         final String script = "(function(){" +
             "var all=[].slice.call(document.querySelectorAll('button,[role=button],a'));" +
