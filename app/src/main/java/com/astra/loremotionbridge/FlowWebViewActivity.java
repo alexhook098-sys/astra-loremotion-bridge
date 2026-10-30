@@ -474,6 +474,60 @@ public final class FlowWebViewActivity extends Activity {
         });
     }
 
+    // Executes Flow's native More options -> Download media -> 720p Original size path.
+    // The WebView DownloadListener above owns the actual file transfer and persistence.
+    public void downloadOriginal720(android.webkit.ValueCallback<String> callback) {
+        final String script =
+            "(function(){"
+            + "window.__astraFlowDownloadAction='RUNNING';"
+            + "const items=()=>[...document.querySelectorAll('[role=menuitem]')];"
+            + "const findDownload=()=>items().find(x=>/download\\s*media/i.test(x.innerText||''));"
+            + "const fail=s=>{window.__astraFlowDownloadAction='ERR|'+s};"
+            + "const choose720=()=>{"
+            + "const q=items().find(x=>/720p/i.test(x.innerText||'')&&/original size/i.test(x.innerText||''));"
+            + "if(!q){fail('720P_ORIGINAL_SIZE_NOT_FOUND');return;}"
+            + "q.click();window.__astraFlowDownloadAction='OK|720p Original size';"
+            + "};"
+            + "const openDownload=()=>{"
+            + "const d=findDownload();if(!d){fail('DOWNLOAD_MEDIA_NOT_FOUND');return;}"
+            + "d.click();setTimeout(choose720,350);"
+            + "};"
+            + "if(findDownload()){openDownload();}"
+            + "else{"
+            + "const b=[...document.querySelectorAll('button[aria-label=\\\"More options\\\"]')][0];"
+            + "if(!b){fail('EDITOR_MORE_OPTIONS_NOT_FOUND');return 'FAILED';}"
+            + "b.click();setTimeout(openDownload,350);"
+            + "}"
+            + "return 'STARTED';"
+            + "})()";
+        main.post(() -> {
+            if (webView == null) {
+                callback.onReceiveValue("\\\"ERR|FLOW_WEBVIEW_UNAVAILABLE\\\"");
+                return;
+            }
+            webView.evaluateJavascript(script, value ->
+                pollFlowDownloadAction(callback, System.currentTimeMillis() + 10000L));
+        });
+    }
+
+    private void pollFlowDownloadAction(android.webkit.ValueCallback<String> callback,
+            long deadline) {
+        if (webView == null) {
+            callback.onReceiveValue("\\\"ERR|FLOW_WEBVIEW_CLOSED\\\"");
+            return;
+        }
+        webView.evaluateJavascript("window.__astraFlowDownloadAction||'RUNNING'", value -> {
+            String result = jsString(value);
+            if (result != null && !"RUNNING".equals(result)) {
+                callback.onReceiveValue(value);
+            } else if (System.currentTimeMillis() >= deadline) {
+                callback.onReceiveValue("\\\"ERR|FLOW_DOWNLOAD_MENU_TIMEOUT\\\"");
+            } else {
+                main.postDelayed(() -> pollFlowDownloadAction(callback, deadline), 150L);
+            }
+        });
+    }
+
     public void evaluate(String script, android.webkit.ValueCallback<String> callback) {
         main.post(() -> {
             if (webView == null) {
