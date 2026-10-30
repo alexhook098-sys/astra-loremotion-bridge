@@ -5,6 +5,8 @@ import android.app.DownloadManager;
 import android.content.Context;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Environment;
 import android.util.Log;
 import android.webkit.CookieManager;
@@ -32,6 +34,7 @@ public final class LeonardoWebViewActivity extends Activity {
     // Cached by WebView callbacks on UI thread; safe for ASTRA-HTTP reads.
     private volatile String currentUrl = "";
     private volatile String currentTitle = "";
+    private final Handler main = new Handler(Looper.getMainLooper());
 
     public static LeonardoWebViewActivity getInstance() { return instance; }
 
@@ -88,6 +91,8 @@ public final class LeonardoWebViewActivity extends Activity {
         if (url == null || url.trim().isEmpty()) url = DEFAULT_URL;
         currentUrl = url;
         webView.loadUrl(url);
+
+        if (getIntent().getBooleanExtra("background", false)) sendToBackSoon();
     }
 
     // Keep long OAuth URLs from expanding the activity header.
@@ -143,6 +148,23 @@ public final class LeonardoWebViewActivity extends Activity {
 
     public void openUrl(String url) {
         runOnUiThread(() -> { if (webView != null && url != null && !url.isEmpty()) webView.loadUrl(url); });
+    }
+
+    public void openUrlInBackground(final String url) {
+        runOnUiThread(() -> {
+            if (webView != null && url != null && !url.isEmpty()) {
+                webView.loadUrl(url);
+                sendToBackSoon();
+            }
+        });
+    }
+
+    private void sendToBackSoon() {
+        main.postDelayed(() -> {
+            if (!isFinishing() && !isDestroyed()) {
+                try { moveTaskToBack(true); } catch (Exception ignored) {}
+            }
+        }, 250L);
     }
     public void evaluate(String script, android.webkit.ValueCallback<String> callback) {
         runOnUiThread(() -> {

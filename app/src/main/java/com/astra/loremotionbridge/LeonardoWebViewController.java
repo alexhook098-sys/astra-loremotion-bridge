@@ -7,18 +7,41 @@ import android.content.Intent;
 public final class LeonardoWebViewController {
     private LeonardoWebViewController() {}
     public static String start(Context context, String url) {
-        if (url == null || url.trim().isEmpty()) url = LeonardoWebViewActivity.DEFAULT_URL;
+        return start(context, url, false);
+    }
+
+    public static String start(Context context, String url, boolean background) {
+        if (url == null || url.trim().isEmpty()) {
+            url = LeonardoWebViewActivity.DEFAULT_URL;
+        }
+
         LeonardoWebViewActivity activity = LeonardoWebViewActivity.getInstance();
-        if (activity != null) { activity.openUrl(url); return "{\"ok\":true,\"action\":\"leonardo-open-reused\",\"url\":\""+esc(url)+"\"}"; }
+
+        if (activity != null) {
+            if (background) activity.openUrlInBackground(url);
+            else activity.openUrl(url);
+            return "{\"ok\":true,\"action\":\"leonardo-open-reused\",\"background\":"
+                    + background + ",\"url\":\"" + esc(url) + "\"}";
+        }
+
         try {
             Intent intent = new Intent(context, LeonardoWebViewActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             intent.putExtra("url", url);
+            intent.putExtra("background", background);
             context.startActivity(intent);
-            return "{\"ok\":true,\"action\":\"leonardo-start-requested\",\"url\":\""+esc(url)+"\"}";
-        } catch (Exception e) { return "{\"ok\":false,\"error\":\""+esc(String.valueOf(e))+"\"}"; }
+
+            return "{\"ok\":true,\"action\":\"leonardo-start-requested\",\"background\":"
+                    + background + ",\"url\":\"" + esc(url) + "\"}";
+        } catch (Exception e) {
+            return "{\"ok\":false,\"error\":\"" + esc(String.valueOf(e)) + "\"}";
+        }
     }
-    public static String open(Context context, String url) { return start(context, url); }
+
+    public static String open(Context context, String url) {
+        return start(context, url, false);
+    }
+
     public static String status() {
         LeonardoWebViewActivity a=LeonardoWebViewActivity.getInstance();
         return a==null ? "{\"ok\":true,\"ready\":false,\"state\":\"stopped\"}" : a.statusJson();

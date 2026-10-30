@@ -387,7 +387,7 @@ public class LocalBridgeServer {
 
             if ("/leonardo/status".equals(p)) return LeonardoWebViewController.status();
             if ("/leonardo/start".equals(p)) return LeonardoWebViewController.start(
-                    MainApplication.context(), m.getOrDefault("url", LeonardoWebViewActivity.DEFAULT_URL));
+                    MainApplication.context(), m.getOrDefault("url", LeonardoWebViewActivity.DEFAULT_URL), true);
             if ("/leonardo/open".equals(p)) return LeonardoWebViewController.open(
                     MainApplication.context(), m.getOrDefault("url", LeonardoWebViewActivity.DEFAULT_URL));
             if ("/leonardo/eval".equals(p)) return LeonardoWebViewController.evaluate(
