@@ -29,6 +29,9 @@ public final class LeonardoWebViewActivity extends Activity {
     private TextView status;
     private volatile String lifecycle = "created";
     private volatile String lastDownload = "";
+    // Cached by WebView callbacks on UI thread; safe for ASTRA-HTTP reads.
+    private volatile String currentUrl = "";
+    private volatile String currentTitle = "";
 
     public static LeonardoWebViewActivity getInstance() { return instance; }
 
@@ -63,12 +66,19 @@ public final class LeonardoWebViewActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
                 lifecycle = "pageStarted";
+                currentUrl = url == null ? "" : url;
+                currentTitle = view.getTitle() == null ? "" : view.getTitle();
                 status.setText("ASTRA Leonardo: loading " + compactUrl(url));
             }
             @Override public void onPageFinished(WebView view, String url) {
                 lifecycle = "pageFinished";
+                currentUrl = url == null ? "" : url;
+                currentTitle = view.getTitle() == null ? "" : view.getTitle();
                 status.setText("ASTRA Leonardo: " + compactUrl(url));
                 Log.i("ASTRA-LEONARDO", "Page finished: " + url);
+            }
+            @Override public void onReceivedTitle(WebView view, String title) {
+                currentTitle = title == null ? "" : title;
             }
         });
         webView.setDownloadListener(new DownloadListener() {
@@ -79,6 +89,7 @@ public final class LeonardoWebViewActivity extends Activity {
         });
         String url = getIntent().getStringExtra("url");
         if (url == null || url.trim().isEmpty()) url = DEFAULT_URL;
+        currentUrl = url;
         webView.loadUrl(url);
     }
 
@@ -143,8 +154,9 @@ public final class LeonardoWebViewActivity extends Activity {
         });
     }
     public String statusJson() {
-        String url = webView == null ? "" : webView.getUrl();
-        String title = webView == null ? "" : webView.getTitle();
+        // Do not call WebView APIs from ASTRA-HTTP.
+        String url = currentUrl;
+        String title = currentTitle;
         return "{\"ok\":true,\"ready\":" + (url != null && !url.isEmpty() && !"about:blank".equals(url))
             + ",\"state\":\"" + esc(lifecycle) + "\",\"url\":\"" + esc(url)
             + "\",\"title\":\"" + esc(title) + "\",\"lastDownload\":\"" + esc(lastDownload) + "\"}";
