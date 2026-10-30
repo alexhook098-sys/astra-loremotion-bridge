@@ -106,7 +106,7 @@ public final class FlowWebViewController {
     public static String downloadOriginal720() {
         FlowWebViewActivity activity = FlowWebViewActivity.getInstance();
         if (activity == null) {
-            return "{\\"ok\\":false,\\"error\\":\\"flow_not_started\\"}";
+            return "{\"ok\":false,\"error\":\"flow_not_started\"}";
         }
         final Object lock = new Object();
         final String[] result = new String[1];
@@ -123,13 +123,13 @@ public final class FlowWebViewController {
                 if (!done[0]) lock.wait(12000L);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                return "{\\"ok\\":false,\\"error\\":\\"interrupted\\"}";
+                return "{\"ok\":false,\"error\":\"interrupted\"}";
             }
         }
-        if (!done[0]) return "{\\"ok\\":false,\\"error\\":\\"flow_download_action_timeout\\"}";
+        if (!done[0]) return "{\"ok\":false,\"error\":\"flow_download_action_timeout\"}";
         String value = result[0] == null ? "" : result[0];
         boolean ok = value.contains("OK|");
-        return "{\\"ok\\":" + ok + ",\\"action\\":\\"flow-download-original-720\\",\\"result\\":\\"" + esc(value) + "\\"}";
+        return "{\"ok\":" + ok + ",\"action\":\"flow-download-original-720\",\"result\":\"" + esc(value) + "\"}";
     }
 
     public static String evaluate(String script) {
