@@ -179,6 +179,7 @@ public class LocalBridgeServer {
                     "/flow/start".equals(routeOnlyPath) ||
                     "/flow/open".equals(routeOnlyPath) ||
                     "/flow/eval".equals(routeOnlyPath) ||
+                    "/flow/download-original".equals(routeOnlyPath) ||
                     "/flow/front".equals(routeOnlyPath) ||
                     "/motion16/start".equals(routeOnlyPath) ||
                     "/motion16/open".equals(routeOnlyPath) ||
@@ -358,6 +359,7 @@ public class LocalBridgeServer {
                     MainApplication.context(),
                     m.getOrDefault("url", "https://flow.google.com/u/2/project/4daa2354-7afc-44e5-b51d-1652eb4aaaac"));
             if ("/flow/status".equals(p)) return FlowWebViewController.status();
+            if ("/flow/download-original".equals(p)) return FlowWebViewController.downloadOriginal720();
             if ("/flow/eval".equals(p)) return FlowWebViewController.evaluate(
                     m.getOrDefault("script", "document.title"));
             if ("/flow/reload".equals(p)) return FlowWebViewController.reload();
