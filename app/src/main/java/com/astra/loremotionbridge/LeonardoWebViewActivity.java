@@ -77,9 +77,6 @@ public final class LeonardoWebViewActivity extends Activity {
                 status.setText("ASTRA Leonardo: " + compactUrl(url));
                 Log.i("ASTRA-LEONARDO", "Page finished: " + url);
             }
-            @Override public void onReceivedTitle(WebView view, String title) {
-                currentTitle = title == null ? "" : title;
-            }
         });
         webView.setDownloadListener(new DownloadListener() {
             @Override public void onDownloadStart(String url, String userAgent, String contentDisposition,
