@@ -353,10 +353,10 @@ public class LocalBridgeServer {
             if ("/flow/backup/start".equals(p)) return FlowWebViewController.startBackup(MainApplication.context());
                         if ("/flow/start".equals(p)) return FlowWebViewController.start(
                     MainApplication.context(),
-                    m.getOrDefault("url", "https://flow.google.com/u/1/project/54203513-938c-412e-9974-9ddf842bd7d5"));
+                    m.getOrDefault("url", "https://flow.google.com/u/2/project/4daa2354-7afc-44e5-b51d-1652eb4aaaac"));
             if ("/flow/open".equals(p)) return FlowWebViewController.open(
                     MainApplication.context(),
-                    m.getOrDefault("url", "https://flow.google.com/u/1/project/54203513-938c-412e-9974-9ddf842bd7d5"));
+                    m.getOrDefault("url", "https://flow.google.com/u/2/project/4daa2354-7afc-44e5-b51d-1652eb4aaaac"));
             if ("/flow/status".equals(p)) return FlowWebViewController.status();
             if ("/flow/eval".equals(p)) return FlowWebViewController.evaluate(
                     m.getOrDefault("script", "document.title"));
