@@ -502,7 +502,7 @@ public final class FlowWebViewActivity extends Activity {
             + "})()";
         main.post(() -> {
             if (webView == null) {
-                callback.onReceiveValue("\"ERR|FLOW_WEBVIEW_UNAVAILABLE\"");
+                callback.onReceiveValue("ERR|FLOW_WEBVIEW_UNAVAILABLE");
                 return;
             }
             webView.evaluateJavascript(script, value ->
@@ -513,15 +513,15 @@ public final class FlowWebViewActivity extends Activity {
     private void pollFlowDownloadAction(android.webkit.ValueCallback<String> callback,
             long deadline) {
         if (webView == null) {
-            callback.onReceiveValue("\"ERR|FLOW_WEBVIEW_CLOSED\"");
+            callback.onReceiveValue("ERR|FLOW_WEBVIEW_CLOSED");
             return;
         }
         webView.evaluateJavascript("window.__astraFlowDownloadAction||'RUNNING'", value -> {
             String result = jsString(value);
             if (result != null && !"RUNNING".equals(result)) {
-                callback.onReceiveValue(value);
+                callback.onReceiveValue(result);
             } else if (System.currentTimeMillis() >= deadline) {
-                callback.onReceiveValue("\"ERR|FLOW_DOWNLOAD_MENU_TIMEOUT\"");
+                callback.onReceiveValue("ERR|FLOW_DOWNLOAD_MENU_TIMEOUT");
             } else {
                 main.postDelayed(() -> pollFlowDownloadAction(callback, deadline), 150L);
             }
