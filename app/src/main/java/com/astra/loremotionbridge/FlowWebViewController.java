@@ -103,6 +103,35 @@ public final class FlowWebViewController {
         return "{\"ok\":true,\"action\":\"flow-close-requested\"}";
     }
 
+    public static String downloadOriginal720() {
+        FlowWebViewActivity activity = FlowWebViewActivity.getInstance();
+        if (activity == null) {
+            return "{\\"ok\\":false,\\"error\\":\\"flow_not_started\\"}";
+        }
+        final Object lock = new Object();
+        final String[] result = new String[1];
+        final boolean[] done = new boolean[1];
+        activity.downloadOriginal720(value -> {
+            synchronized (lock) {
+                result[0] = value;
+                done[0] = true;
+                lock.notifyAll();
+            }
+        });
+        synchronized (lock) {
+            try {
+                if (!done[0]) lock.wait(12000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return "{\\"ok\\":false,\\"error\\":\\"interrupted\\"}";
+            }
+        }
+        if (!done[0]) return "{\\"ok\\":false,\\"error\\":\\"flow_download_action_timeout\\"}";
+        String value = result[0] == null ? "" : result[0];
+        boolean ok = value.contains("OK|");
+        return "{\\"ok\\":" + ok + ",\\"action\\":\\"flow-download-original-720\\",\\"result\\":\\"" + esc(value) + "\\"}";
+    }
+
     public static String evaluate(String script) {
         FlowWebViewActivity activity = FlowWebViewActivity.getInstance();
         if (activity == null) {
