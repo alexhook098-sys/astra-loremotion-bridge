@@ -1,6 +1,16 @@
 package com.astra.loremotionbridge;
 
 import android.app.Activity;
+import java.io.OutputStream;
+import java.io.IOException;
+import android.webkit.DownloadListener;
+import android.provider.MediaStore;
+import android.os.Environment;
+import android.os.Build;
+import android.net.Uri;
+import android.content.Context;
+import android.content.ContentValues;
+import android.app.DownloadManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -144,6 +154,59 @@ public final class FlowWebViewActivity extends Activity {
         cookies.setAcceptCookie(true);
         cookies.setAcceptThirdPartyCookies(webView, true);
 
+
+        // Flow export support: WebView does not download files unless a DownloadListener
+        // forwards authenticated HTTPS requests (or blob URLs) to Android.
+        webView.setDownloadListener(new DownloadListener() {
+            @Override public void onDownloadStart(String url, String userAgent,
+                    String contentDisposition, String mimeType, long contentLength) {
+                Log.i("ASTRA-FLOW-DL", "Download callback url=" + url
+                        + " mime=" + mimeType + " bytes=" + contentLength);
+                if (url == null || url.isEmpty()) {
+                    Log.e("ASTRA-FLOW-DL", "Rejected empty download URL");
+                    return;
+                }
+                if (url.startsWith("blob:")) {
+                    startFlowBlobDownload(url, mimeType);
+                    return;
+                }
+                if (!url.startsWith("https://")) {
+                    Log.w("ASTRA-FLOW-DL", "Rejected non-HTTPS download URL");
+                    return;
+                }
+                try {
+                    DownloadManager.Request request =
+                            new DownloadManager.Request(Uri.parse(url));
+                    String cookie = CookieManager.getInstance().getCookie(url);
+                    if (userAgent != null && !userAgent.isEmpty())
+                        request.addRequestHeader("User-Agent", userAgent);
+                    if (cookie != null && !cookie.isEmpty())
+                        request.addRequestHeader("Cookie", cookie);
+                    request.setMimeType(mimeType != null && !mimeType.isEmpty()
+                            ? mimeType : "video/mp4");
+                    request.setTitle("ASTRA Flow video");
+                    request.setDescription("Downloading generated Flow video");
+                    request.setNotificationVisibility(
+                            DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                    request.setAllowedOverMetered(true);
+                    request.setAllowedOverRoaming(true);
+                    String ext = (mimeType != null && mimeType.toLowerCase().contains("gif"))
+                            ? ".gif" : ".mp4";
+                    request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,
+                            "ASTRA_Flow_" + System.currentTimeMillis() + ext);
+                    DownloadManager manager = (DownloadManager)
+                            getSystemService(Context.DOWNLOAD_SERVICE);
+                    if (manager == null) throw new IllegalStateException("DownloadManager unavailable");
+                    long id = manager.enqueue(request);
+                    Log.i("ASTRA-FLOW-DL", "Download queued id=" + id);
+                    if (status != null) status.setText("ASTRA Flow: download queued (" + id + ")");
+                } catch (Exception e) {
+                    Log.e("ASTRA-FLOW-DL", "Could not queue Flow download", e);
+                    if (status != null) status.setText("ASTRA Flow download error: " + e.getMessage());
+                }
+            }
+        });
+
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -210,6 +273,169 @@ public final class FlowWebViewActivity extends Activity {
         if (url != null && !url.isEmpty() && webView != null) {
             openUrl(url);
         }
+    }
+
+
+    // Flow uses browser-created blob URLs for some exports. DownloadManager cannot
+    // fetch blob: URLs, so read the blob in the authenticated WebView and stream it
+    // to MediaStore in bounded chunks without loading the whole video into Java memory.
+    private void startFlowBlobDownload(String blobUrl, String mimeType) {
+        if (webView == null || blobUrl == null ||
+                !blobUrl.startsWith("blob:https://flow.google.com/")) {
+            Log.w("ASTRA-FLOW-DL", "Blocked blob URL outside Flow origin");
+            if (status != null) status.setText("ASTRA Flow: unsupported blob origin");
+            return;
+        }
+        String init = "window.__astraFlowBlobInit='';(async()=>{try{" +
+                "const r=await fetch(" + org.json.JSONObject.quote(blobUrl) + ");" +
+                "if(!r.ok)throw new Error('blob fetch failed '+r.status);" +
+                "const b=await r.blob();if(!b.size)throw new Error('empty blob');" +
+                "if(b.size>1073741824)throw new Error('video exceeds 1 GiB limit');" +
+                "window.__astraFlowBlob={blob:b,size:b.size};" +
+                "window.__astraFlowBlobInit='OK|'+b.size+'|'+encodeURIComponent(b.type||'video/mp4');" +
+                "}catch(e){window.__astraFlowBlobInit='ERR|'+String(e&&e.message||e)}})();'STARTED'";
+        main.post(() -> {
+            if (webView == null) return;
+            long deadline = System.currentTimeMillis() + 30000L;
+            webView.evaluateJavascript(init, value -> pollFlowBlobInit(mimeType, deadline));
+        });
+    }
+
+    private void pollFlowBlobInit(String mimeType, long deadline) {
+        if (webView == null) return;
+        webView.evaluateJavascript("window.__astraFlowBlobInit||''", value -> {
+            String result = jsString(value);
+            if (result == null || result.isEmpty()) {
+                if (System.currentTimeMillis() >= deadline) {
+                    Log.e("ASTRA-FLOW-DL", "Blob preparation timed out");
+                    if (status != null) status.setText("ASTRA Flow: export preparation timed out");
+                } else main.postDelayed(() -> pollFlowBlobInit(mimeType, deadline), 120);
+                return;
+            }
+            if (!result.startsWith("OK|")) {
+                String reason = result.startsWith("ERR|") ? result.substring(4) : result;
+                Log.e("ASTRA-FLOW-DL", "Blob preparation failed: " + reason);
+                if (status != null) status.setText("ASTRA Flow export error: " + reason);
+                return;
+            }
+            try {
+                String[] p = result.split("\\|", 3);
+                long size = Long.parseLong(p[1]);
+                String type = p.length > 2
+                        ? java.net.URLDecoder.decode(p[2], "UTF-8") : mimeType;
+                beginFlowBlobWrite(size, type);
+            } catch (Exception e) {
+                Log.e("ASTRA-FLOW-DL", "Invalid blob metadata", e);
+                if (status != null) status.setText("ASTRA Flow: invalid export metadata");
+            }
+        });
+    }
+
+    private void beginFlowBlobWrite(long size, String mimeType) {
+        if (Build.VERSION.SDK_INT < 29) {
+            if (status != null) status.setText("ASTRA Flow blob export requires Android 10+");
+            return;
+        }
+        Uri target = null;
+        OutputStream out = null;
+        try {
+            String type = mimeType != null && mimeType.startsWith("video/")
+                    ? mimeType : "video/mp4";
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME,
+                    "ASTRA_Flow_" + System.currentTimeMillis() + ".mp4");
+            values.put(MediaStore.MediaColumns.MIME_TYPE, type);
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+            values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+            target = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            if (target == null) throw new IOException("MediaStore insert returned null");
+            out = getContentResolver().openOutputStream(target, "w");
+            if (out == null) throw new IOException("Cannot open Downloads output");
+            if (status != null) status.setText("ASTRA Flow: saving video (" + size + " bytes)");
+            pumpFlowBlobChunk(target, out, size, 0L);
+        } catch (Exception e) {
+            try { if (out != null) out.close(); } catch (Exception ignored) {}
+            if (target != null) try { getContentResolver().delete(target, null, null); } catch (Exception ignored) {}
+            Log.e("ASTRA-FLOW-DL", "Could not create Downloads file", e);
+            if (status != null) status.setText("ASTRA Flow save error: " + e.getMessage());
+        }
+    }
+
+    private void pumpFlowBlobChunk(Uri target, OutputStream out, long size, long offset) {
+        final int chunkSize = 24576;
+        if (offset >= size) {
+            try {
+                out.close();
+                ContentValues done = new ContentValues();
+                done.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                getContentResolver().update(target, done, null, null);
+                if (webView != null) webView.evaluateJavascript(
+                        "delete window.__astraFlowBlob;delete window.__astraFlowBlobInit;delete window.__astraFlowChunk", null);
+                Log.i("ASTRA-FLOW-DL", "Blob saved successfully bytes=" + size);
+                if (status != null) status.setText("ASTRA Flow video saved to Downloads");
+            } catch (Exception e) {
+                Log.e("ASTRA-FLOW-DL", "Could not finalize Flow file", e);
+                if (status != null) status.setText("ASTRA Flow finalize error: " + e.getMessage());
+            }
+            return;
+        }
+        String js = "window.__astraFlowChunk='';(async()=>{try{" +
+                "const x=window.__astraFlowBlob;if(!x)throw new Error('blob state missing');" +
+                "const a=await x.blob.slice(" + offset + "," + Math.min(size, offset + chunkSize) + ").arrayBuffer();" +
+                "const u=new Uint8Array(a);let s='';for(let i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);" +
+                "window.__astraFlowChunk='CHUNK|'+btoa(s);" +
+                "}catch(e){window.__astraFlowChunk='ERR|'+String(e&&e.message||e)}})();'STARTED'";
+        main.post(() -> {
+            if (webView == null) { failFlowBlob(target, out, "WebView closed"); return; }
+            long deadline = System.currentTimeMillis() + 15000L;
+            webView.evaluateJavascript(js, value ->
+                    pollFlowBlobChunk(target, out, size, offset, deadline));
+        });
+    }
+
+    private void pollFlowBlobChunk(Uri target, OutputStream out, long size,
+            long offset, long deadline) {
+        if (webView == null) { failFlowBlob(target, out, "WebView closed"); return; }
+        webView.evaluateJavascript("window.__astraFlowChunk||''", value -> {
+            String result = jsString(value);
+            if (result == null || result.isEmpty()) {
+                if (System.currentTimeMillis() >= deadline)
+                    failFlowBlob(target, out, "chunk read timed out");
+                else main.postDelayed(() ->
+                        pollFlowBlobChunk(target, out, size, offset, deadline), 100);
+                return;
+            }
+            if (!result.startsWith("CHUNK|")) {
+                String reason = result.startsWith("ERR|") ? result.substring(4) : result;
+                failFlowBlob(target, out, reason);
+                return;
+            }
+            try {
+                byte[] bytes = android.util.Base64.decode(
+                        result.substring(6), android.util.Base64.DEFAULT);
+                if (bytes.length == 0) throw new IOException("empty chunk");
+                out.write(bytes);
+                pumpFlowBlobChunk(target, out, size, offset + bytes.length);
+            } catch (Exception e) {
+                failFlowBlob(target, out, "write failed: " + e.getMessage());
+            }
+        });
+    }
+
+    private void failFlowBlob(Uri target, OutputStream out, String reason) {
+        try { out.close(); } catch (Exception ignored) {}
+        try { getContentResolver().delete(target, null, null); } catch (Exception ignored) {}
+        if (webView != null) webView.evaluateJavascript("delete window.__astraFlowBlob", null);
+        Log.e("ASTRA-FLOW-DL", "Blob export failed: " + reason);
+        if (status != null) status.setText("ASTRA Flow export failed: " + reason);
+    }
+
+    private static String jsString(String value) {
+        if (value == null || "null".equals(value)) return null;
+        try {
+            Object parsed = new org.json.JSONTokener(value).nextValue();
+            return parsed instanceof String ? (String) parsed : String.valueOf(parsed);
+        } catch (Exception e) { return value; }
     }
 
     public void openUrl(String url) {
