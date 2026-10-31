@@ -13,14 +13,17 @@ public final class FlowWebViewController {
         if (url == null || url.isEmpty()) url = PROJECT_URL;
         FlowWebViewActivity activity = FlowWebViewActivity.getInstance();
         if (activity != null) {
-            activity.openUrlInBackground(url);
-            return "{\"ok\":true,\"action\":\"flow-start-reused\",\"url\":\"" + esc(url) + "\"}";
+            bringToFront(context);
+            activity.openUrl(url);
+            return "{\"ok\":true,\"action\":\"flow-start-reused-foreground\",\"url\":\"" + esc(url) + "\"}";
         }
         try {
             Intent intent = new Intent(context, FlowWebViewActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             intent.putExtra("url", url);
-            intent.putExtra("background", true);
+            // Keep Flow visible while generation and editor interaction run.
+            // Android may throttle or block WebView interaction while this Activity is backgrounded.
+            intent.putExtra("background", false);
             android.content.pm.ResolveInfo resolved =
                 context.getPackageManager().resolveActivity(intent, 0);
             if (resolved == null)
