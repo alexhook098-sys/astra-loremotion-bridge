@@ -15,6 +15,7 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.JavascriptInterface;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -31,12 +32,31 @@ public final class LeonardoWebViewActivity extends Activity {
     private TextView status;
     private volatile String lifecycle = "created";
     private volatile String lastDownload = "";
+    private volatile String observedVideoUrl = "";
     // Cached by WebView callbacks on UI thread; safe for ASTRA-HTTP reads.
     private volatile String currentUrl = "";
     private volatile String currentTitle = "";
     private final Handler main = new Handler(Looper.getMainLooper());
 
     public static LeonardoWebViewActivity getInstance() { return instance; }
+
+    private final class LeonardoJsBridge {
+        @JavascriptInterface
+        public void onVideo(String candidateUrl) {
+            if (candidateUrl == null) return;
+            Uri uri = Uri.parse(candidateUrl.trim());
+            String host = uri.getHost();
+            String path = uri.getPath();
+            if ("https".equalsIgnoreCase(uri.getScheme())
+                    && ("cdn.leonardo.ai".equalsIgnoreCase(host) || (host != null && host.toLowerCase(java.util.Locale.ROOT).endsWith(".cdn.leonardo.ai")))
+                    && path != null
+                    && path.contains("/generations/")
+                    && path.toLowerCase(java.util.Locale.ROOT).endsWith(".mp4")) {
+                observedVideoUrl = candidateUrl.trim();
+                Log.i("ASTRA-LEONARDO", "New generated video URL observed");
+            }
+        }
+    }
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -90,6 +110,7 @@ public final class LeonardoWebViewActivity extends Activity {
         String url = getIntent().getStringExtra("url");
         if (url == null || url.trim().isEmpty()) url = DEFAULT_URL;
         currentUrl = url;
+        webView.addJavascriptInterface(new LeonardoJsBridge(), "AstraLeonardo");
         webView.loadUrl(url);
 
         if (getIntent().getBooleanExtra("background", false)) sendToBackSoon();
@@ -182,18 +203,33 @@ public final class LeonardoWebViewActivity extends Activity {
     }
 
 
+    public String watchStatusJson() {
+        String url = observedVideoUrl;
+        return "{\"ok\":true,\"found\":" + (url != null && !url.isEmpty())
+            + ",\"url\":\"" + esc(url) + "\"}";
+    }
+
     public String armOriginalVideoWatch() {
+        observedVideoUrl = "";
         final Object lock = new Object();
         final String[] result = new String[1];
         final boolean[] done = new boolean[1];
 
         final String script =
             "(function(){"
-            + "var urls=[].slice.call(document.querySelectorAll('video'))"
-            + ".map(function(v){return v.currentSrc||v.src||'';})"
-            + ".filter(Boolean);"
+            + "var valid=function(u){return !!u&&/cdn\\.leonardo\\.ai/i.test(u)&&/generations/i.test(u)&&/\\.mp4(?:$|[?#])/i.test(u);};"
+            + "var urls=[].slice.call(document.querySelectorAll('video')).map(function(v){return v.currentSrc||v.src||'';}).filter(Boolean);"
             + "window.__astraLeonardoKnownVideoUrls=urls;"
-            + "return JSON.stringify({ok:true,count:urls.length});"
+            + "window.__astraLeonardoNewVideoUrls=[];"
+            + "var add=function(v){if(!v||v.tagName!=='VIDEO')return;var u=v.currentSrc||v.src||v.getAttribute('src')||'';if(valid(u)&&!urls.includes(u)&&!window.__astraLeonardoNewVideoUrls.includes(u)){window.__astraLeonardoNewVideoUrls.push(u);if(window.AstraLeonardo&&window.AstraLeonardo.onVideo)window.AstraLeonardo.onVideo(u);}};"
+            + "var scan=function(){document.querySelectorAll('video').forEach(add);};"
+            + "if(window.__astraLeonardoVideoObserver)window.__astraLeonardoVideoObserver.disconnect();"
+            + "var observer=new MutationObserver(function(){scan();});"
+            + "observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});"
+            + "document.addEventListener('loadedmetadata',function(e){add(e.target);},true);"
+            + "window.__astraLeonardoVideoObserver=observer;"
+            + "scan();"
+            + "return JSON.stringify({ok:true,count:urls.length,observer:true});"
             + "})()";
 
         evaluate(script, value -> {
@@ -336,7 +372,7 @@ public final class LeonardoWebViewActivity extends Activity {
             String host = uri.getHost();
             String path = uri.getPath();
             if (!"https".equalsIgnoreCase(uri.getScheme())
-                    || !"cdn.leonardo.ai".equalsIgnoreCase(host)
+                    || !("cdn.leonardo.ai".equalsIgnoreCase(host) || (host != null && host.toLowerCase(java.util.Locale.ROOT).endsWith(".cdn.leonardo.ai")))
                     || path == null
                     || !path.contains("/generations/")
                     || !path.toLowerCase(java.util.Locale.ROOT).endsWith(".mp4")) {

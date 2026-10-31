@@ -55,6 +55,13 @@ public final class LeonardoWebViewController {
         return done[0] ? "{\"ok\":true,\"value\":"+(result[0]==null?"null":result[0])+"}" : "{\"ok\":false,\"error\":\"leonardo_eval_timeout\"}";
     }
 
+    public static String watchStatus() {
+        LeonardoWebViewActivity a = LeonardoWebViewActivity.getInstance();
+        return a == null
+            ? "{\"ok\":false,\"error\":\"leonardo_not_started\"}"
+            : a.watchStatusJson();
+    }
+
     public static String armOriginalWatch() {
         LeonardoWebViewActivity a = LeonardoWebViewActivity.getInstance();
         return a == null
