@@ -191,15 +191,6 @@ public final class FlowWebViewActivity extends Activity {
         }
         hideAfterPageLoad = getIntent().getBooleanExtra("background", false);
         webView.loadUrl(url);
-        if (hideAfterPageLoad) {
-            hideAfterPageLoad = false;
-            main.postDelayed(() -> {
-                if (!isFinishing() && !isDestroyed()) {
-                    moveTaskToBack(true);
-                    Log.i("ASTRA-FLOW", "Background mode: moved task to back after load start");
-                }
-            }, 250L);
-        }
     }
 
     @Override
@@ -223,14 +214,8 @@ public final class FlowWebViewActivity extends Activity {
     public void openUrlInBackground(String url) {
         main.post(() -> {
             if (webView != null && url != null && !url.isEmpty()) {
-                hideAfterPageLoad = false;
+                hideAfterPageLoad = true;
                 webView.loadUrl(url);
-                main.postDelayed(() -> {
-                    if (!isFinishing() && !isDestroyed()) {
-                        moveTaskToBack(true);
-                        Log.i("ASTRA-FLOW", "Background mode: moved task to back after load start");
-                    }
-                }, 250L);
             }
         });
     }
