@@ -168,8 +168,10 @@ public class ChatActivity extends Activity {
         messages.addView(row);
         messageScroll.post(() -> messageScroll.fullScroll(View.FOCUS_DOWN));
         if (save) {
-            history.put(new JSONObject().put("text", text).put("user", user));
-            getSharedPreferences("astra_chat", MODE_PRIVATE).edit().putString("messages", history.toString()).apply();
+            try {
+                history.put(new JSONObject().put("text", text).put("user", user));
+                getSharedPreferences("astra_chat", MODE_PRIVATE).edit().putString("messages", history.toString()).apply();
+            } catch (Exception ignored) {}
         }
     }
 
