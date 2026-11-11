@@ -19,7 +19,7 @@
 <application
         android:name=".MainApplication"
         android:theme="@style/AppTheme"
-        android:label="ASTRA Browser Control"
+        android:label="ASTRA"
         android:icon="@drawable/astra_app_icon"
         android:roundIcon="@drawable/astra_app_icon"
         android:allowBackup="false"
@@ -27,8 +27,17 @@
         android:supportsRtl="true">
 
         <activity
-            android:name=".MainActivity"
+            android:name=".ChatActivity"
             android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="false">
 
             <intent-filter>
                 <action
