@@ -2,7 +2,6 @@ package com.astra.loremotionbridge;
 
 import android.Manifest;
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
@@ -45,7 +44,7 @@ public class MainActivity extends Activity {
                     + "\n\nОШИБКА СЕРВЕРА\n"
                     + (bridgeError == null ? "Пока нет данных" : bridgeError)
                     + "\n\nWEB ENGINE         : Android WebView\n"
-                    + "Вход в аккаунт — через кнопку WebView ниже."
+                    + "Для запуска браузера используй кнопку ниже."
             );
         }
     };
@@ -159,7 +158,7 @@ public class MainActivity extends Activity {
         Button start = new Button(this);
         start.setText("▶   ЗАПУСТИТЬ ASTRA BROWSER");
         start.setOnClickListener(v -> {
-            statusText.setText("Запускаю фоновый мост. Для входа в аккаунт открой WebView кнопкой ниже.");
+            statusText.setText("Запускаю ASTRA Browser и фоновый мост…");
             Intent service = new Intent(this, BrowserBridgeService.class);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(service);
@@ -172,55 +171,6 @@ public class MainActivity extends Activity {
         });
         styleButton(start, CYAN, true);
         layout.addView(start);
-
-        Button showWebView = new Button(this);
-        showWebView.setText("◎   ПОКАЗАТЬ WEBVIEW");
-        showWebView.setOnClickListener(v -> {
-            String result = WebViewBrowserController.bringToFront(this);
-            statusText.setText("WebView: " + result);
-        });
-        styleButton(showWebView, PURPLE, false);
-        layout.addView(showWebView);
-
-        Button showLog = new Button(this);
-        showLog.setText("≋   ЖУРНАЛ ОШИБОК");
-        showLog.setOnClickListener(v -> {
-            TextView logText = new TextView(this);
-            logText.setText(HeadlessBrowserRuntime.getLogText());
-            logText.setTextIsSelectable(true);
-            logText.setTextSize(12);
-            logText.setTextColor(WHITE);
-            logText.setPadding(dp(20), dp(16), dp(20), dp(16));
-            logText.setBackgroundColor(BG);
-            ScrollView logScroll = new ScrollView(this);
-            logScroll.addView(logText, new ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT));
-            new AlertDialog.Builder(this)
-                    .setTitle("ASTRA — журнал запуска")
-                    .setView(logScroll)
-                    .setPositiveButton("ЗАКРЫТЬ", null)
-                    .setNeutralButton("КОПИРОВАТЬ", (dialog, which) -> {
-                        android.content.ClipboardManager clipboard =
-                                (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-                        if (clipboard != null) {
-                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText(
-                                    "ASTRA runtime log", HeadlessBrowserRuntime.getLogText()));
-                        }
-                    })
-                    .show();
-        });
-        styleButton(showLog, PINK, false);
-        layout.addView(showLog);
-
-        Button refresh = new Button(this);
-        refresh.setText("↻   ОБНОВИТЬ СТАТУС");
-        refresh.setOnClickListener(v -> {
-            handler.removeCallbacks(statusPoll);
-            handler.post(statusPoll);
-        });
-        styleButton(refresh, CYAN, false);
-        layout.addView(refresh);
 
         TextView footer = new TextView(this);
         footer.setText("ASTRA  •  LOCAL CONTROL NODE");
