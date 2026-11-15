@@ -41,7 +41,7 @@ static common_sampler                   * g_sampler;
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_arm_aichat_internal_InferenceEngineImpl_init(JNIEnv *env, jobject /*unused*/, jstring nativeLibDir) {
+Java_com_astra_loremotionbridge_QwenRuntime_init(JNIEnv *env, jobject /*unused*/, jstring nativeLibDir) {
     // Set llama log handler to Android
     llama_log_set(aichat_android_log_callback, nullptr);
 
@@ -58,7 +58,7 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_init(JNIEnv *env, jobject /*unu
 
 extern "C"
 JNIEXPORT jint JNICALL
-Java_com_arm_aichat_internal_InferenceEngineImpl_load(JNIEnv *env, jobject, jstring jmodel_path) {
+Java_com_astra_loremotionbridge_QwenRuntime_load(JNIEnv *env, jobject, jstring jmodel_path) {
     llama_model_params model_params = llama_model_default_params();
 
     const auto *model_path = env->GetStringUTFChars(jmodel_path, 0);
@@ -112,7 +112,7 @@ static common_sampler *new_sampler(float temp) {
 
 extern "C"
 JNIEXPORT jint JNICALL
-Java_com_arm_aichat_internal_InferenceEngineImpl_prepare(JNIEnv * /*env*/, jobject /*unused*/) {
+Java_com_astra_loremotionbridge_QwenRuntime_prepare(JNIEnv * /*env*/, jobject /*unused*/) {
     auto *context = init_context(g_model);
     if (!context) { return 1; }
     g_context = context;
@@ -136,13 +136,13 @@ static std::string get_backend() {
 
 extern "C"
 JNIEXPORT jstring JNICALL
-Java_com_arm_aichat_internal_InferenceEngineImpl_systemInfo(JNIEnv *env, jobject /*unused*/) {
+Java_com_astra_loremotionbridge_QwenRuntime_systemInfo(JNIEnv *env, jobject /*unused*/) {
     return env->NewStringUTF(llama_print_system_info());
 }
 
 extern "C"
 JNIEXPORT jstring JNICALL
-Java_com_arm_aichat_internal_InferenceEngineImpl_benchModel(JNIEnv *env, jobject /*unused*/, jint pp, jint tg,
+Java_com_astra_loremotionbridge_QwenRuntime_benchModel(JNIEnv *env, jobject /*unused*/, jint pp, jint tg,
                                                       jint pl, jint nr) {
     auto *context = init_context(g_model, pp);
     if (!context) {
@@ -352,7 +352,7 @@ static int decode_tokens_in_batches(
 
 extern "C"
 JNIEXPORT jint JNICALL
-Java_com_arm_aichat_internal_InferenceEngineImpl_processSystemPrompt(
+Java_com_astra_loremotionbridge_QwenRuntime_processSystemPrompt(
         JNIEnv *env,
         jobject /*unused*/,
         jstring jsystem_prompt
@@ -401,7 +401,7 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_processSystemPrompt(
 
 extern "C"
 JNIEXPORT jint JNICALL
-Java_com_arm_aichat_internal_InferenceEngineImpl_processUserPrompt(
+Java_com_astra_loremotionbridge_QwenRuntime_processUserPrompt(
         JNIEnv *env,
         jobject /*unused*/,
         jstring juser_prompt,
@@ -485,7 +485,7 @@ static bool is_valid_utf8(const char *string) {
 
 extern "C"
 JNIEXPORT jstring JNICALL
-Java_com_arm_aichat_internal_InferenceEngineImpl_generateNextToken(
+Java_com_astra_loremotionbridge_QwenRuntime_generateNextToken(
         JNIEnv *env,
         jobject /*unused*/
 ) {
@@ -545,7 +545,7 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_generateNextToken(
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_arm_aichat_internal_InferenceEngineImpl_unload(JNIEnv * /*unused*/, jobject /*unused*/) {
+Java_com_astra_loremotionbridge_QwenRuntime_unload(JNIEnv * /*unused*/, jobject /*unused*/) {
     // Reset long-term & short-term states
     reset_long_term_states();
     reset_short_term_states();
@@ -560,6 +560,6 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_unload(JNIEnv * /*unused*/, job
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_arm_aichat_internal_InferenceEngineImpl_shutdown(JNIEnv *, jobject /*unused*/) {
+Java_com_astra_loremotionbridge_QwenRuntime_shutdown(JNIEnv *, jobject /*unused*/) {
     llama_backend_free();
 }
