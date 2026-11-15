@@ -239,7 +239,7 @@ public class ChatActivity extends Activity {
         busy = true;
         modelStatus.setText("QWEN ОБРАБАТЫВАЕТ ЗАПРОС…");
         modelExecutor.execute(() -> {
-            JSONObject result = parse(QwenRuntime.chat(value, 96));
+            JSONObject result = parse(QwenRuntime.chat(value, 32));
             String answer = result.optBoolean("ok")
                     ? result.optString("response", "")
                     : "Ошибка модели: " + result.optString("error", "unknown");
