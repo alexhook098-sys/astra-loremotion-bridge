@@ -28,9 +28,10 @@ constexpr int   N_THREADS_MIN           = 2;
 constexpr int   N_THREADS_MAX           = 4;
 constexpr int   N_THREADS_HEADROOM      = 2;
 
-constexpr int   DEFAULT_CONTEXT_SIZE    = 8192;
+// Tuned for entry-level Android devices such as Galaxy A12.
+constexpr int   DEFAULT_CONTEXT_SIZE    = 4096;
 constexpr int   OVERFLOW_HEADROOM       = 4;
-constexpr int   BATCH_SIZE              = 512;
+constexpr int   BATCH_SIZE              = 128;
 constexpr float DEFAULT_SAMPLER_TEMP    = 0.3f;
 
 static llama_model                      * g_model;
@@ -445,7 +446,10 @@ Java_com_astra_loremotionbridge_QwenRuntime_processUserPrompt(
 
     // Update position
     current_position += user_prompt_size;
-    stop_generation_position = current_position + user_prompt_size + n_predict;
+    // current_position already includes the prompt; do not count it twice.
+    // The previous expression generated roughly another prompt-length of tokens,
+    // making replies unnecessarily long and slow on mobile CPUs.
+    stop_generation_position = current_position + n_predict;
     return 0;
 }
 
