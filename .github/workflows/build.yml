@@ -14,10 +14,14 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
-        with:
-          accept-android-sdk-licenses: true
-          packages: 'platform-tools, platforms;android-35, ndk;29.0.13113456, cmake;3.31.6'
+      - name: Install Android native toolchain
+        shell: bash
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort | tail -n 1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses
+          yes | "$SDKMANAGER" --install "platforms;android-35" "ndk;29.0.13113456" "cmake;3.31.6"
       - name: Fetch pinned llama.cpp source
         run: |
           git clone --filter=blob:none https://github.com/ggml-org/llama.cpp.git llama.cpp
