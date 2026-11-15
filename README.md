@@ -39,3 +39,8 @@ The existing ASTRA Browser Worker can connect to CDP on port `9222`. Continue us
 - Chrome is downloaded over HTTPS from Google's official Chrome for Testing storage URL.
 - Chrome's runtime libraries are installed inside the existing Ubuntu rootfs; Termux's package database is not used by the app. The installer checks that Ubuntu package indexes and package candidates are really present instead of trusting a successful `apt-get update` exit code alone. It tries the Ubuntu ports repository over HTTPS first (Ubuntu package signatures are still checked against the bundled archive keyring), then HTTP if HTTPS cannot produce usable indexes.
 - The Android foreground-service notification remains visible while the background browser service is running, as required by Android. The browser window itself is headless and is not displayed on screen.
+
+
+## Experimental local Qwen runtime
+
+The `feature/local-qwen-android` branch contains an experimental ARM64 llama.cpp integration. The GGUF model is not bundled in the APK; it must be stored in app-private files and loaded through the `/qwen/load` bridge endpoint. This branch is experimental and is not merged into `main`.
