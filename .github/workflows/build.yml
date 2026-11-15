@@ -1,8 +1,10 @@
-name: Build APK
+name: Build ASTRA APK (ARM64 + local Qwen)
 on:
   workflow_dispatch:
   push:
-    branches: [ main, feature/bing-blob-save-20261018, feature/motion16-webview, integration/motion16-cosmic, feature/leonardo-web, fix/remove-inactive-home-buttons ]
+    branches:
+      - feature/local-qwen-android
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -12,11 +14,21 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android native toolchain
+        run: |
+          sdkmanager "ndk;29.0.13113456" "cmake;3.31.6"
+      - name: Fetch pinned llama.cpp source
+        run: |
+          git clone https://github.com/ggml-org/llama.cpp.git llama.cpp
+          git -C llama.cpp checkout fc504f91d8cfdfcd9b0fedcf14600fd2b0e63420
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - run: gradle assembleDebug
+      - name: Build ARM64 debug APK
+        run: gradle --no-daemon assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: astra-loremotion-bridge-debug
+          name: astra-local-qwen-arm64-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

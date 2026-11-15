@@ -190,7 +190,9 @@ public class LocalBridgeServer {
                     "/leonardo/download".equals(routeOnlyPath) ||
                 "/leonardo/download-original".equals(routeOnlyPath) ||
                 "/leonardo/original-watch/arm".equals(routeOnlyPath) ||
-                "/leonardo/watch/status".equals(routeOnlyPath);
+                "/leonardo/watch/status".equals(routeOnlyPath) ||
+                    "/qwen/load".equals(routeOnlyPath) ||
+                    "/qwen/chat".equals(routeOnlyPath);
             if ("POST".equalsIgnoreCase(method) && jsonAdapterRoute) {
                 if (contentLength <= 0 || contentLength > 1024 * 1024) {
                     sendResponse(sock, "{\"ok\":false,\"error\":\"invalid_json_body_size\"}",
@@ -350,6 +352,9 @@ public class LocalBridgeServer {
                 }
             }
             if (postParams != null) m.putAll(postParams);
+            if ("/qwen/status".equals(p)) return QwenRuntime.statusJson();
+            if ("/qwen/load".equals(p)) return QwenRuntime.loadModel(m.getOrDefault("path", ""));
+            if ("/qwen/chat".equals(p)) return QwenRuntime.chat(m.getOrDefault("prompt", ""), Integer.parseInt(m.getOrDefault("max_tokens", "128")));
             if ("/headless/status".equals(p)) return HeadlessBrowserRuntime.statusJson();
             if ("/headless/log".equals(p)) return HeadlessBrowserRuntime.logJson();
             if ("/headless/start".equals(p)) {
