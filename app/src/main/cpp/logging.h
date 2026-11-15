@@ -2,11 +2,6 @@
 // Created by Han Yin on 10/31/25.
 //
 
-#ifndef AICHAT_LOGGING_H
-#define AICHAT_LOGGING_H
-
-#endif //AICHAT_LOGGING_H
-
 #pragma once
 #include <android/log.h>
 
@@ -22,8 +17,9 @@
 #endif
 #endif
 
+// Keep compatibility with minSdk 26: __android_log_is_loggable is API 30+.
 static inline int ai_should_log(int prio) {
-    return __android_log_is_loggable(prio, LOG_TAG, LOG_MIN_LEVEL);
+    return prio >= LOG_MIN_LEVEL;
 }
 
 #if LOG_MIN_LEVEL <= ANDROID_LOG_VERBOSE
