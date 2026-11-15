@@ -25,13 +25,13 @@ static std::string join(const std::vector<T> &values, const std::string &delim) 
  * LLama resources: context, model, batch and sampler
  */
 constexpr int   N_THREADS_MIN           = 2;
-constexpr int   N_THREADS_MAX           = 4;
+constexpr int   N_THREADS_MAX           = 2;
 constexpr int   N_THREADS_HEADROOM      = 2;
 
 // Tuned for entry-level Android devices such as Galaxy A12.
-constexpr int   DEFAULT_CONTEXT_SIZE    = 4096;
+constexpr int   DEFAULT_CONTEXT_SIZE    = 2048;
 constexpr int   OVERFLOW_HEADROOM       = 4;
-constexpr int   BATCH_SIZE              = 128;
+constexpr int   BATCH_SIZE              = 64;
 constexpr float DEFAULT_SAMPLER_TEMP    = 0.3f;
 
 static llama_model                      * g_model;
