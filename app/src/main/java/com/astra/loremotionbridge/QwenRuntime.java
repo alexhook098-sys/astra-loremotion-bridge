@@ -1,11 +1,12 @@
 package com.astra.loremotionbridge;
 
+import android.content.Context;
 import org.json.JSONObject;
 import java.io.File;
 
 /**
- * Optional on-device Qwen runtime backed by llama.cpp.
- * The GGUF model is stored in app-private files, never bundled in the APK.
+ * Persistent on-device Qwen runtime backed by llama.cpp.
+ * The GGUF file is copied once into app-private storage and survives app updates.
  */
 public final class QwenRuntime {
     private static boolean initialized = false;
@@ -25,11 +26,43 @@ public final class QwenRuntime {
     private static native void shutdown();
     private static native String systemInfo();
 
+    private static File modelFile() {
+        Context context = MainApplication.context();
+        File directory = new File(context.getFilesDir(), "models");
+        if (!directory.exists()) directory.mkdirs();
+        return new File(directory, "qwen-model.gguf");
+    }
+
+    public static synchronized boolean hasStoredModel() {
+        File file = modelFile();
+        return file.isFile() && file.length() > 0;
+    }
+
+    public static synchronized String storedModelPath() {
+        return modelFile().getAbsolutePath();
+    }
+
+    public static synchronized boolean isLoaded() {
+        return loaded;
+    }
+
     private static synchronized void ensureInitialized() {
         if (initialized) return;
         System.loadLibrary("ai-chat");
         init(MainApplication.context().getApplicationInfo().nativeLibraryDir);
         initialized = true;
+    }
+
+    /** Automatically reloads the already-imported GGUF after process restart. */
+    public static synchronized String loadStoredModel() {
+        File file = modelFile();
+        if (!file.isFile() || file.length() == 0) {
+            return "{\"ok\":false,\"error\":\"model_not_installed\"}";
+        }
+        if (loaded && file.getAbsolutePath().equals(modelPath)) {
+            return "{\"ok\":true,\"loaded\":true,\"already_loaded\":true}";
+        }
+        return loadModel(file.getAbsolutePath());
     }
 
     public static synchronized String statusJson() {
@@ -39,7 +72,9 @@ public final class QwenRuntime {
             out.put("engine", "llama.cpp");
             out.put("initialized", initialized);
             out.put("loaded", loaded);
+            out.put("installed", hasStoredModel());
             out.put("model", modelPath);
+            out.put("stored_model", storedModelPath());
             out.put("last_error", lastError);
             if (initialized) out.put("system_info", systemInfo());
             return out.toString();
@@ -51,17 +86,17 @@ public final class QwenRuntime {
     public static synchronized String loadModel(String path) {
         try {
             if (path == null || path.trim().isEmpty()) {
-                return "{\"ok\":false,\"error\":\"missing_path\",\"hint\":\"POST /qwen/load with JSON {path: absolute GGUF path}\"}";
+                return "{\"ok\":false,\"error\":\"missing_path\"}";
             }
             File file = new File(path);
-            if (!file.isFile() || !file.canRead()) {
+            if (!file.isFile() || !file.canRead() || file.length() == 0) {
                 return "{\"ok\":false,\"error\":\"model_file_not_readable\"}";
             }
-            ensureInitialized();
             if (loaded) {
                 unload();
                 loaded = false;
             }
+            ensureInitialized();
             int result = load(file.getAbsolutePath());
             if (result != 0) throw new IllegalStateException("llama_model_load_failed:" + result);
             result = prepare();
@@ -71,16 +106,21 @@ public final class QwenRuntime {
             loaded = true;
             modelPath = file.getAbsolutePath();
             lastError = "";
-            return "{\"ok\":true,\"loaded\":true,\"model\":\"" + escape(modelPath) + "\"}";
+            JSONObject out = new JSONObject();
+            out.put("ok", true);
+            out.put("loaded", true);
+            out.put("model", modelPath);
+            return out.toString();
         } catch (Throwable e) {
             lastError = String.valueOf(e);
+            loaded = false;
             return "{\"ok\":false,\"error\":\"" + escape(lastError) + "\"}";
         }
     }
 
     public static synchronized String chat(String prompt, int maxTokens) {
         try {
-            if (!loaded) return "{\"ok\":false,\"error\":\"model_not_loaded\",\"hint\":\"Load a GGUF model with POST /qwen/load first\"}";
+            if (!loaded) return "{\"ok\":false,\"error\":\"model_not_loaded\"}";
             if (prompt == null || prompt.trim().isEmpty()) return "{\"ok\":false,\"error\":\"empty_prompt\"}";
             int count = Math.max(1, Math.min(512, maxTokens));
             int result = processUserPrompt(prompt, count);
