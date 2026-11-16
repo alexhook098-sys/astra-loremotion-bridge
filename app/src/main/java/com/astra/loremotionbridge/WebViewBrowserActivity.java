@@ -30,7 +30,13 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.IOException;
-import java.util.Locale;\nimport java.net.HttpURLConnection;\nimport java.net.URL;\nimport java.util.HashSet;\nimport java.util.Set;\nimport java.util.concurrent.ExecutorService;\nimport java.util.concurrent.Executors;
+import java.util.Locale;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class WebViewBrowserActivity extends Activity {
     private static volatile WebViewBrowserActivity instance;
@@ -39,7 +45,19 @@ public class WebViewBrowserActivity extends Activity {
     private TextView status;
     private ValueCallback<Uri[]> pendingFileCallback;
     private String pendingUploadPath;
-    private final Handler main = new Handler(Looper.getMainLooper());\n    private final ExecutorService perchanceDownloads = Executors.newSingleThreadExecutor();\n    private final Set<String> seenPerchanceImages = new HashSet<>();\n    private boolean perchanceObserverRunning;\n    private final Runnable perchanceObserver = new Runnable() {\n        @Override public void run() {\n            if (webView == null || isFinishing()) { perchanceObserverRunning = false; return; }\n            String url = webView.getUrl();\n            if (isPerchanceUrl(url)) scanPerchanceImages();\n            else { perchanceObserverRunning = false; return; }\n            main.postDelayed(this, 2500L);\n        }\n    };
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final ExecutorService perchanceDownloads = Executors.newSingleThreadExecutor();
+    private final Set<String> seenPerchanceImages = new HashSet<>();
+    private boolean perchanceObserverRunning;
+    private final Runnable perchanceObserver = new Runnable() {
+        @Override public void run() {
+            if (webView == null || isFinishing()) { perchanceObserverRunning = false; return; }
+            String url = webView.getUrl();
+            if (isPerchanceUrl(url)) scanPerchanceImages();
+            else { perchanceObserverRunning = false; return; }
+            main.postDelayed(this, 2500L);
+        }
+    };
 
     public static WebViewBrowserActivity getInstance() { return instance; }
 
@@ -89,7 +107,13 @@ public class WebViewBrowserActivity extends Activity {
 
     // Keep Perchance generation alive when the user returns to ASTRA CHAT.
     // Moving this task to the background preserves the same WebView, DOM and session.
-    @Override protected void onDestroy() {\n        stopPerchanceObserver();\n        super.onDestroy();\n        if (instance == this) instance = null;\n    }\n\n    @Override public void onBackPressed() {
+    @Override protected void onDestroy() {
+        stopPerchanceObserver();
+        super.onDestroy();
+        if (instance == this) instance = null;
+    }
+
+    @Override public void onBackPressed() {
         String current = webView == null ? "" : webView.getUrl();
         boolean perchance = false;
         try {
@@ -1090,13 +1114,18 @@ public class WebViewBrowserActivity extends Activity {
 
     private void updateStatus() {
         if (status != null && webView != null)
-            status.setText("ASTRA WebView\n\n" +
-                    webView.getTitle() + "\n" + webView.getUrl());
+            status.setText("ASTRA WebView
+
+" +
+                    webView.getTitle() + "
+" + webView.getUrl());
     }
 
     private void setStatus(String text) {
         main.post(() -> {
-            if (status != null) status.setText("ASTRA WebView\n\n" + text);
+            if (status != null) status.setText("ASTRA WebView
+
+" + text);
         });
     }
 
@@ -1115,7 +1144,9 @@ public class WebViewBrowserActivity extends Activity {
         if (s == null) return "";
         return s.replace("\\", "\\\\")
                 .replace("\"", "\\\"")
-                .replace("\n", "\\n")
+                .replace("
+", "\
+")
                 .replace("\r", "\\r");
     }
 
