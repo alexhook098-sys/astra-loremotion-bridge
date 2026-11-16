@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build a small, self-contained ARM64 FFmpeg CLI for ASTRA One Click Motion.
+# Build a self-contained ARM64 FFmpeg CLI packaged in Android nativeLibraryDir.
 # LGPL build: no external GPL codecs such as x264 are included.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FFMPEG_SRC="${ROOT}/.build/ffmpeg"
-OUT="${ROOT}/app/src/main/assets/ffmpeg/arm64-v8a"
+OUT="${ROOT}/app/src/main/jniLibs/arm64-v8a"
 NDK="${ANDROID_NDK_HOME:-${ANDROID_NDK:-}}"
 API="${ANDROID_API_LEVEL:-26}"
 
@@ -75,7 +75,7 @@ make distclean >/dev/null 2>&1 || true
 
 make -j"$(nproc)"
 mkdir -p "${OUT}"
-install -m 0755 ffmpeg "${OUT}/ffmpeg"
+install -m 0755 ffmpeg "${OUT}/libffmpeg.so"
 "${STRIP}" "${OUT}/ffmpeg"
 file "${OUT}/ffmpeg"
-echo "ASTRA FFmpeg ARM64 ready: ${OUT}/ffmpeg"
+echo "ASTRA FFmpeg ARM64 ready: ${OUT}/libffmpeg.so"
