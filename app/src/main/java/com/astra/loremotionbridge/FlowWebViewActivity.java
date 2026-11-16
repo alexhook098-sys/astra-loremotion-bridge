@@ -11,6 +11,10 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.DownloadListener;
+import android.app.DownloadManager;
+import android.net.Uri;
+import android.os.Environment;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -153,6 +157,35 @@ public final class FlowWebViewActivity extends Activity {
         cookies.setAcceptThirdPartyCookies(webView, true);
 
         webView.setWebChromeClient(new WebChromeClient());
+
+        webView.setDownloadListener((downloadUrl, userAgent, contentDisposition, mimeType, contentLength) -> {
+            if (downloadUrl == null || downloadUrl.isEmpty()) return;
+            if (downloadUrl.startsWith("blob:")) {
+                Log.w("ASTRA-FLOW-DOWNLOAD", "Blob URL download requires page-side blob bridge; not handing it to DownloadManager");
+                status.setText("ASTRA Flow: получена blob-ссылка, нужен отдельный мост загрузки");
+                return;
+            }
+            try {
+                DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+                if (manager == null) throw new IllegalStateException("DownloadManager unavailable");
+                DownloadManager.Request request = new DownloadManager.Request(Uri.parse(downloadUrl));
+                request.setTitle("ASTRA · Google Flow video");
+                request.setDescription("Сохранение результата Google Flow");
+                request.setMimeType(mimeType == null ? "video/mp4" : mimeType);
+                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_MOVIES,
+                        "ASTRA/Flow/flow_" + System.currentTimeMillis() + ".mp4");
+                String cookies = CookieManager.getInstance().getCookie(downloadUrl);
+                if (cookies != null && !cookies.isEmpty()) request.addRequestHeader("Cookie", cookies);
+                if (userAgent != null && !userAgent.isEmpty()) request.addRequestHeader("User-Agent", userAgent);
+                manager.enqueue(request);
+                status.setText("ASTRA Flow: загрузка видео в Movies/ASTRA/Flow");
+                Log.i("ASTRA-FLOW-DOWNLOAD", "Download queued; mime=" + mimeType + ", bytes=" + contentLength);
+            } catch (Exception e) {
+                Log.e("ASTRA-FLOW-DOWNLOAD", "Could not queue video download", e);
+                status.setText("ASTRA Flow: ошибка загрузки · " + e.getClass().getSimpleName());
+            }
+        });
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
