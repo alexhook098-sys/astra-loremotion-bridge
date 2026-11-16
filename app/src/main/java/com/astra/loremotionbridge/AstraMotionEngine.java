@@ -28,7 +28,13 @@ public final class AstraMotionEngine {
         File temp = new File(context.getCacheDir(), "astra_motion_" + System.currentTimeMillis() + ".mp4");
         if (temp.exists()) temp.delete();
 
-        String inputRate = String.format(Locale.US, "%.6f", 20.0 / DURATION_SECONDS);
+        File[] frameFiles = frames.listFiles((dir, name) ->
+                name.startsWith("frame_") && name.endsWith(".png"));
+        int inputFrameCount = frameFiles == null ? 0 : frameFiles.length;
+        if (inputFrameCount < 2)
+            throw new IllegalStateException("Недостаточно кадров для создания видео");
+        // Keep every supported grid (16 or 20 frames) stretched across the same 1.5-second source interval.
+        String inputRate = String.format(Locale.US, "%.6f", inputFrameCount / DURATION_SECONDS);
         String filter = "minterpolate=fps=20:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1," +
                 "tpad=stop_mode=clone:stop_duration=1,trim=end_frame=30,setpts=N/(20*TB)";
         Process process = new ProcessBuilder(
