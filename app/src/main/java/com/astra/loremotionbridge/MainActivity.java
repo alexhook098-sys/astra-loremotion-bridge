@@ -22,13 +22,13 @@ public class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private TextView statusText;
 
-    private static final int BG = Color.rgb(7, 11, 26);
-    private static final int PANEL = Color.rgb(18, 25, 49);
-    private static final int CYAN = Color.rgb(53, 217, 255);
-    private static final int PURPLE = Color.rgb(139, 92, 255);
-    private static final int PINK = Color.rgb(255, 79, 216);
-    private static final int WHITE = Color.rgb(231, 241, 255);
-    private static final int MUTED = Color.rgb(145, 164, 197);
+    private static final int BG = Color.rgb(5, 3, 14);
+    private static final int PANEL = Color.rgb(19, 10, 34);
+    private static final int CYAN = Color.rgb(204, 139, 255);
+    private static final int PURPLE = Color.rgb(174, 83, 255);
+    private static final int PINK = Color.rgb(226, 115, 255);
+    private static final int WHITE = Color.rgb(248, 239, 255);
+    private static final int MUTED = Color.rgb(164, 145, 184);
 
     private final Runnable statusPoll = new Runnable() {
         @Override public void run() {
@@ -75,7 +75,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView eyebrow = new TextView(this);
-        eyebrow.setText("✦   SYSTEM ONLINE   /   01");
+        eyebrow.setText("✧   ASTRA  ·  AI COMPANION   ✧");
         eyebrow.setTextSize(11);
         eyebrow.setTextColor(CYAN);
         eyebrow.setLetterSpacing(0.12f);
@@ -83,7 +83,8 @@ public class MainActivity extends Activity {
         layout.addView(eyebrow, matchWrap());
 
         TextView title = new TextView(this);
-        title.setText("A S T R A");
+        title.setText("✦");
+        title.setTextSize(54);
         title.setTextSize(36);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         title.setTextColor(WHITE);
@@ -95,7 +96,8 @@ public class MainActivity extends Activity {
         layout.addView(title, titleParams);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("N E U R A L   I N T E R F A C E");
+        subtitle.setText("A S T R A");
+        subtitle.setTextSize(25);
         subtitle.setTextSize(10);
         subtitle.setTextColor(PURPLE);
         subtitle.setGravity(Gravity.CENTER);
@@ -106,7 +108,7 @@ public class MainActivity extends Activity {
         layout.addView(subtitle, subParams);
 
         TextView section = new TextView(this);
-        section.setText("01   /   СИСТЕМА И СОСТОЯНИЕ");
+        section.setText("ТВОЁ ПРОСТРАНСТВО");
         section.setTextSize(11);
         section.setTextColor(CYAN);
         section.setLetterSpacing(0.06f);
@@ -126,7 +128,7 @@ public class MainActivity extends Activity {
         statusCard.setElevation(dp(4));
 
         TextView statusHeading = new TextView(this);
-        statusHeading.setText("◉   BRIDGE MONITOR");
+        statusHeading.setText("✧   ASTRA CORE  /  BRIDGE");
         statusHeading.setTextSize(13);
         statusHeading.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         statusHeading.setTextColor(CYAN);
@@ -147,7 +149,7 @@ public class MainActivity extends Activity {
         layout.addView(statusCard, cardParams);
 
         TextView controlsTitle = new TextView(this);
-        controlsTitle.setText("02   /   УПРАВЛЕНИЕ");
+        controlsTitle.setText("БЫСТРЫЙ ДОСТУП");
         controlsTitle.setTextSize(11);
         controlsTitle.setTextColor(PINK);
         controlsTitle.setLetterSpacing(0.06f);
@@ -156,7 +158,7 @@ public class MainActivity extends Activity {
         layout.addView(controlsTitle, controlsParams);
 
         Button start = new Button(this);
-        start.setText("▶   ЗАПУСТИТЬ ASTRA BROWSER");
+        start.setText("◉   ОТКРЫТЬ ASTRA BROWSER");
         start.setOnClickListener(v -> {
             statusText.setText("Запускаю ASTRA Browser и фоновый мост…");
             Intent service = new Intent(this, BrowserBridgeService.class);
@@ -173,7 +175,7 @@ public class MainActivity extends Activity {
         layout.addView(start);
 
         TextView footer = new TextView(this);
-        footer.setText("ASTRA  •  LOCAL CONTROL NODE");
+        footer.setText("A S T R A   •   EXPLORE YOUR UNIVERSE");
         footer.setTextSize(10);
         footer.setTextColor(MUTED);
         footer.setGravity(Gravity.CENTER);
