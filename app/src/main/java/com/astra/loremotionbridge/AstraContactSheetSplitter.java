@@ -12,7 +12,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 
-/** Splits supported 5x4, 4x5 or 4x4 ASTRA contact sheets into normalized, ordered frames. */
+/** Splits supported 5x4, 4x5, 4x4 or 2x5 ASTRA contact sheets into normalized, ordered frames. */
 public final class AstraContactSheetSplitter {
     private static final int DEFAULT_COLUMNS = 5;
     private static final int DEFAULT_ROWS = 4;
@@ -20,6 +20,8 @@ public final class AstraContactSheetSplitter {
     private static final int ALT_ROWS = 5;
     private static final int SQUARE_COLUMNS = 4;
     private static final int SQUARE_ROWS = 4;
+    private static final int STORY_COLUMNS = 2;
+    private static final int STORY_ROWS = 5;
     public static final int FRAME_WIDTH = 576;
     public static final int FRAME_HEIGHT = 896;
     private static final int CELL_INSET = 2;
@@ -62,7 +64,9 @@ public final class AstraContactSheetSplitter {
             int[][] grids = {
                     {DEFAULT_COLUMNS, DEFAULT_ROWS},
                     {ALT_COLUMNS, ALT_ROWS},
-                    {SQUARE_COLUMNS, SQUARE_ROWS}
+                    {SQUARE_COLUMNS, SQUARE_ROWS},
+                    // The 2×5 storyboards use near-square panels in the supplied examples.
+                    {STORY_COLUMNS, STORY_ROWS}
             };
             int columns = DEFAULT_COLUMNS;
             int rows = DEFAULT_ROWS;
@@ -91,7 +95,7 @@ public final class AstraContactSheetSplitter {
                 int top = row * cellH + CELL_INSET;
                 int right = (col == columns - 1 ? sheet.getWidth() : (col + 1) * cellW) - CELL_INSET;
                 int bottom = (row == rows - 1 ? sheet.getHeight() : (row + 1) * cellH) - CELL_INSET;
-                if (right <= left || bottom <= top) throw new IllegalArgumentException("Некорректная сетка контактного листа 5×4, 4×5 или 4×4");
+                if (right <= left || bottom <= top) throw new IllegalArgumentException("Некорректная сетка контактного листа 5×4, 4×5, 4×4 или 2×5");
                 Bitmap cell = Bitmap.createBitmap(sheet, left, top, right-left, bottom-top);
                 Bitmap frame = Bitmap.createBitmap(FRAME_WIDTH, FRAME_HEIGHT, Bitmap.Config.ARGB_8888);
                 Canvas canvas = new Canvas(frame);
