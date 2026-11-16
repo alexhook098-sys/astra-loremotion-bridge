@@ -87,7 +87,9 @@ public final class AstraMotionEngine {
             values.put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/ASTRA");
             values.put(MediaStore.Video.Media.IS_PENDING, 1);
         }
-        Uri collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+        Uri collection = Build.VERSION.SDK_INT >= 29
+                ? MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                : MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
         Uri uri = context.getContentResolver().insert(collection, values);
         if (uri == null) throw new IllegalStateException("Не удалось создать видео в галерее");
         boolean complete = false;
