@@ -57,10 +57,13 @@ public class GifStudioActivity extends Activity {
         setContentView(root);
     }
     private void chooseImages(){
-        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("image/*");
+        // Use the Android photo/gallery picker instead of the document browser.
+        // On Samsung devices this normally opens the visual image picker.
+        Intent i=new Intent(Intent.ACTION_GET_CONTENT);
+        i.setType("image/*");
         i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
-        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-        startActivityForResult(i,REQUEST_IMAGES);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        startActivityForResult(Intent.createChooser(i,"Выбери кадры в Галерее"),REQUEST_IMAGES);
     }
     @Override @Deprecated protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
@@ -69,7 +72,7 @@ public class GifStudioActivity extends Activity {
         try{
             if(data.getClipData()!=null){for(int n=0;n<data.getClipData().getItemCount();n++)selected.add(data.getClipData().getItemAt(n).getUri());}
             else if(data.getData()!=null)selected.add(data.getData());
-            for(Uri u:selected){try{getContentResolver().takePersistableUriPermission(u,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(SecurityException ignored){}}
+            // ACTION_GET_CONTENT grants temporary read access for this activity/session.
             while(selected.size()>30)selected.remove(selected.size()-1);
             status.setText(selected.size()>=2?"Выбрано кадров: "+selected.size():"Нужно выбрать минимум 2 изображения.");
         }catch(Exception e){status.setText("Не удалось прочитать выбор: "+e.getMessage());}
