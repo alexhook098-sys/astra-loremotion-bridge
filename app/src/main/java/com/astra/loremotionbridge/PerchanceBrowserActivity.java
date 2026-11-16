@@ -71,6 +71,8 @@ public class PerchanceBrowserActivity extends Activity {
     private boolean promptInjected;
     private int automationAttempts;
     private String pendingPrompt;
+    private String lastAutomationDiagnostic = "not_run";
+    private String lastPageDiagnostic = "";
 
     private final Runnable observer = new Runnable() {
         @Override public void run() {
@@ -175,6 +177,7 @@ public class PerchanceBrowserActivity extends Activity {
                                 String host = frameUrl == null ? null : Uri.parse(frameUrl).getHost();
                                 if (host != null && host.endsWith(".perchance.org")
                                         && !host.equalsIgnoreCase("perchance.org")) {
+                                    Log.i(TAG, "Wrapper iframe selected: url=" + frameUrl + " host=" + host);
                                     generatorFrameRedirected = true;
                                     pageLoaded = false;
                                     setStatus("PERCHANCE · подключаю интерфейс генератора…");
@@ -203,7 +206,10 @@ public class PerchanceBrowserActivity extends Activity {
         pageLoaded = true;
         setStatus("PERCHANCE · сборщик активен · " + counters());
         startObserver();
-        if (pendingPrompt != null) main.postDelayed(this::attemptPromptInjection, 900L);
+        if (pendingPrompt != null) {
+            main.postDelayed(this::diagnosePage, 250L);
+            main.postDelayed(this::attemptPromptInjection, 1100L);
+        }
     }
 
     @Override protected void onNewIntent(Intent intent) {
@@ -229,14 +235,18 @@ public class PerchanceBrowserActivity extends Activity {
     private void attemptPromptInjection() {
         if (webView == null || pendingPrompt == null || !pageLoaded || isFinishing()) return;
         if (++automationAttempts > 45) {
-            setStatus("PERCHANCE · не удалось найти поле промпта или кнопку генерации");
-            Log.w(TAG, "Background automation timed out");
+            setStatus("PERCHANCE · тайм-аут: " + shorten(lastAutomationDiagnostic, 110));
+            Log.w(TAG, "Background automation timed out; lastResult=" + lastAutomationDiagnostic
+                    + "; page=" + shorten(lastPageDiagnostic, 2500));
             pendingPrompt = null;
             return;
         }
         if (!promptInjected) {
             webView.evaluateJavascript(buildPromptScript(pendingPrompt), result -> {
-                if (result != null && result.contains("FIELD_SET")) {
+                String response = decodeJsResult(result);
+                lastAutomationDiagnostic = response;
+                Log.i(TAG, "Prompt injection attempt " + automationAttempts + ": " + response);
+                if (response.contains("FIELD_SET")) {
                     promptInjected = true;
                     setStatus("PERCHANCE · промпт введён в фоновой вкладке");
                     main.postDelayed(this::attemptPromptInjection, 650L);
@@ -246,7 +256,10 @@ public class PerchanceBrowserActivity extends Activity {
             });
         } else {
             webView.evaluateJavascript(buildGenerateClickScript(), result -> {
-                if (result != null && result.contains("CLICKED")) {
+                String response = decodeJsResult(result);
+                lastAutomationDiagnostic = response;
+                Log.i(TAG, "Generate click attempt " + automationAttempts + ": " + response);
+                if (response.contains("CLICKED")) {
                     setStatus("PERCHANCE · генерация запущена в фоне · " + counters());
                     Log.i(TAG, "Background Generate button clicked");
                     pendingPrompt = null;
@@ -255,6 +268,72 @@ public class PerchanceBrowserActivity extends Activity {
                 }
             });
         }
+    }
+
+
+    private void diagnosePage() {
+        if (webView == null || isFinishing() || !pageLoaded) return;
+        webView.evaluateJavascript(buildPageDiagnosticScript(), result -> {
+            String diagnostic = decodeJsResult(result);
+            lastPageDiagnostic = diagnostic;
+            Log.i(TAG, "PERCHANCE_PAGE_DIAGNOSTIC " + shorten(diagnostic, 3500));
+            try {
+                JSONObject data = new JSONObject(diagnostic);
+                setStatus("PERCHANCE · DOM: frames=" + data.optInt("frameCount")
+                        + " · roots=" + data.optInt("rootCount")
+                        + " · fields=" + data.optInt("fieldCount")
+                        + " · buttons=" + data.optInt("buttonCount"));
+            } catch (Exception e) {
+                Log.w(TAG, "Could not summarize page diagnostic: " + diagnostic);
+            }
+        });
+    }
+
+    private String decodeJsResult(String result) {
+        if (result == null) return "";
+        try {
+            Object parsed = new org.json.JSONTokener(result).nextValue();
+            return parsed instanceof String ? (String) parsed : String.valueOf(parsed);
+        } catch (Exception e) {
+            return result;
+        }
+    }
+
+    private String shorten(String value, int limit) {
+        if (value == null) return "";
+        String clean = value.replaceAll("\\s+", " ").trim();
+        return clean.length() <= limit ? clean : clean.substring(0, limit) + "…";
+    }
+
+    private String buildPageDiagnosticScript() {
+        return "(function(){try{"
+                + "const roots=[],frames=[],seen=new Set();"
+                + "function collect(root,label){if(!root||seen.has(root))return;seen.add(root);roots.push(root);"
+                + "try{Array.from(root.querySelectorAll('iframe')).forEach((f,i)=>{"
+                + "let same=false;try{same=!!f.contentDocument;}catch(e){}"
+                + "frames.push({index:i,src:f.src||'',title:f.title||'',name:f.name||'',sameOrigin:same});"
+                + "if(same)collect(f.contentDocument,'iframe:'+i);});"
+                + "Array.from(root.querySelectorAll('*')).forEach((n,i)=>{if(n.shadowRoot)collect(n.shadowRoot,'shadow:'+i);});"
+                + "}catch(e){}}"
+                + "collect(document,'main');"
+                + "const visible=e=>{try{const r=e.getBoundingClientRect(),w=e.ownerDocument.defaultView,s=w.getComputedStyle(e);"
+                + "return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';}catch(x){return false;}};"
+                + "const fields=[],buttons=[];"
+                + "roots.forEach((r,ri)=>{try{Array.from(r.querySelectorAll('textarea,input,[contenteditable],[role=textbox],[placeholder],[data-placeholder]'))"
+                + ".filter(visible).slice(0,40).forEach(e=>fields.push({root:ri,tag:e.tagName,id:e.id||'',name:e.getAttribute('name')||'',"
+                + "type:e.getAttribute('type')||'',placeholder:e.getAttribute('placeholder')||'',aria:e.getAttribute('aria-label')||'',"
+                + "role:e.getAttribute('role')||'',contenteditable:e.getAttribute('contenteditable')||'',"
+                + "disabled:!!e.disabled,readOnly:!!e.readOnly}));"
+                + "Array.from(r.querySelectorAll('button,[role=button],input[type=submit],[onclick]'))"
+                + ".filter(visible).slice(0,60).forEach(e=>buttons.push({root:ri,tag:e.tagName,id:e.id||'',"
+                + "text:((e.innerText||e.textContent||e.value||'').replace(/\\s+/g,' ').trim()).slice(0,100),"
+                + "aria:e.getAttribute('aria-label')||'',title:e.getAttribute('title')||'',"
+                + "disabled:!!e.disabled,ariaDisabled:e.getAttribute('aria-disabled')||''}));"
+                + "}catch(e){}});"
+                + "return JSON.stringify({url:location.href,title:document.title||'',readyState:document.readyState,"
+                + "bodyText:(document.body&&document.body.innerText||'').slice(0,350),frameCount:frames.length,"
+                + "rootCount:roots.length,fieldCount:fields.length,buttonCount:buttons.length,frames:frames,fields:fields,buttons:buttons});"
+                + "}catch(e){return JSON.stringify({error:String(e&&e.message||e),url:location.href});}})();";
     }
 
     private String buildPromptScript(String prompt) {
