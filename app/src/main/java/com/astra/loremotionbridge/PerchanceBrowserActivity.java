@@ -51,6 +51,8 @@ public class PerchanceBrowserActivity extends Activity {
     private static final String HOME = "https://perchance.org/aigen-rus-edit";
     private static final String BRIDGE_OBJECT = "ASTRA_PERCHANCE_BRIDGE";
     private static final long MAX_IMAGE_BYTES = 20L * 1024L * 1024L;
+    public static final String EXTRA_AUTOMATE = "astra_perchance_automate";
+    public static final String EXTRA_PROMPT = "astra_perchance_prompt";
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService downloads = Executors.newSingleThreadExecutor();
@@ -63,6 +65,10 @@ public class PerchanceBrowserActivity extends Activity {
     private TextView status;
     private boolean observing;
     private boolean documentStartCaptureInstalled;
+    private boolean pageLoaded;
+    private boolean promptInjected;
+    private int automationAttempts;
+    private String pendingPrompt;
 
     private final Runnable observer = new Runnable() {
         @Override public void run() {
@@ -81,6 +87,7 @@ public class PerchanceBrowserActivity extends Activity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        readAutomationIntent(getIntent());
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -152,14 +159,89 @@ public class PerchanceBrowserActivity extends Activity {
                 if (!documentStartCaptureInstalled) {
                     view.evaluateJavascript(buildCaptureScript(), null);
                 }
+                pageLoaded = true;
                 setStatus("PERCHANCE · сборщик активен · " + counters());
                 startObserver();
+                if (pendingPrompt != null) main.postDelayed(PerchanceBrowserActivity.this::attemptPromptInjection, 900L);
             }
         });
 
         root.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(root);
         webView.loadUrl(HOME);
+        // Keep this dedicated Perchance task alive, but immediately return to ASTRA.
+        if (pendingPrompt != null) main.postDelayed(() -> moveTaskToBack(true), 120L);
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        readAutomationIntent(intent);
+        if (pendingPrompt != null) {
+            moveTaskToBack(true);
+            if (pageLoaded) main.postDelayed(this::attemptPromptInjection, 500L);
+        }
+    }
+
+    private void readAutomationIntent(Intent intent) {
+        if (intent == null || !intent.getBooleanExtra(EXTRA_AUTOMATE, false)) return;
+        String prompt = intent.getStringExtra(EXTRA_PROMPT);
+        if (prompt == null || prompt.trim().isEmpty()) return;
+        pendingPrompt = prompt.trim();
+        promptInjected = false;
+        automationAttempts = 0;
+        Log.i(TAG, "Background generation queued; prompt length=" + pendingPrompt.length());
+    }
+
+    private void attemptPromptInjection() {
+        if (webView == null || pendingPrompt == null || !pageLoaded || isFinishing()) return;
+        if (++automationAttempts > 45) {
+            setStatus("PERCHANCE · не удалось найти поле промпта или кнопку генерации");
+            Log.w(TAG, "Background automation timed out");
+            pendingPrompt = null;
+            return;
+        }
+        if (!promptInjected) {
+            webView.evaluateJavascript(buildPromptScript(pendingPrompt), result -> {
+                if (result != null && result.contains("FIELD_SET")) {
+                    promptInjected = true;
+                    setStatus("PERCHANCE · промпт введён в фоновой вкладке");
+                    main.postDelayed(this::attemptPromptInjection, 650L);
+                } else {
+                    main.postDelayed(this::attemptPromptInjection, 900L);
+                }
+            });
+        } else {
+            webView.evaluateJavascript(buildGenerateClickScript(), result -> {
+                if (result != null && result.contains("CLICKED")) {
+                    setStatus("PERCHANCE · генерация запущена в фоне · " + counters());
+                    Log.i(TAG, "Background Generate button clicked");
+                    pendingPrompt = null;
+                } else {
+                    main.postDelayed(this::attemptPromptInjection, 900L);
+                }
+            });
+        }
+    }
+
+    private String buildPromptScript(String prompt) {
+        return "(function(p){try{"
+                + "const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';};"
+                + "let a=Array.from(document.querySelectorAll('textarea,input[type=text],[contenteditable=true]')).filter(visible);"
+                + "a.sort((x,y)=>{const score=e=>(e.tagName==='TEXTAREA'?100:0)+(e.isContentEditable?40:0)+(/prompt|описан|изображ|image/i.test((e.getAttribute('placeholder')||'')+' '+(e.getAttribute('aria-label')||''))?30:0);return score(y)-score(x);});"
+                + "const e=a[0];if(!e)return 'FIELD_NOT_FOUND';"
+                + "if(e.isContentEditable){e.focus();e.innerText=p;e.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:p}));}"
+                + "else{e.focus();const proto=e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;const d=Object.getOwnPropertyDescriptor(proto,'value');if(d&&d.set)d.set.call(e,p);else e.value=p;e.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:p}));e.dispatchEvent(new Event('change',{bubbles:true}));}"
+                + "return 'FIELD_SET';}catch(e){return 'FIELD_ERROR:'+e.message;}})(" + JSONObject.quote(prompt) + ");";
+    }
+
+    private String buildGenerateClickScript() {
+        return "(function(){try{"
+                + "const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';};"
+                + "const a=Array.from(document.querySelectorAll('button,[role=button],input[type=submit]')).filter(visible);"
+                + "const b=a.find(e=>/сгенерировать|generate|создать изображение|create image/i.test((e.innerText||e.value||'')+' '+(e.getAttribute('aria-label')||'')));"
+                + "if(!b)return 'BUTTON_NOT_FOUND';if(b.disabled||b.getAttribute('aria-disabled')==='true')return 'BUTTON_DISABLED';b.click();return 'CLICKED';"
+                + "}catch(e){return 'CLICK_ERROR:'+e.message;}})();";
     }
 
     private void installFrameCaptureBridge() {
