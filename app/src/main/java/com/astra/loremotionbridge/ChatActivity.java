@@ -31,11 +31,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class ChatActivity extends Activity {
-    private static final int BG = Color.rgb(8, 11, 24);
-    private static final int PANEL = Color.rgb(20, 27, 49);
-    private static final int LILAC = Color.rgb(229, 199, 255);
-    private static final int CYAN = Color.rgb(101, 221, 245);
-    private static final int WHITE = Color.rgb(234, 241, 255);
+    private static final int BG = Color.rgb(5, 3, 14);
+    private static final int PANEL = Color.rgb(23, 12, 39);
+    private static final int LILAC = Color.rgb(226, 190, 255);
+    private static final int CYAN = Color.rgb(194, 126, 255);
+    private static final int WHITE = Color.rgb(249, 241, 255);
     private static final int PICK_MODEL = 18767;
 
     private final ExecutorService modelExecutor = Executors.newSingleThreadExecutor();
@@ -77,15 +77,16 @@ public class ChatActivity extends Activity {
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        TextView mark = label("✦", 27, CYAN, true);
+        TextView mark = label("ᗅ", 30, CYAN, true);
         mark.setGravity(Gravity.CENTER);
-        mark.setBackground(round(Color.rgb(54, 43, 83), LILAC, 16));
+        mark.setBackground(round(Color.rgb(35, 15, 57), LILAC, 24));
+        mark.setShadowLayer(dp(12), 0, 0, LILAC);
         header.addView(mark, new LinearLayout.LayoutParams(dp(48), dp(48)));
         LinearLayout names = new LinearLayout(this);
         names.setOrientation(LinearLayout.VERTICAL);
         names.setPadding(dp(12), 0, 0, 0);
-        names.addView(label("ASTRA CHAT", 20, LILAC, true));
-        names.addView(label("OPENROUTER AI", 9, CYAN, false));
+        names.addView(label("A S T R A", 20, LILAC, true));
+        names.addView(label("● ONLINE  ·  AI COMPANION", 9, CYAN, false));
         header.addView(names, new LinearLayout.LayoutParams(0, -2, 1));
         header.addView(label("● CLOUD", 10, Color.rgb(131, 217, 178), true));
         root.addView(header);
@@ -125,8 +126,8 @@ public class ChatActivity extends Activity {
         LinearLayout chatPanel = new LinearLayout(this);
         chatPanel.setOrientation(LinearLayout.VERTICAL);
         chatPanel.setPadding(dp(13), dp(13), dp(13), dp(10));
-        chatPanel.setBackground(round(Color.rgb(20, 23, 45), Color.rgb(65, 103, 140), 22));
-        chatPanel.addView(label("ПЕРЕПИСКА  ·  ASTRA SESSION", 10, CYAN, true));
+        chatPanel.setBackground(round(Color.rgb(17, 8, 29), Color.rgb(105, 57, 145), 22));
+        chatPanel.addView(label("✧  ASTRA SPACE  ·  ДИАЛОГ", 10, CYAN, true));
         messageScroll = new ScrollView(this);
         messages = new LinearLayout(this);
         messages.setOrientation(LinearLayout.VERTICAL);
@@ -245,8 +246,8 @@ public class ChatActivity extends Activity {
     private void addMessage(String text, boolean user, boolean save) {
         TextView bubble = label(text, 14, WHITE, false);
         bubble.setPadding(dp(13), dp(11), dp(13), dp(11));
-        bubble.setBackground(round(user ? Color.rgb(76, 51, 111) : Color.rgb(30, 42, 65),
-                Color.rgb(57, 91, 119), 17));
+        bubble.setBackground(round(user ? Color.rgb(76, 35, 111) : Color.rgb(31, 17, 48),
+                Color.rgb(117, 65, 157), 17));
         LinearLayout row = new LinearLayout(this);
         row.setGravity(user ? Gravity.RIGHT : Gravity.LEFT);
         LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
@@ -285,7 +286,7 @@ public class ChatActivity extends Activity {
         b.setTextSize(10);
         b.setTextColor(accent);
         b.setAllCaps(false);
-        b.setBackground(round(Color.rgb(29, 34, 58), accent, 15));
+        b.setBackground(round(Color.rgb(27, 12, 43), accent, 18));
         return b;
     }
 
