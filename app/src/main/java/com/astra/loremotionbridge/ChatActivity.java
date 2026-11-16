@@ -73,13 +73,18 @@ public class ChatActivity extends Activity {
     }
 
     private void buildScreen() {
+        LinearLayout screen = new LinearLayout(this);
+        screen.setOrientation(LinearLayout.VERTICAL);
+        screen.setPadding(dp(16), dp(12), dp(16), dp(8));
+
         ScrollView rootScroll = new ScrollView(this);
         rootScroll.setFillViewport(true);
         rootScroll.setBackgroundColor(Color.TRANSPARENT);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(16), dp(16), dp(12));
+        root.setPadding(0, 0, 0, dp(8));
         rootScroll.addView(root, new ScrollView.LayoutParams(-1, -2));
+        screen.addView(rootScroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -167,8 +172,8 @@ public class ChatActivity extends Activity {
         send.setOnClickListener(v -> sendMessage());
         composer.addView(send, new LinearLayout.LayoutParams(dp(52), dp(46)));
         LinearLayout.LayoutParams composerParams = new LinearLayout.LayoutParams(-1, -2);
-        composerParams.topMargin = dp(12);
-        root.addView(composer, composerParams);
+        composerParams.topMargin = dp(8);
+        screen.addView(composer, composerParams);
 
         FrameLayout frame = new FrameLayout(this);
         ImageView wallpaper = new ImageView(this);
@@ -179,7 +184,7 @@ public class ChatActivity extends Activity {
             if (bitmap != null) wallpaper.setImageBitmap(bitmap);
         }
         frame.addView(wallpaper, new FrameLayout.LayoutParams(-1, -1));
-        frame.addView(rootScroll, new FrameLayout.LayoutParams(-1, -1));
+        frame.addView(screen, new FrameLayout.LayoutParams(-1, -1));
         setContentView(frame);
     }
 
