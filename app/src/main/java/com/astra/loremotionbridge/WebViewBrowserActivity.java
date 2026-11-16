@@ -30,7 +30,7 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.IOException;
-import java.util.Locale;
+import java.util.Locale;\nimport java.net.HttpURLConnection;\nimport java.net.URL;\nimport java.util.HashSet;\nimport java.util.Set;\nimport java.util.concurrent.ExecutorService;\nimport java.util.concurrent.Executors;
 
 public class WebViewBrowserActivity extends Activity {
     private static volatile WebViewBrowserActivity instance;
@@ -39,7 +39,7 @@ public class WebViewBrowserActivity extends Activity {
     private TextView status;
     private ValueCallback<Uri[]> pendingFileCallback;
     private String pendingUploadPath;
-    private final Handler main = new Handler(Looper.getMainLooper());
+    private final Handler main = new Handler(Looper.getMainLooper());\n    private final ExecutorService perchanceDownloads = Executors.newSingleThreadExecutor();\n    private final Set<String> seenPerchanceImages = new HashSet<>();\n    private boolean perchanceObserverRunning;\n    private final Runnable perchanceObserver = new Runnable() {\n        @Override public void run() {\n            if (webView == null || isFinishing()) { perchanceObserverRunning = false; return; }\n            String url = webView.getUrl();\n            if (isPerchanceUrl(url)) scanPerchanceImages();\n            else { perchanceObserverRunning = false; return; }\n            main.postDelayed(this, 2500L);\n        }\n    };
 
     public static WebViewBrowserActivity getInstance() { return instance; }
 
@@ -89,7 +89,7 @@ public class WebViewBrowserActivity extends Activity {
 
     // Keep Perchance generation alive when the user returns to ASTRA CHAT.
     // Moving this task to the background preserves the same WebView, DOM and session.
-    @Override public void onBackPressed() {
+    @Override protected void onDestroy() {\n        stopPerchanceObserver();\n        super.onDestroy();\n        if (instance == this) instance = null;\n    }\n\n    @Override public void onBackPressed() {
         String current = webView == null ? "" : webView.getUrl();
         boolean perchance = false;
         try {
@@ -107,6 +107,113 @@ public class WebViewBrowserActivity extends Activity {
             return;
         }
         super.onBackPressed();
+    }
+
+    private boolean isPerchanceUrl(String value) {
+        try {
+            String host = Uri.parse(value == null ? "" : value).getHost();
+            return host != null && (host.equalsIgnoreCase("perchance.org")
+                    || host.toLowerCase(Locale.US).endsWith(".perchance.org"));
+        } catch (Exception ignored) { return false; }
+    }
+
+    private void startPerchanceObserver() {
+        if (perchanceObserverRunning) return;
+        perchanceObserverRunning = true;
+        main.removeCallbacks(perchanceObserver);
+        main.post(perchanceObserver);
+        Log.i("ASTRA-PERCHANCE", "Result observer started");
+    }
+
+    private void stopPerchanceObserver() {
+        perchanceObserverRunning = false;
+        main.removeCallbacks(perchanceObserver);
+    }
+
+    // Observe rendered result images without interacting with the generator UI.
+    private void scanPerchanceImages() {
+        if (webView == null) return;
+        String script = "(function(){var a=[...document.images].filter(function(i){"
+                + "return i.complete&&i.naturalWidth>=256&&i.naturalHeight>=256&&i.src&&"
+                + "i.src.indexOf('https://')===0;}).map(function(i){return i.currentSrc||i.src;});"
+                + "return JSON.stringify(Array.from(new Set(a)));})()";
+        webView.evaluateJavascript(script, raw -> {
+            if (raw == null || "null".equals(raw)) return;
+            try {
+                Object decoded = new org.json.JSONTokener(raw).nextValue();
+                if (!(decoded instanceof String)) return;
+                JSONArray urls = new JSONArray((String) decoded);
+                for (int i = 0; i < urls.length(); i++) {
+                    String imageUrl = urls.optString(i, "");
+                    if (imageUrl.isEmpty() || !seenPerchanceImages.add(imageUrl)) continue;
+                    perchanceDownloads.execute(() -> downloadPerchanceImage(imageUrl));
+                }
+            } catch (Exception e) {
+                Log.w("ASTRA-PERCHANCE", "Could not parse generated image list", e);
+            }
+        });
+    }
+
+    private void downloadPerchanceImage(String imageUrl) {
+        HttpURLConnection connection = null;
+        try {
+            URL url = new URL(imageUrl);
+            if (!"https".equalsIgnoreCase(url.getProtocol())) return;
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setConnectTimeout(12000);
+            connection.setReadTimeout(20000);
+            connection.setInstanceFollowRedirects(true);
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36");
+            String cookie = CookieManager.getInstance().getCookie(imageUrl);
+            if (cookie != null) connection.setRequestProperty("Cookie", cookie);
+            int code = connection.getResponseCode();
+            String mime = connection.getContentType();
+            if (code < 200 || code >= 300 || mime == null || !mime.toLowerCase(Locale.US).startsWith("image/")) return;
+            int length = connection.getContentLength();
+            if (length > 20 * 1024 * 1024) return;
+            ContentValues values = new ContentValues();
+            String ext = mime.toLowerCase(Locale.US).contains("png") ? ".png"
+                    : mime.toLowerCase(Locale.US).contains("webp") ? ".webp" : ".jpg";
+            values.put(android.provider.MediaStore.Images.Media.DISPLAY_NAME,
+                    "ASTRA_PERCHANCE_" + System.currentTimeMillis() + ext);
+            values.put(android.provider.MediaStore.Images.Media.MIME_TYPE, mime.split(";")[0].trim());
+            if (Build.VERSION.SDK_INT >= 29) {
+                values.put(android.provider.MediaStore.Images.Media.RELATIVE_PATH,
+                        Environment.DIRECTORY_PICTURES + "/ASTRA/Perchance");
+                values.put(android.provider.MediaStore.Images.Media.IS_PENDING, 1);
+            }
+            Uri target = getContentResolver().insert(
+                    android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+            if (target == null) return;
+            boolean complete = false;
+            try (InputStream in = connection.getInputStream();
+                 OutputStream out = getContentResolver().openOutputStream(target, "w")) {
+                if (out == null) throw new IOException("gallery_stream_unavailable");
+                byte[] buffer = new byte[16384];
+                int total = 0, count;
+                while ((count = in.read(buffer)) != -1) {
+                    total += count;
+                    if (total > 20 * 1024 * 1024) throw new IOException("image_too_large");
+                    out.write(buffer, 0, count);
+                }
+                complete = total > 0;
+            } finally {
+                if (Build.VERSION.SDK_INT >= 29) {
+                    ContentValues done = new ContentValues();
+                    done.put(android.provider.MediaStore.Images.Media.IS_PENDING, 0);
+                    if (complete) getContentResolver().update(target, done, null, null);
+                    else getContentResolver().delete(target, null, null);
+                } else if (!complete) getContentResolver().delete(target, null, null);
+            }
+            if (complete) {
+                Log.i("ASTRA-PERCHANCE", "Generated image saved: " + target);
+                ChatActivity.onPerchanceImageReady(target);
+            }
+        } catch (Exception e) {
+            Log.w("ASTRA-PERCHANCE", "Image capture failed: " + e.getMessage());
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
     }
 
     private void configure(WebView wv) {
