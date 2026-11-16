@@ -68,14 +68,14 @@ public class MainActivity extends Activity {
 
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(dp(22), dp(28), dp(22), dp(24));
+        layout.setPadding(dp(20), dp(18), dp(20), dp(22));
         layout.setGravity(Gravity.CENTER_HORIZONTAL);
         scroll.addView(layout, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView eyebrow = new TextView(this);
-        eyebrow.setText("✧   ASTRA  ·  AI COMPANION   ✧");
+        eyebrow.setText("✧   YOUR CREATIVE UNIVERSE   ✧");
         eyebrow.setTextSize(11);
         eyebrow.setTextColor(CYAN);
         eyebrow.setLetterSpacing(0.12f);
@@ -83,11 +83,11 @@ public class MainActivity extends Activity {
         layout.addView(eyebrow, matchWrap());
 
         TextView title = new TextView(this);
-        title.setText("✦");
-        title.setTextSize(54);
-        title.setTextSize(36);
+        title.setText("ᗅ");
+        title.setTextSize(58);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         title.setTextColor(WHITE);
+        title.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
         title.setGravity(Gravity.CENTER);
         title.setLetterSpacing(0.16f);
         title.setShadowLayer(dp(18), 0, 0, CYAN);
@@ -98,13 +98,12 @@ public class MainActivity extends Activity {
         TextView subtitle = new TextView(this);
         subtitle.setText("A S T R A");
         subtitle.setTextSize(25);
-        subtitle.setTextSize(10);
         subtitle.setTextColor(PURPLE);
         subtitle.setGravity(Gravity.CENTER);
         subtitle.setLetterSpacing(0.10f);
         LinearLayout.LayoutParams subParams = matchWrap();
         subParams.topMargin = dp(5);
-        subParams.bottomMargin = dp(26);
+        subParams.bottomMargin = dp(18);
         layout.addView(subtitle, subParams);
 
         TextView section = new TextView(this);
@@ -118,12 +117,12 @@ public class MainActivity extends Activity {
 
         LinearLayout statusCard = new LinearLayout(this);
         statusCard.setOrientation(LinearLayout.VERTICAL);
-        statusCard.setPadding(dp(18), dp(17), dp(18), dp(17));
+        statusCard.setPadding(dp(16), dp(13), dp(16), dp(13));
         GradientDrawable panel = new GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
                 new int[]{Color.rgb(21, 32, 62), Color.rgb(13, 18, 39)});
         panel.setCornerRadius(dp(20));
-        panel.setStroke(dp(1), Color.rgb(48, 133, 190));
+        panel.setStroke(dp(1), Color.rgb(105, 57, 145));
         statusCard.setBackground(panel);
         statusCard.setElevation(dp(4));
 
@@ -157,8 +156,16 @@ public class MainActivity extends Activity {
         controlsParams.bottomMargin = dp(10);
         layout.addView(controlsTitle, controlsParams);
 
+        Button chat = new Button(this);
+        chat.setText("◉   ЧАТ С ASTRA");
+        chat.setOnClickListener(v -> startActivity(new Intent(this, ChatActivity.class)));
+        styleButton(chat, PINK, true);
+        chat.setTextSize(16);
+        chat.setPadding(dp(18), dp(16), dp(18), dp(16));
+        layout.addView(chat);
+
         Button start = new Button(this);
-        start.setText("◉   ОТКРЫТЬ ASTRA BROWSER");
+        start.setText("⌁   ОТКРЫТЬ ASTRA BROWSER");
         start.setOnClickListener(v -> {
             statusText.setText("Запускаю ASTRA Browser и фоновый мост…");
             Intent service = new Intent(this, BrowserBridgeService.class);
@@ -171,11 +178,11 @@ public class MainActivity extends Activity {
             handler.removeCallbacks(statusPoll);
             handler.post(statusPoll);
         });
-        styleButton(start, CYAN, true);
+        styleButton(start, CYAN, false);
         layout.addView(start);
 
         TextView footer = new TextView(this);
-        footer.setText("A S T R A   •   EXPLORE YOUR UNIVERSE");
+        footer.setText("A S T R A   ✧   EXPLORE YOUR UNIVERSE");
         footer.setTextSize(10);
         footer.setTextColor(MUTED);
         footer.setGravity(Gravity.CENTER);
