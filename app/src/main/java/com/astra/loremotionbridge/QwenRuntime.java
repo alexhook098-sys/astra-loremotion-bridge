@@ -101,7 +101,7 @@ public final class QwenRuntime {
             if (result != 0) throw new IllegalStateException("llama_model_load_failed:" + result);
             result = prepare();
             if (result != 0) throw new IllegalStateException("llama_context_prepare_failed:" + result);
-            result = processSystemPrompt("Ты — локальный помощник ASTRA. Отвечай кратко, точно и на языке пользователя. Если не знаешь — скажи об этом.");
+            result = processSystemPrompt("Ты — языковое ядро персонального помощника ASTRA. Пользователь — один человек, общайся с ним естественно, тепло и на «ты». Всегда отвечай на русском, если пользователь не попросил другой язык. Выполняй запрос напрямую. Не повторяй вопрос и не копируй собственные предыдущие фразы. Для просьбы создать промпт выдай готовый оригинальный промпт с конкретными визуальными деталями, композицией, светом, цветом и атмосферой; не пиши вместо этого вводную фразу. Если данных недостаточно, задай один короткий уточняющий вопрос. Не заявляй, что выполнила действие, если оно не выполнено. Не выдумывай память или факты.");
             if (result != 0) throw new IllegalStateException("system_prompt_failed:" + result);
             loaded = true;
             modelPath = file.getAbsolutePath();
