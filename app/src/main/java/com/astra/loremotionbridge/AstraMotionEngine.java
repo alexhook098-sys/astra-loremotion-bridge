@@ -15,8 +15,6 @@ import java.util.Locale;
 /** Runs FFmpeg from Android nativeLibraryDir, where packaged native code is executable. */
 public final class AstraMotionEngine {
     private static final int FPS = 20;
-    private static final int OUTPUT_FRAMES = 30;
-    private static final double DURATION_SECONDS = 1.5;
 
     private AstraMotionEngine() {}
 
@@ -33,17 +31,20 @@ public final class AstraMotionEngine {
         int inputFrameCount = frameFiles == null ? 0 : frameFiles.length;
         if (inputFrameCount < 2)
             throw new IllegalStateException("Недостаточно кадров для создания видео");
-        // Keep every supported grid (16 or 20 frames) stretched across the same 1.5-second source interval.
-        String inputRate = String.format(Locale.US, "%.6f", inputFrameCount / DURATION_SECONDS);
+        // 2×5 storyboards are intentionally shorter: 1.0 s / 20 frames.
+        // The 4×4, 4×5 and 5×4 formats retain the 1.5 s / 30 frame output.
+        double durationSeconds = inputFrameCount == 10 ? 1.0 : 1.5;
+        int outputFrames = inputFrameCount == 10 ? 20 : 30;
+        String inputRate = String.format(Locale.US, "%.6f", inputFrameCount / durationSeconds);
         String filter = "minterpolate=fps=20:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1," +
-                "tpad=stop_mode=clone:stop_duration=1,trim=end_frame=30,setpts=N/(20*TB)";
+                "tpad=stop_mode=clone:stop_duration=1,trim=end_frame=" + outputFrames + ",setpts=N/(20*TB)";
         Process process = new ProcessBuilder(
                 binary.getAbsolutePath(),
                 "-hide_banner", "-loglevel", "error", "-y",
                 "-framerate", inputRate, "-start_number", "1",
                 "-i", new File(frames, "frame_%04d.png").getAbsolutePath(),
                 "-vf", filter,
-                "-frames:v", String.valueOf(OUTPUT_FRAMES),
+                "-frames:v", String.valueOf(outputFrames),
                 "-r", String.valueOf(FPS),
                 "-an", "-c:v", "mpeg4", "-q:v", "3",
                 "-pix_fmt", "yuv420p", "-movflags", "+faststart",
