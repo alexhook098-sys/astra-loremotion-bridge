@@ -117,13 +117,26 @@ public class PerchanceBrowserActivity extends Activity {
 
     private void scanImages() {
         if (webView == null) return;
-        String js = "(function(){return JSON.stringify(Array.from(document.images).map(i=>({src:i.currentSrc||i.src,w:i.naturalWidth,h:i.naturalHeight,ok:i.complete})));})()";
+        String js = "(function(){"
+                + "const out=[],seen=new Set();"
+                + "function blocked(el){let n=el;for(let k=0;n&&k<7;k++,n=n.parentElement){"
+                + "const s=String((n.id||'')+' '+(n.className||'')+' '+(n.getAttribute&&n.getAttribute('aria-label')||'')).toLowerCase();"
+                + "if(/advert|sponsor|banner|реклама/.test(s))return true;}return false;}"
+                + "function add(src,w,h,ok,el){if(!src||seen.has(src)||blocked(el))return;seen.add(src);"
+                + "if(w>=256&&h>=256&&ok)out.push({src:src,w:w,h:h,ok:true});}"
+                + "Array.from(document.images).forEach(i=>add(i.currentSrc||i.src,i.naturalWidth,i.naturalHeight,i.complete,i));"
+                + "Array.from(document.querySelectorAll('*')).forEach(el=>{const bg=getComputedStyle(el).backgroundImage;"
+                + "if(!bg||bg==='none')return;const m=bg.match(/url\\(['\"]?(https?:[^'\")]+)['\"]?\\)/);"
+                + "if(!m)return;const r=el.getBoundingClientRect();add(m[1],Math.round(r.width),Math.round(r.height),true,el);});"
+                + "return JSON.stringify(out);})()";
         webView.evaluateJavascript(js, value -> {
             try {
                 if (value == null || "null".equals(value)) return;
                 Object parsed = new org.json.JSONTokener(value).nextValue();
                 String decoded = parsed instanceof String ? (String) parsed : String.valueOf(parsed);
                 JSONArray images = new JSONArray(decoded);
+                Log.i(TAG, "Perchance result candidates: " + images.length());
+                runOnUiThread(() -> status.setText("PERCHANCE · найдено крупных изображений: " + images.length()));
                 for (int i = 0; i < images.length(); i++) {
                     JSONObject item = images.optJSONObject(i);
                     if (item == null || !item.optBoolean("ok")) continue;
@@ -147,6 +160,7 @@ public class PerchanceBrowserActivity extends Activity {
             connection.setReadTimeout(30000);
             connection.setInstanceFollowRedirects(true);
             connection.setRequestProperty("User-Agent", "Mozilla/5.0");
+            connection.setRequestProperty("Referer", HOME);
             String cookie = CookieManager.getInstance().getCookie(imageUrl);
             if (cookie != null) connection.setRequestProperty("Cookie", cookie);
             connection.connect();
