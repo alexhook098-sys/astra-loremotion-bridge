@@ -28,7 +28,7 @@
         <uses-native-library android:name="libagifencoder.quram.so" android:required="false" />
 
         <activity android:name=".GifStudioActivity" android:exported="false" />
-        <activity android:name=".RadioActivity" android:exported="false" android:launchMode="singleTask" />
+        <activity android:name=".RadioActivity" android:exported="false" />
 
         <activity
             android:name=".ChatActivity"
