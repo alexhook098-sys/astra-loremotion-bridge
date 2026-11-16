@@ -13,6 +13,8 @@ import android.widget.TextView;
 
 /** Official RadioPotok embed for SOUNDPARK DEEP. */
 public class RadioActivity extends Activity {
+    // Keep the player alive when RadioActivity closes.
+    private static WebView sharedWebView;
     private WebView webView;
 
     @Override protected void onCreate(Bundle state) {
@@ -39,13 +41,19 @@ public class RadioActivity extends Activity {
         station.setPadding(0, 0, 0, dp(16));
         root.addView(station, new LinearLayout.LayoutParams(-1, -2));
 
-        webView = new WebView(this);
-        webView.setBackgroundColor(Color.rgb(8, 11, 24));
-        webView.getSettings().setJavaScriptEnabled(true);
-        webView.getSettings().setDomStorageEnabled(true);
-        webView.getSettings().setMediaPlaybackRequiresUserGesture(true);
-        webView.setWebViewClient(new WebViewClient());
-        webView.setWebChromeClient(new WebChromeClient());
+        if (sharedWebView == null) {
+            sharedWebView = new WebView(getApplicationContext());
+            sharedWebView.setBackgroundColor(Color.rgb(8, 11, 24));
+            sharedWebView.getSettings().setJavaScriptEnabled(true);
+            sharedWebView.getSettings().setDomStorageEnabled(true);
+            sharedWebView.getSettings().setMediaPlaybackRequiresUserGesture(true);
+            sharedWebView.setWebViewClient(new WebViewClient());
+            sharedWebView.setWebChromeClient(new WebChromeClient());
+        }
+        webView = sharedWebView;
+        if (webView.getParent() instanceof ViewGroup) {
+            ((ViewGroup) webView.getParent()).removeView(webView);
+        }
         root.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1));
 
         TextView note = new TextView(this);
@@ -71,8 +79,11 @@ public class RadioActivity extends Activity {
 
     @Override protected void onDestroy() {
         if (webView != null) {
-            ((ViewGroup) webView.getParent()).removeView(webView);
-            webView.destroy();
+            if (webView.getParent() instanceof ViewGroup) {
+                ((ViewGroup) webView.getParent()).removeView(webView);
+            }
+            // Keep the WebView and its media session alive for ChatActivity.
+            // Do not pause, stop loading, or destroy the player on Back.
             webView = null;
         }
         super.onDestroy();
