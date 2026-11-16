@@ -1,6 +1,7 @@
 package com.astra.loremotionbridge;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -63,6 +64,14 @@ public class RadioActivity extends Activity {
                 "<script defer src='https://radiopotok.ru/f/script6.1/1260.js' charset='UTF-8'></script>" +
                 "</body></html>";
         webView.loadDataWithBaseURL("https://radiopotok.ru/", html, "text/html", "UTF-8", null);
+    }
+
+    @Override public void onBackPressed() {
+        // Keep this Activity and its WebView alive underneath the chat.
+        // Reopening RadioActivity (singleTask) returns to this same player instance.
+        Intent chat = new Intent(this, ChatActivity.class);
+        chat.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+        startActivity(chat);
     }
 
     private int dp(int value) {
