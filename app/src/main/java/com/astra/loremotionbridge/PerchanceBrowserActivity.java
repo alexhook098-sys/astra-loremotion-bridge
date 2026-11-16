@@ -722,13 +722,32 @@ public class PerchanceBrowserActivity extends Activity {
         });
     }
 
-    public String statusJson() {
+    private String buildStatusJsonOnMain() {
         String url = webView == null ? "" : webView.getUrl();
-        return "{\"ok\":true,\"ready\":" + (pageLoaded && webView != null)
-                + ",\"url\":\"" + (url == null ? "" : url.replace("\\", "\\\\").replace("\"", "\\\"")) + "\""
-                + ",\"promptQueued\":" + (pendingPrompt != null)
-                + ",\"promptInjected\":" + promptInjected
-                + ",\"diagnostic\":\"" + (lastAutomationDiagnostic == null ? "" : lastAutomationDiagnostic.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ")) + "\"}";
+        return "{\\"ok\\":true,\\"ready\\":" + (pageLoaded && webView != null)
+                + ",\\"url\\":\\"" + (url == null ? "" : url.replace("\\\\", "\\\\\\\\").replace("\\"", "\\\\\"")) + "\\""
+                + ",\\"promptQueued\\":" + (pendingPrompt != null)
+                + ",\\"promptInjected\\":" + promptInjected
+                + ",\\"diagnostic\\":\\"" + (lastAutomationDiagnostic == null ? "" : lastAutomationDiagnostic.replace("\\\\", "\\\\\\\\").replace("\\"", "\\\\\"").replace("\\n", " ")) + "\\"}";
+    }
+
+    public String statusJson() {
+        if (Looper.myLooper() == Looper.getMainLooper()) return buildStatusJsonOnMain();
+        final String[] result = new String[1];
+        final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        main.post(() -> {
+            try { result[0] = buildStatusJsonOnMain(); }
+            finally { latch.countDown(); }
+        });
+        try {
+            if (!latch.await(3, java.util.concurrent.TimeUnit.SECONDS)) {
+                return "{\\"ok\\":false,\\"error\\":\\"status_timeout\\"}";
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return "{\\"ok\\":false,\\"error\\":\\"status_interrupted\\"}";
+        }
+        return result[0] == null ? "{\\"ok\\":false,\\"error\\":\\"status_unavailable\\"}" : result[0];
     }
 
     public void minimizePerchance() { runOnUiThread(() -> moveTaskToBack(true)); }
