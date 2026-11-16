@@ -182,7 +182,7 @@ public class PerchanceBrowserActivity extends Activity {
                 getContentResolver().update(target, done, null, null);
             }
             Log.i(TAG, "Image saved " + target);
-            ChatActivity.onPerchanceImageReady(target);
+            ChatActivity.onPerchanceImageReady(this, target);
             runOnUiThread(() -> status.setText("PERCHANCE · изображение сохранено в ASTRA/Perchance"));
             return true;
         } catch (Exception e) {
