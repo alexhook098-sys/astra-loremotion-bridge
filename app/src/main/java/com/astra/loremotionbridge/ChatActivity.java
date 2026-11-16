@@ -308,6 +308,12 @@ public class ChatActivity extends Activity {
         }
     }
 
+    // Backward-compatible entry point used by the existing Browser bridge.
+    public static void onPerchanceImageReady(Uri image) {
+        ChatActivity activity = activeInstance;
+        if (activity != null) onPerchanceImageReady(activity, image);
+    }
+
     public static void onPerchanceImageReady(Context context, Uri image) {
         if (context == null || image == null) return;
         // Persist delivery before notifying the chat. The chat may have been destroyed in background.
