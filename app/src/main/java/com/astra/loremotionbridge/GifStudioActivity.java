@@ -57,13 +57,23 @@ public class GifStudioActivity extends Activity {
         setContentView(root);
     }
     private void chooseImages(){
-        // Use the Android photo/gallery picker instead of the document browser.
-        // On Samsung devices this normally opens the visual image picker.
-        Intent i=new Intent(Intent.ACTION_GET_CONTENT);
-        i.setType("image/*");
-        i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
-        i.addCategory(Intent.CATEGORY_OPENABLE);
-        startActivityForResult(Intent.createChooser(i,"Выбери кадры в Галерее"),REQUEST_IMAGES);
+        Intent i;
+        if(Build.VERSION.SDK_INT>=33){
+            // Android Photo Picker: visual gallery grid, not the Files document browser.
+            // Multiple images are returned together; selection is capped at 30 frames.
+            i=new Intent(MediaStore.ACTION_PICK_IMAGES);
+            i.setType("image/*");
+            i.putExtra(MediaStore.EXTRA_PICK_IMAGES_MAX,30);
+            i.putExtra("android.provider.extra.PICK_IMAGES_IN_ORDER",true);
+        }else{
+            // Compatibility path for older Android versions.
+            i=new Intent(Intent.ACTION_GET_CONTENT);
+            i.setType("image/*");
+            i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i=Intent.createChooser(i,"Выбери кадры в Галерее");
+        }
+        startActivityForResult(i,REQUEST_IMAGES);
     }
     @Override @Deprecated protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
