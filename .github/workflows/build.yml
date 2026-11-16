@@ -6,6 +6,7 @@ on:
       - feature/local-qwen-android
       - feature/astra-chat-gif-studio
       - feature/astra-one-click-motion
+      - feature/perchance-background-agent
 
 jobs:
   build:
