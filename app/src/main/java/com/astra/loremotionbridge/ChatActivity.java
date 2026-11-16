@@ -31,11 +31,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class ChatActivity extends Activity {
-    private static final int BG = Color.rgb(5, 3, 14);
-    private static final int PANEL = Color.rgb(23, 12, 39);
-    private static final int LILAC = Color.rgb(226, 190, 255);
-    private static final int CYAN = Color.rgb(194, 126, 255);
-    private static final int WHITE = Color.rgb(249, 241, 255);
+    private int BG = Color.rgb(5, 3, 14);
+    private int PANEL = Color.rgb(23, 12, 39);
+    private int LILAC = Color.rgb(226, 190, 255);
+    private int CYAN = Color.rgb(194, 126, 255);
+    private int WHITE = Color.rgb(249, 241, 255);
     private static final int PICK_MODEL = 18767;
 
     private final ExecutorService modelExecutor = Executors.newSingleThreadExecutor();
@@ -53,6 +53,7 @@ public class ChatActivity extends Activity {
                 checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 18766);
         }
+        applyAppearance();
         history = loadHistory();
         buildScreen();
         if (history.length() == 0) {
@@ -69,7 +70,9 @@ public class ChatActivity extends Activity {
     private void buildScreen() {
         ScrollView rootScroll = new ScrollView(this);
         rootScroll.setFillViewport(true);
-        rootScroll.setBackgroundColor(BG);
+        String wallpaper = getSharedPreferences("astra_appearance", MODE_PRIVATE).getString("wallpaper", "art");
+        if ("art".equals(wallpaper)) rootScroll.setBackgroundResource(R.drawable.astra_background);
+        else rootScroll.setBackgroundColor(BG);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(16), dp(16), dp(12));
@@ -113,6 +116,12 @@ public class ChatActivity extends Activity {
         identityParams.topMargin = dp(8);
         identityParams.bottomMargin = dp(6);
         root.addView(identity, identityParams);
+
+        Button appearance = smallButton("✧  ОБОИ И ЦВЕТОВАЯ СХЕМА", LILAC);
+        appearance.setOnClickListener(v -> showAppearance());
+        LinearLayout.LayoutParams appearanceParams = new LinearLayout.LayoutParams(-1, dp(40));
+        appearanceParams.bottomMargin = dp(6);
+        root.addView(appearance, appearanceParams);
 
         LinearLayout actions = new LinearLayout(this);
         actions.setPadding(0, dp(7), 0, dp(6));
@@ -187,6 +196,39 @@ public class ChatActivity extends Activity {
         fp.topMargin = dp(8);
         root.addView(footer, fp);
         setContentView(rootScroll);
+    }
+
+
+    private void applyAppearance() {
+        android.content.SharedPreferences prefs = getSharedPreferences("astra_appearance", MODE_PRIVATE);
+        String palette = prefs.getString("palette", "violet");
+        if ("blue".equals(palette)) {
+            BG = Color.rgb(4, 9, 22); PANEL = Color.rgb(10, 22, 43);
+            LILAC = Color.rgb(160, 205, 255); CYAN = Color.rgb(75, 165, 255);
+        } else if ("teal".equals(palette)) {
+            BG = Color.rgb(3, 14, 17); PANEL = Color.rgb(8, 29, 33);
+            LILAC = Color.rgb(160, 244, 225); CYAN = Color.rgb(65, 207, 190);
+        } else {
+            BG = Color.rgb(5, 3, 14); PANEL = Color.rgb(23, 12, 39);
+            LILAC = Color.rgb(226, 190, 255); CYAN = Color.rgb(194, 126, 255);
+        }
+    }
+
+    private void showAppearance() {
+        String[] choices = {"Фиолетовая · ASTRA", "Ледяная · BLUE", "Бирюзовая · TEAL",
+                "Обои: фирменный арт ASTRA", "Обои: тёмный минимализм"};
+        new AlertDialog.Builder(this).setTitle("Оформление ASTRA")
+                .setItems(choices, (dialog, which) -> {
+                    android.content.SharedPreferences.Editor edit =
+                            getSharedPreferences("astra_appearance", MODE_PRIVATE).edit();
+                    if (which == 0) edit.putString("palette", "violet");
+                    else if (which == 1) edit.putString("palette", "blue");
+                    else if (which == 2) edit.putString("palette", "teal");
+                    else if (which == 3) edit.putString("wallpaper", "art");
+                    else if (which == 4) edit.putString("wallpaper", "plain");
+                    edit.apply();
+                    recreate();
+                }).setNegativeButton("ЗАКРЫТЬ", null).show();
     }
 
     private void updateProviderStatus() {
