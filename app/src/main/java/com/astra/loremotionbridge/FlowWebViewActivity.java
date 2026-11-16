@@ -32,6 +32,7 @@ public final class FlowWebViewActivity extends Activity {
     private boolean diagRequestPending = false;
     private String pendingPrompt;
     private boolean promptInjected;
+    private boolean videoModeSelected;
     private int automationAttempts;
 
     private final Runnable diagPoll = new Runnable() {
@@ -230,6 +231,7 @@ public final class FlowWebViewActivity extends Activity {
         if (prompt == null || prompt.trim().isEmpty()) return;
         pendingPrompt = prompt.trim();
         promptInjected = false;
+        videoModeSelected = false;
         automationAttempts = 0;
         Log.i("ASTRA-FLOW-AUTO", "Background prompt queued; length=" + pendingPrompt.length());
     }
@@ -241,13 +243,17 @@ public final class FlowWebViewActivity extends Activity {
             pendingPrompt = null;
             return;
         }
-        webView.evaluateJavascript(buildFlowAutomationScript(pendingPrompt, promptInjected), result -> {
+        webView.evaluateJavascript(buildFlowAutomationScript(pendingPrompt, promptInjected, videoModeSelected), result -> {
             String value = result == null ? "" : result;
             Log.i("ASTRA-FLOW-AUTO", "attempt=" + automationAttempts + " result=" + value);
             if (value.contains("FIELD_SET")) {
                 promptInjected = true;
                 status.setText("ASTRA Flow: prompt entered");
                 main.postDelayed(this::attemptFlowAutomation, 700L);
+            } else if (value.contains("VIDEO_MODE_SELECTED")) {
+                videoModeSelected = true;
+                status.setText("ASTRA Flow: Video mode selected");
+                main.postDelayed(this::attemptFlowAutomation, 500L);
             } else if (value.contains("GENERATE_CLICKED")) {
                 status.setText("ASTRA Flow: generation submitted in background");
                 pendingPrompt = null;
@@ -257,8 +263,16 @@ public final class FlowWebViewActivity extends Activity {
         });
     }
 
-    private String buildFlowAutomationScript(String prompt, boolean clickGenerate) {
+    private String buildFlowAutomationScript(String prompt, boolean clickGenerate, boolean selectVideo) {
         String quoted = org.json.JSONObject.quote(prompt);
+        if (clickGenerate && !selectVideo) {
+            return "(function(){try{const es=Array.from(document.querySelectorAll('button,[role=button],[role=tab],[aria-label]'));"
+                + "const b=es.find(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);"
+                + "const t=((e.innerText||e.textContent||'')+' '+(e.getAttribute('aria-label')||'')).trim();"
+                + "return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&!e.disabled&&/^video$/i.test(t);});"
+                + "if(!b)return 'VIDEO_MODE_NOT_FOUND';b.click();return 'VIDEO_MODE_SELECTED';"
+                + "}catch(e){return 'ERROR:'+e.message;}})()";
+        }
         if (clickGenerate) {
             return "(function(){try{const es=Array.from(document.querySelectorAll('button,[role=button]'));"
                 + "const b=es.find(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);"
