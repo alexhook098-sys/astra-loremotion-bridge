@@ -41,7 +41,7 @@ public class ChatActivity extends Activity {
     private static int CYAN = Color.rgb(101, 221, 245);
     private static int WHITE = Color.rgb(234, 241, 255);
     private static final int PICK_WALLPAPER = 18768;
-    private static final int PICK_MODEL = 18767;
+    private static final int PICK_MODEL = 18767;\n    private static final int PICK_MOTION_REFERENCE = 18769;
 
     private final ExecutorService modelExecutor = Executors.newSingleThreadExecutor();
     private LinearLayout messages;
@@ -127,6 +127,12 @@ public class ChatActivity extends Activity {
         LinearLayout.LayoutParams gifParams = new LinearLayout.LayoutParams(-1, dp(44));
         gifParams.bottomMargin = dp(8);
         root.addView(gifStudio, gifParams);
+
+        Button motionButton = smallButton("✦  ONE CLICK MOTION · ИЗОБРАЖЕНИЕ В ВИДЕО", CYAN);
+        motionButton.setOnClickListener(v -> chooseMotionReference());
+        LinearLayout.LayoutParams motionParams = new LinearLayout.LayoutParams(-1, dp(44));
+        motionParams.bottomMargin = dp(8);
+        root.addView(motionButton, motionParams);
 
         Button radioButton = smallButton("♫  SOUNDPARK DEEP · RADIO", CYAN);
         radioButton.setOnClickListener(v -> startActivity(new Intent(this, RadioActivity.class)));
@@ -219,6 +225,10 @@ public class ChatActivity extends Activity {
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == PICK_MOTION_REFERENCE && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            processMotionReference(data.getData());
+            return;
+        }
         if (requestCode == PICK_WALLPAPER && resultCode == RESULT_OK && data != null && data.getData() != null) {
             try (InputStream in = getContentResolver().openInputStream(data.getData());
                  FileOutputStream out = new FileOutputStream(new File(getFilesDir(), "astra_chat_wallpaper.jpg"))) {
@@ -230,6 +240,39 @@ public class ChatActivity extends Activity {
                 new AlertDialog.Builder(this).setMessage("Не удалось установить обои: " + e.getMessage()).setPositiveButton("OK", null).show();
             }
         }
+    }
+
+    private void chooseMotionReference() {
+        Intent pick;
+        if (Build.VERSION.SDK_INT >= 33) {
+            pick = new Intent(android.provider.MediaStore.ACTION_PICK_IMAGES);
+            pick.setType("image/*");
+            pick.putExtra(android.provider.MediaStore.EXTRA_PICK_IMAGES_MAX, 1);
+        } else {
+            pick = new Intent(Intent.ACTION_GET_CONTENT);
+            pick.setType("image/*");
+            pick.addCategory(Intent.CATEGORY_OPENABLE);
+        }
+        startActivityForResult(pick, PICK_MOTION_REFERENCE);
+    }
+
+    private void processMotionReference(Uri uri) {
+        addMessage("Выбрала референс для ASTRA One Click Motion.", true, true);
+        addMessage("Подготавливаю контактный лист 5×4…", false, true);
+        modelExecutor.execute(() -> {
+            try {
+                File frames = AstraContactSheetSplitter.split(this, uri);
+                runOnUiThread(() -> addMessage(
+                        "Подготовлено 20 упорядоченных кадров (576×896). Папка: " +
+                        frames.getAbsolutePath() +
+                        "\\nСледующий этап — подключение автономного интерполятора и сборка MP4.",
+                        false, true));
+            } catch (Exception e) {
+                runOnUiThread(() -> addMessage("Не удалось обработать референс: " +
+                        (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()),
+                        false, true));
+            }
+        });
     }
 
     private void updateProviderStatus() {
