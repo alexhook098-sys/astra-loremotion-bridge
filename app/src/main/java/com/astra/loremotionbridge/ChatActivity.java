@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.text.InputType;
 import android.content.Intent;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Color;
@@ -73,6 +74,12 @@ public class ChatActivity extends Activity {
             }
         }
         updateProviderStatus();
+        consumePendingPerchanceImages();
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        consumePendingPerchanceImages();
     }
 
     private void buildScreen() {
@@ -301,25 +308,51 @@ public class ChatActivity extends Activity {
         }
     }
 
-    public static void onPerchanceImageReady(Uri image) {
+    public static void onPerchanceImageReady(Context context, Uri image) {
+        if (context == null || image == null) return;
+        // Persist delivery before notifying the chat. The chat may have been destroyed in background.
+        android.content.SharedPreferences prefs = context.getSharedPreferences("astra_chat", MODE_PRIVATE);
+        JSONArray pending;
+        try {
+            String raw = prefs.getString("perchance_pending", "[]");
+            pending = new JSONArray(raw);
+        } catch (Exception e) { pending = new JSONArray(); }
+        try {
+            pending.put(new JSONObject().put("uri", image.toString()));
+            prefs.edit().putString("perchance_pending", pending.toString()).apply();
+        } catch (Exception ignored) {}
         ChatActivity activity = activeInstance;
-        if (activity == null || image == null) return;
-        activity.runOnUiThread(() -> {
-            activity.addMessage("✦ PERCHANCE: новое изображение сохранено в Галерею. Нажми, чтобы открыть.", false, true);
-            int last = activity.messages.getChildCount() - 1;
+        if (activity != null) activity.runOnUiThread(activity::consumePendingPerchanceImages);
+    }
+
+    private void consumePendingPerchanceImages() {
+        if (isFinishing() || messages == null) return;
+        android.content.SharedPreferences prefs = getSharedPreferences("astra_chat", MODE_PRIVATE);
+        JSONArray pending;
+        try { pending = new JSONArray(prefs.getString("perchance_pending", "[]")); }
+        catch (Exception e) { pending = new JSONArray(); }
+        if (pending.length() == 0) return;
+        prefs.edit().remove("perchance_pending").apply();
+        for (int i = 0; i < pending.length(); i++) {
+            JSONObject item = pending.optJSONObject(i);
+            if (item == null) continue;
+            Uri image = Uri.parse(item.optString("uri", ""));
+            if (image.toString().isEmpty()) continue;
+            addMessage("✦ PERCHANCE: новое изображение сохранено в Галерею. Нажми, чтобы открыть.", false, true);
+            int last = messages.getChildCount() - 1;
             if (last >= 0) {
-                View row = activity.messages.getChildAt(last);
+                View row = messages.getChildAt(last);
                 if (row instanceof ViewGroup && ((ViewGroup) row).getChildCount() > 0) {
                     View bubble = ((ViewGroup) row).getChildAt(0);
                     bubble.setOnClickListener(v -> {
                         Intent open = new Intent(Intent.ACTION_VIEW);
                         open.setDataAndType(image, "image/*");
                         open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                        try { activity.startActivity(open); } catch (Exception ignored) {}
+                        try { startActivity(open); } catch (Exception ignored) {}
                     });
                 }
             }
-        });
+        }
     }
 
     private void updateProviderStatus() {
