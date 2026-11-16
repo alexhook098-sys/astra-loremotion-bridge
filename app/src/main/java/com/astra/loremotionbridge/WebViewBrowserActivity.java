@@ -1114,18 +1114,13 @@ public class WebViewBrowserActivity extends Activity {
 
     private void updateStatus() {
         if (status != null && webView != null)
-            status.setText("ASTRA WebView
-
-" +
-                    webView.getTitle() + "
-" + webView.getUrl());
+            status.setText("ASTRA WebView\\n\\n" +
+                    webView.getTitle() + "\\n" + webView.getUrl());
     }
 
     private void setStatus(String text) {
         main.post(() -> {
-            if (status != null) status.setText("ASTRA WebView
-
-" + text);
+            if (status != null) status.setText("ASTRA WebView\\n\\n" + text);
         });
     }
 
@@ -1144,9 +1139,7 @@ public class WebViewBrowserActivity extends Activity {
         if (s == null) return "";
         return s.replace("\\", "\\\\")
                 .replace("\"", "\\\"")
-                .replace("
-", "\
-")
+                .replace("\\n", "\\\\n")
                 .replace("\r", "\\r");
     }
 
