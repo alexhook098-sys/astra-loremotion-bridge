@@ -59,7 +59,12 @@ make distclean >/dev/null 2>&1 || true
   --enable-decoder=png \
   --enable-encoder=mpeg4 \
   --enable-muxer=mp4 \
-  --enable-filter=minterpolate,tpad,trim,setpts,scale,format \
+  --enable-filter=minterpolate \
+  --enable-filter=tpad \
+  --enable-filter=trim \
+  --enable-filter=setpts \
+  --enable-filter=scale \
+  --enable-filter=format \
   --disable-network \
   --disable-autodetect \
   --disable-doc \
