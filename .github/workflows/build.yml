@@ -24,6 +24,11 @@ jobs:
           test -x "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses || true
           "$SDKMANAGER" --install "platforms;android-35" "ndk;29.0.13113456" "cmake;3.31.6"
+      - name: Build self-contained FFmpeg for Android ARM64
+        shell: bash
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.13113456"
+          bash tools/build_ffmpeg_android.sh
       - name: Fetch pinned llama.cpp source
         run: |
           git clone --filter=blob:none https://github.com/ggml-org/llama.cpp.git llama.cpp
