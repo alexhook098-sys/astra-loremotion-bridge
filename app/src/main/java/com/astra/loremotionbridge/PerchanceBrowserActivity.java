@@ -67,6 +67,7 @@ public class PerchanceBrowserActivity extends Activity {
     private boolean observing;
     private boolean documentStartCaptureInstalled;
     private boolean pageLoaded;
+    private boolean generatorFrameRedirected;
     private boolean promptInjected;
     private int automationAttempts;
     private String pendingPrompt;
@@ -157,13 +158,34 @@ public class PerchanceBrowserActivity extends Activity {
 
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) {
-                if (!documentStartCaptureInstalled) {
-                    view.evaluateJavascript(buildCaptureScript(), null);
+                // The public Perchance page is only a wrapper: the actual generator UI
+                // lives in a cross-origin iframe. Navigate WebView to that iframe URL
+                // so automation can access its DOM without violating same-origin rules.
+                if (!generatorFrameRedirected && url != null
+                        && "perchance.org".equalsIgnoreCase(Uri.parse(url).getHost())) {
+                    view.evaluateJavascript(
+                            "(function(){var f=document.querySelector('iframe');return f&&f.src?f.src:'';})()",
+                            result -> {
+                                String frameUrl = null;
+                                try {
+                                    if (result != null && result.length() > 2) {
+                                        frameUrl = new JSONObject("{\"url\":" + result + "}").optString("url", "");
+                                    }
+                                } catch (Exception ignored) { }
+                                String host = frameUrl == null ? null : Uri.parse(frameUrl).getHost();
+                                if (host != null && host.endsWith(".perchance.org")
+                                        && !host.equalsIgnoreCase("perchance.org")) {
+                                    generatorFrameRedirected = true;
+                                    pageLoaded = false;
+                                    setStatus("PERCHANCE · подключаю интерфейс генератора…");
+                                    view.loadUrl(frameUrl);
+                                } else {
+                                    finishPageLoad(view);
+                                }
+                            });
+                    return;
                 }
-                pageLoaded = true;
-                setStatus("PERCHANCE · сборщик активен · " + counters());
-                startObserver();
-                if (pendingPrompt != null) main.postDelayed(PerchanceBrowserActivity.this::attemptPromptInjection, 900L);
+                finishPageLoad(view);
             }
         });
 
@@ -172,6 +194,16 @@ public class PerchanceBrowserActivity extends Activity {
         webView.loadUrl(HOME);
         // Keep this dedicated Perchance task alive, but immediately return to ASTRA.
         if (pendingPrompt != null) main.postDelayed(() -> moveTaskToBack(true), 120L);
+    }
+
+    private void finishPageLoad(WebView view) {
+        if (!documentStartCaptureInstalled) {
+            view.evaluateJavascript(buildCaptureScript(), null);
+        }
+        pageLoaded = true;
+        setStatus("PERCHANCE · сборщик активен · " + counters());
+        startObserver();
+        if (pendingPrompt != null) main.postDelayed(this::attemptPromptInjection, 900L);
     }
 
     @Override protected void onNewIntent(Intent intent) {
