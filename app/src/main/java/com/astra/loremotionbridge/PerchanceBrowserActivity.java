@@ -723,12 +723,27 @@ public class PerchanceBrowserActivity extends Activity {
     }
 
     private String buildStatusJsonOnMain() {
-        String url = webView == null ? "" : webView.getUrl();
-        return "{\\"ok\\":true,\\"ready\\":" + (pageLoaded && webView != null)
-                + ",\\"url\\":\\"" + (url == null ? "" : url.replace("\\\\", "\\\\\\\\").replace("\\"", "\\\\\"")) + "\\""
-                + ",\\"promptQueued\\":" + (pendingPrompt != null)
-                + ",\\"promptInjected\\":" + promptInjected
-                + ",\\"diagnostic\\":\\"" + (lastAutomationDiagnostic == null ? "" : lastAutomationDiagnostic.replace("\\\\", "\\\\\\\\").replace("\\"", "\\\\\"").replace("\\n", " ")) + "\\"}";
+        JSONObject status = new JSONObject();
+        try {
+            status.put("ok", true);
+            status.put("ready", pageLoaded && webView != null);
+            status.put("url", webView == null || webView.getUrl() == null ? "" : webView.getUrl());
+            status.put("promptQueued", pendingPrompt != null);
+            status.put("promptInjected", promptInjected);
+            status.put("diagnostic", lastAutomationDiagnostic == null ? "" : lastAutomationDiagnostic);
+        } catch (Exception e) {
+            Log.e(TAG, "Could not build Perchance status", e);
+        }
+        return status.toString();
+    }
+
+    private String statusErrorJson(String error) {
+        JSONObject status = new JSONObject();
+        try {
+            status.put("ok", false);
+            status.put("error", error);
+        } catch (Exception ignored) { }
+        return status.toString();
     }
 
     public String statusJson() {
@@ -741,13 +756,13 @@ public class PerchanceBrowserActivity extends Activity {
         });
         try {
             if (!latch.await(3, java.util.concurrent.TimeUnit.SECONDS)) {
-                return "{\\"ok\\":false,\\"error\\":\\"status_timeout\\"}";
+                return statusErrorJson("status_timeout");
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return "{\\"ok\\":false,\\"error\\":\\"status_interrupted\\"}";
+            return statusErrorJson("status_interrupted");
         }
-        return result[0] == null ? "{\\"ok\\":false,\\"error\\":\\"status_unavailable\\"}" : result[0];
+        return result[0] == null ? statusErrorJson("status_unavailable") : result[0];
     }
 
     public void minimizePerchance() { runOnUiThread(() -> moveTaskToBack(true)); }
