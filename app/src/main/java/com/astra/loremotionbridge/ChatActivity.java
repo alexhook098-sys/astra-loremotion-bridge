@@ -138,6 +138,16 @@ public class ChatActivity extends Activity {
         perchanceParams.bottomMargin = dp(8);
         root.addView(perchance, perchanceParams);
 
+        Button googleFlow = smallButton("✦  GOOGLE FLOW · AI VIDEO GENERATOR", CYAN);
+        googleFlow.setOnClickListener(v -> {
+            Intent flowIntent = new Intent(this, FlowWebViewActivity.class);
+            flowIntent.putExtra("url", FlowWebViewActivity.FLOW_PROJECT_URL);
+            startActivity(flowIntent);
+        });
+        LinearLayout.LayoutParams flowParams = new LinearLayout.LayoutParams(-1, dp(43));
+        flowParams.bottomMargin = dp(8);
+        root.addView(googleFlow, flowParams);
+
         installButton = smallButton("＋  ПОДКЛЮЧИТЬ OPENROUTER · API KEY", CYAN);
         installButton.setOnClickListener(v -> showOpenRouterSetup());
         root.addView(installButton, new LinearLayout.LayoutParams(-1, dp(44)));
@@ -458,6 +468,20 @@ public class ChatActivity extends Activity {
     private void sendMessage() {
         String value = input.getText().toString().trim();
         if (value.isEmpty() || busy) return;
+        String flowPrompt = extractFlowPrompt(value);
+        if (flowPrompt != null && !flowPrompt.isEmpty()) {
+            addMessage(value, true, true);
+            input.setText("");
+            addMessage("✦ ASTRA · передаю запрос в Google Flow в фоне…", false, true);
+            Intent generation = new Intent(this, FlowWebViewActivity.class);
+            generation.putExtra("url", FlowWebViewActivity.FLOW_PROJECT_URL);
+            generation.putExtra(FlowWebViewActivity.EXTRA_AUTOMATE, true);
+            generation.putExtra(FlowWebViewActivity.EXTRA_PROMPT, flowPrompt);
+            generation.putExtra("background", true);
+            startActivity(generation);
+            modelStatus.setText("● ASTRA · GOOGLE FLOW РАБОТАЕТ В ФОНЕ");
+            return;
+        }
         String perchancePrompt = extractPerchancePrompt(value);
         if (perchancePrompt != null && !perchancePrompt.isEmpty()) {
             addMessage(value, true, true);
@@ -492,6 +516,26 @@ public class ChatActivity extends Activity {
                 updateProviderStatus();
             });
         });
+    }
+
+    private String extractFlowPrompt(String text) {
+        if (text == null) return null;
+        String value = text.trim();
+        String[] prefixes = {"flow:", "google flow:", "флоу:", "создай видео", "сгенерируй видео",
+                "сделай видео", "анимируй", "generate video:", "create video:", "make a video:"};
+        String lower = value.toLowerCase(java.util.Locale.ROOT);
+        for (String prefix : prefixes) {
+            if (lower.startsWith(prefix)) {
+                String prompt = value.substring(prefix.length()).replaceFirst("^[\\s:—-]+", "").trim();
+                if (!prompt.isEmpty()) return prompt;
+            }
+        }
+        Pattern ru = Pattern.compile("(?iu)^\\s*(?:пожалуйста[,!]?\\s*)?(?:создай|сгенерируй|сделай)\\s+(?:мне\\s+)?видео\\s*[:—-]?\\s*(.+)$");
+        Matcher rm = ru.matcher(value);
+        if (rm.matches()) return rm.group(1).trim();
+        Pattern en = Pattern.compile("(?i)^\\s*(?:please\\s+)?(?:generate|create|make)\\s+(?:a\\s+)?video\\s*[:—-]?\\s*(.+)$");
+        Matcher em = en.matcher(value);
+        return em.matches() ? em.group(1).trim() : null;
     }
 
     private String extractPerchancePrompt(String text) {
