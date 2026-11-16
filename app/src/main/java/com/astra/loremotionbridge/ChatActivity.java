@@ -226,7 +226,12 @@ public class ChatActivity extends Activity {
         }
     }
 
-    @Override protected void onDestroy() {\n        if (activeInstance == this) activeInstance = null;\n        super.onDestroy();\n    }\n\n    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    @Override protected void onDestroy() {
+        if (activeInstance == this) activeInstance = null;
+        super.onDestroy();
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == PICK_MOTION_REFERENCE && resultCode == RESULT_OK && data != null && data.getData() != null) {
             processMotionReference(data.getData());
@@ -275,7 +280,8 @@ public class ChatActivity extends Activity {
     }
 
     private void addVideoMessage(Uri video) {
-        String message = "✦ ASTRA MOTION: видео сохранено в Галерею · Movies/ASTRA\nНажми здесь, чтобы открыть MP4.";
+        String message = "✦ ASTRA MOTION: видео сохранено в Галерею · Movies/ASTRA
+Нажми здесь, чтобы открыть MP4.";
         addMessage(message, false, true);
         int last = messages.getChildCount() - 1;
         if (last >= 0) {
