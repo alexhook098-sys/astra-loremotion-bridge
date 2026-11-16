@@ -105,14 +105,6 @@ public class WebViewBrowserActivity extends Activity {
         main.postDelayed(() -> { if (!isFinishing()) { try { moveTaskToBack(true); } catch (Exception ignored) {} } }, 250L);
     }
 
-    // Keep Perchance generation alive when the user returns to ASTRA CHAT.
-    // Moving this task to the background preserves the same WebView, DOM and session.
-    @Override protected void onDestroy() {
-        stopPerchanceObserver();
-        super.onDestroy();
-        if (instance == this) instance = null;
-    }
-
     @Override public void onBackPressed() {
         String current = webView == null ? "" : webView.getUrl();
         boolean perchance = false;
@@ -1125,6 +1117,7 @@ public class WebViewBrowserActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        stopPerchanceObserver();
         Log.i("ASTRA-WV-DIAG", "Activity onDestroy entered");
         if (webView != null) {
             webView.stopLoading();
