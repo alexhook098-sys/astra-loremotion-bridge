@@ -258,23 +258,39 @@ public class ChatActivity extends Activity {
     }
 
     private void processMotionReference(Uri uri) {
-        addMessage("Выбрала референс для ASTRA One Click Motion.", true, true);
-        addMessage("Подготавливаю контактный лист 5×4…", false, true);
+        addMessage("Референс принят для ASTRA One Click Motion.", true, true);
+        addMessage("Разбираю лист 5×4 и создаю плавное видео…", false, true);
         modelExecutor.execute(() -> {
             try {
-                File frames = AstraContactSheetSplitter.split(this, uri);
-                runOnUiThread(() -> addMessage(
-                        "Подготовлено 20 упорядоченных кадров (576×896). Папка: " +
-                        frames.getAbsolutePath() +
-                        "
-Следующий этап — подключение автономного интерполятора и сборка MP4.",
-                        false, true));
+                Uri video = AstraMotionEngine.createVideo(this, uri);
+                runOnUiThread(() -> addVideoMessage(video));
             } catch (Exception e) {
-                runOnUiThread(() -> addMessage("Не удалось обработать референс: " +
+                runOnUiThread(() -> addMessage("Не удалось создать видео: " +
                         (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()),
                         false, true));
             }
         });
+    }
+
+    private void addVideoMessage(Uri video) {
+        String message = "✦ ASTRA MOTION: видео сохранено в Галерею · Movies/ASTRA\nНажми здесь, чтобы открыть MP4.";
+        addMessage(message, false, true);
+        int last = messages.getChildCount() - 1;
+        if (last >= 0) {
+            View row = messages.getChildAt(last);
+            if (row instanceof ViewGroup && ((ViewGroup) row).getChildCount() > 0) {
+                View bubble = ((ViewGroup) row).getChildAt(0);
+                bubble.setOnClickListener(v -> {
+                    Intent open = new Intent(Intent.ACTION_VIEW);
+                    open.setDataAndType(video, "video/mp4");
+                    open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    try { startActivity(open); }
+                    catch (Exception e) {
+                        addMessage("Не найдено приложение для просмотра MP4.", false, true);
+                    }
+                });
+            }
+        }
     }
 
     private void updateProviderStatus() {
