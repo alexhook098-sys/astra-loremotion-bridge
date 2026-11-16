@@ -56,7 +56,7 @@ public class ChatActivity extends Activity {
         history = loadHistory();
         buildScreen();
         if (history.length() == 0) {
-            addMessage("Привет. Я ASTRA. Выбери GGUF-модель один раз — дальше я буду находить её сама. ✦", false, true);
+            addMessage("Привет. Я ASTRA. Подключи OpenRouter один раз — скачивать модель на телефон не нужно. ✦", false, true);
         } else {
             for (int i = 0; i < history.length(); i++) {
                 JSONObject m = history.optJSONObject(i);
