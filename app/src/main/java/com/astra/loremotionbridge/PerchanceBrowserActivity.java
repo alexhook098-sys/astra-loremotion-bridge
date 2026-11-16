@@ -170,7 +170,7 @@ public class PerchanceBrowserActivity extends Activity {
                 if (!generatorFrameRedirected && url != null
                         && "perchance.org".equalsIgnoreCase(Uri.parse(url).getHost())) {
                     view.evaluateJavascript(
-                            "(function(){var f=document.querySelector('iframe');return f&&f.src?f.src:'';})()",
+                            "(function(){var fs=Array.from(document.querySelectorAll('iframe'));var f=fs.find(function(x){try{var u=new URL(x.src,location.href);return u.hostname.toLowerCase().endsWith('.perchance.org')&&u.hostname.toLowerCase()!=='perchance.org';}catch(e){return false;}});return f&&f.src?f.src:'';})()",
                             result -> {
                                 String frameUrl = null;
                                 try {
