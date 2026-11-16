@@ -218,7 +218,10 @@ public class PerchanceBrowserActivity extends Activity {
         readAutomationIntent(intent);
         if (pendingPrompt != null) {
             moveTaskToBack(true);
-            if (pageLoaded) main.postDelayed(this::attemptPromptInjection, 500L);
+            if (pageLoaded) {
+                main.postDelayed(this::diagnosePage, 150L);
+                main.postDelayed(this::attemptPromptInjection, 500L);
+            }
         }
     }
 
@@ -229,6 +232,8 @@ public class PerchanceBrowserActivity extends Activity {
         pendingPrompt = prompt.trim();
         promptInjected = false;
         automationAttempts = 0;
+        lastAutomationDiagnostic = "queued";
+        lastPageDiagnostic = "";
         Log.i(TAG, "Background generation queued; prompt length=" + pendingPrompt.length());
     }
 
