@@ -1,6 +1,7 @@
 package com.astra.loremotionbridge;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.ContentValues;
 import android.graphics.Color;
 import android.net.Uri;
