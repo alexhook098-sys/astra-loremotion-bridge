@@ -72,7 +72,9 @@ public final class AstraContactSheetSplitter {
             int rows = DEFAULT_ROWS;
             double bestError = Double.POSITIVE_INFINITY;
             for (int[] grid : grids) {
-                double expectedRatio = (double) grid[0] * FRAME_WIDTH / (grid[1] * FRAME_HEIGHT);
+                double expectedRatio = (grid[0] == STORY_COLUMNS && grid[1] == STORY_ROWS)
+                        ? (double) STORY_COLUMNS / STORY_ROWS
+                        : (double) grid[0] * FRAME_WIDTH / (grid[1] * FRAME_HEIGHT);
                 double error = Math.abs(Math.log(sheetRatio / expectedRatio));
                 if (error < bestError) {
                     bestError = error;
