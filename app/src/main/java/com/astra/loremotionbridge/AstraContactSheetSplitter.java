@@ -34,7 +34,19 @@ public final class AstraContactSheetSplitter {
                 throw new IllegalArgumentException("Файл не является изображением");
         }
         BitmapFactory.Options options = new BitmapFactory.Options();
-        options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+        options.inPreferredConfig = Bitmap.Config.RGB_565;
+        // Bound memory on low-RAM phones before decoding a large contact sheet.
+        try (InputStream in = context.getContentResolver().openInputStream(source)) {
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            BitmapFactory.decodeStream(in, null, bounds);
+            int sample = 1;
+            while ((bounds.outWidth / sample) * (bounds.outHeight / sample) > 6_000_000 ||
+                    Math.max(bounds.outWidth / sample, bounds.outHeight / sample) > 3072) {
+                sample *= 2;
+            }
+            options.inSampleSize = sample;
+        }
         try (InputStream in = context.getContentResolver().openInputStream(source)) {
             sheet = BitmapFactory.decodeStream(in, null, options);
         }
