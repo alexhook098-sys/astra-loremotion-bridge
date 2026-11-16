@@ -12,10 +12,12 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 
-/** Splits a 5x4 ASTRA contact sheet into normalized, ordered frames. */
+/** Splits supported 5x4 or 4x5 ASTRA contact sheets into normalized, ordered frames. */
 public final class AstraContactSheetSplitter {
-    public static final int COLUMNS = 5;
-    public static final int ROWS = 4;
+    private static final int DEFAULT_COLUMNS = 5;
+    private static final int DEFAULT_ROWS = 4;
+    private static final int ALT_COLUMNS = 4;
+    private static final int ALT_ROWS = 5;
     public static final int FRAME_WIDTH = 576;
     public static final int FRAME_HEIGHT = 896;
     private static final int CELL_INSET = 2;
@@ -52,8 +54,17 @@ public final class AstraContactSheetSplitter {
         }
         if (sheet == null) throw new IllegalArgumentException("Не удалось декодировать изображение");
         try {
-            int cellW = sheet.getWidth() / COLUMNS;
-            int cellH = sheet.getHeight() / ROWS;
+            // Choose the grid whose expected portrait-cell sheet ratio best matches the image.
+            // This supports both 5 columns × 4 rows and 4 columns × 5 rows without a UI toggle.
+            double sheetRatio = (double) sheet.getWidth() / sheet.getHeight();
+            double defaultRatio = (double) DEFAULT_COLUMNS * FRAME_WIDTH / (DEFAULT_ROWS * FRAME_HEIGHT);
+            double alternateRatio = (double) ALT_COLUMNS * FRAME_WIDTH / (ALT_ROWS * FRAME_HEIGHT);
+            double defaultError = Math.abs(Math.log(sheetRatio / defaultRatio));
+            double alternateError = Math.abs(Math.log(sheetRatio / alternateRatio));
+            int columns = alternateError < defaultError ? ALT_COLUMNS : DEFAULT_COLUMNS;
+            int rows = alternateError < defaultError ? ALT_ROWS : DEFAULT_ROWS;
+            int cellW = sheet.getWidth() / columns;
+            int cellH = sheet.getHeight() / rows;
             if (cellW < 8 || cellH < 8) throw new IllegalArgumentException("Контактный лист слишком маленький");
             File dir = new File(context.getFilesDir(), "astra_motion/frames");
             if (dir.exists()) {
@@ -61,13 +72,13 @@ public final class AstraContactSheetSplitter {
                 if (old != null) for (File f : old) if (f.isFile()) f.delete();
             }
             if (!dir.exists() && !dir.mkdirs()) throw new IllegalStateException("Не удалось создать рабочую папку");
-            for (int i = 0; i < ROWS * COLUMNS; i++) {
-                int col = i % COLUMNS, row = i / COLUMNS;
+            for (int i = 0; i < rows * columns; i++) {
+                int col = i % columns, row = i / columns;
                 int left = col * cellW + CELL_INSET;
                 int top = row * cellH + CELL_INSET;
-                int right = (col == COLUMNS - 1 ? sheet.getWidth() : (col + 1) * cellW) - CELL_INSET;
-                int bottom = (row == ROWS - 1 ? sheet.getHeight() : (row + 1) * cellH) - CELL_INSET;
-                if (right <= left || bottom <= top) throw new IllegalArgumentException("Некорректная сетка 5×4");
+                int right = (col == columns - 1 ? sheet.getWidth() : (col + 1) * cellW) - CELL_INSET;
+                int bottom = (row == rows - 1 ? sheet.getHeight() : (row + 1) * cellH) - CELL_INSET;
+                if (right <= left || bottom <= top) throw new IllegalArgumentException("Некорректная сетка контактного листа 5×4 или 4×5");
                 Bitmap cell = Bitmap.createBitmap(sheet, left, top, right-left, bottom-top);
                 Bitmap frame = Bitmap.createBitmap(FRAME_WIDTH, FRAME_HEIGHT, Bitmap.Config.ARGB_8888);
                 Canvas canvas = new Canvas(frame);
