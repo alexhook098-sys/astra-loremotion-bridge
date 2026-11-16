@@ -75,7 +75,7 @@ make distclean >/dev/null 2>&1 || true
   --extra-ldflags="-Wl,-z,max-page-size=16384"
 
 make -j"$(nproc)"
-if ! ./ffmpeg -hide_banner -decoders 2>&1 | grep -E "[[:space:]]png([[:space:]]|$)"; then
+if ! ./ffmpeg -hide_banner -decoders 2>&1 | grep -E "(^|[[:space:]])png([[:space:]]|$)"; then
   echo "ERROR: PNG decoder was not compiled into FFmpeg." >&2
   exit 1
 fi
