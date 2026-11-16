@@ -155,10 +155,12 @@ public class PerchanceBrowserActivity extends Activity {
                 + "if(/advert|sponsor|banner|реклама/.test(s))return true;}return false;}"
                 + "function add(src,w,h,ok,el){if(!src||seen.has(src)||blocked(el))return;seen.add(src);"
                 + "if(w>=256&&h>=256&&ok)out.push({src:src,w:w,h:h,ok:true});}"
-                + "Array.from(document.images).forEach(i=>add(i.currentSrc||i.src,i.naturalWidth,i.naturalHeight,i.complete,i));"
-                + "Array.from(document.querySelectorAll('*')).forEach(el=>{const bg=getComputedStyle(el).backgroundImage;"
-                + "if(!bg||bg==='none')return;const m=bg.match(/url\\(['\"]?(https?:[^'\")]+)['\"]?\\)/);"
-                + "if(!m)return;const r=el.getBoundingClientRect();add(m[1],Math.round(r.width),Math.round(r.height),true,el);});"
+                + "function scanDoc(doc){try{Array.from(doc.images||[]).forEach(i=>add(i.currentSrc||i.src,i.naturalWidth,i.naturalHeight,i.complete,i));"
+                + "Array.from(doc.querySelectorAll('*')).forEach(el=>{const bg=doc.defaultView.getComputedStyle(el).backgroundImage;"
+                + "if(bg&&bg!=='none'){const m=bg.match(/url\\(['\"]?(https?:[^'\")]+)['\"]?\\)/);"
+                + "if(m){const r=el.getBoundingClientRect();add(m[1],Math.round(r.width),Math.round(r.height),true,el);}}});"
+                + "Array.from(doc.querySelectorAll('iframe')).forEach(fr=>{try{if(fr.contentDocument)scanDoc(fr.contentDocument);}catch(e){}});"
+                + "}catch(e){}}scanDoc(document);"
                 + "return JSON.stringify(out);})()";
         webView.evaluateJavascript(js, value -> {
             try {
