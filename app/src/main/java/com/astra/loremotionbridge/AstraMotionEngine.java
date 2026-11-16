@@ -12,7 +12,7 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.util.Locale;
 
-/** Runs the bundled, app-private FFmpeg binary; no Termux or shell app required. */
+/** Runs FFmpeg from Android nativeLibraryDir, where packaged native code is executable. */
 public final class AstraMotionEngine {
     private static final int FPS = 20;
     private static final int OUTPUT_FRAMES = 30;
@@ -22,7 +22,9 @@ public final class AstraMotionEngine {
 
     public static Uri createVideo(Context context, Uri reference) throws Exception {
         File frames = AstraContactSheetSplitter.split(context, reference);
-        File binary = installBinary(context);
+        File binary = new File(context.getApplicationInfo().nativeLibraryDir, "libffmpeg.so");
+        if (!binary.isFile() || !binary.canExecute())
+            throw new IllegalStateException("Встроенный FFmpeg не найден в nativeLibraryDir или недоступен для запуска");
         File temp = new File(context.getCacheDir(), "astra_motion_" + System.currentTimeMillis() + ".mp4");
         if (temp.exists()) temp.delete();
 
@@ -59,24 +61,6 @@ public final class AstraMotionEngine {
         Uri saved = publishVideo(context, temp);
         temp.delete();
         return saved;
-    }
-
-    private static File installBinary(Context context) throws Exception {
-        File dir = new File(context.getFilesDir(), "astra/bin");
-        if (!dir.exists() && !dir.mkdirs()) throw new IllegalStateException("Не удалось создать папку движка");
-        File target = new File(dir, "ffmpeg");
-        if (!target.isFile() || target.length() == 0) {
-            try (InputStream in = context.getAssets().open("ffmpeg/arm64-v8a/ffmpeg");
-                 FileOutputStream out = new FileOutputStream(target)) {
-                byte[] buffer = new byte[32768];
-                int count;
-                while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
-                out.getFD().sync();
-            }
-        }
-        if (!target.setExecutable(true, true) && !target.canExecute())
-            throw new IllegalStateException("Android не разрешил запуск встроенного FFmpeg");
-        return target;
     }
 
     private static Uri publishVideo(Context context, File source) throws Exception {
