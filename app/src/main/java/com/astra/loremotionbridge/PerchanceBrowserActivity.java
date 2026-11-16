@@ -1,6 +1,8 @@
 package com.astra.loremotionbridge;
 
 import android.app.Activity;
+import android.app.DownloadManager;
+import android.content.Context;
 import android.content.ContentValues;
 import android.graphics.Color;
 import android.net.Uri;
@@ -13,6 +15,7 @@ import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
 import android.webkit.CookieManager;
+import android.webkit.DownloadListener;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -88,6 +91,34 @@ public class PerchanceBrowserActivity extends Activity {
         cookies.setAcceptCookie(true);
         cookies.setAcceptThirdPartyCookies(webView, true);
         webView.setWebChromeClient(new WebChromeClient());
+        // Perchance download buttons are handled by Android instead of being ignored by WebView.
+        webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
+            try {
+                if (url == null || !(url.startsWith("https://") || url.startsWith("http://"))) {
+                    status.setText("PERCHANCE · неподдерживаемый формат скачивания");
+                    return;
+                }
+                DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                request.setTitle("ASTRA · Perchance image");
+                request.setDescription("Сохранение изображения");
+                request.setMimeType(mimeType == null ? "image/*" : mimeType);
+                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_PICTURES,
+                        "ASTRA/Perchance/PERCHANCE_" + System.currentTimeMillis() + ".jpg");
+                request.addRequestHeader("User-Agent", userAgent == null ? "Mozilla/5.0" : userAgent);
+                request.addRequestHeader("Referer", HOME);
+                String cookie = CookieManager.getInstance().getCookie(url);
+                if (cookie != null) request.addRequestHeader("Cookie", cookie);
+                DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                if (manager == null) throw new IllegalStateException("DownloadManager unavailable");
+                manager.enqueue(request);
+                status.setText("PERCHANCE · скачивание началось");
+                Log.i(TAG, "DownloadManager queued Perchance file");
+            } catch (Exception e) {
+                Log.e(TAG, "DownloadListener failed", e);
+                status.setText("PERCHANCE · ошибка скачивания");
+            }
+        });
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) {
                 status.setText("PERCHANCE · наблюдение за результатами");
