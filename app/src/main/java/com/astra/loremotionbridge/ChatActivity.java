@@ -92,13 +92,7 @@ public class ChatActivity extends Activity {
         mark.setGravity(Gravity.CENTER);
         mark.setBackground(round(Color.rgb(54, 43, 83), LILAC, 16));
         header.addView(mark, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        LinearLayout names = new LinearLayout(this);
-        names.setOrientation(LinearLayout.VERTICAL);
-        names.setPadding(dp(12), 0, 0, 0);
-        names.addView(label("ASTRA CHAT", 20, LILAC, true));
-        names.addView(label("OPENROUTER AI", 9, CYAN, false));
-        header.addView(names, new LinearLayout.LayoutParams(0, -2, 1));
-        header.addView(label("● CLOUD", 10, Color.rgb(131, 217, 178), true));
+        // Minimal header: keep the ASTRA symbol, remove redundant title/provider/status labels.
         root.addView(header);
 
         Button appearance = smallButton("✧  ОБОИ И ЦВЕТОВАЯ СХЕМА", LILAC);
