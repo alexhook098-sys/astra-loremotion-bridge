@@ -150,7 +150,11 @@ public class ChatActivity extends Activity {
         root.addView(gifStudio, gifParams);
 
         Button radioButton = smallButton("♫  SOUNDPARK DEEP · RADIO", CYAN);
-        radioButton.setOnClickListener(v -> startActivity(new Intent(this, RadioActivity.class)));
+        radioButton.setOnClickListener(v -> {
+            Intent radio = new Intent(this, RadioActivity.class);
+            radio.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+            startActivity(radio);
+        });
         LinearLayout.LayoutParams radioParams = new LinearLayout.LayoutParams(-1, dp(40));
         radioParams.bottomMargin = dp(5);
         root.addView(radioButton, radioParams);
