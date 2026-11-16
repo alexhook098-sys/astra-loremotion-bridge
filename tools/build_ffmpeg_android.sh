@@ -75,8 +75,12 @@ make distclean >/dev/null 2>&1 || true
   --extra-ldflags="-Wl,-z,max-page-size=16384"
 
 make -j"$(nproc)"
-if ! ./ffmpeg -hide_banner -decoders 2>&1 | grep -E "(^|[[:space:]])png([[:space:]]|$)"; then
-  echo "ERROR: PNG decoder was not compiled into FFmpeg." >&2
+if ! grep -q "^CONFIG_PNG_DECODER=yes$" config.mak; then
+  echo "ERROR: FFmpeg was configured without the PNG decoder." >&2
+  exit 1
+fi
+if ! grep -q "^CONFIG_ZLIB=yes$" config.mak; then
+  echo "ERROR: FFmpeg was configured without zlib support required by PNG." >&2
   exit 1
 fi
 mkdir -p "${OUT}"
