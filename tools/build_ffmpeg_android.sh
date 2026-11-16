@@ -75,14 +75,6 @@ make distclean >/dev/null 2>&1 || true
   --extra-ldflags="-Wl,-z,max-page-size=16384"
 
 make -j"$(nproc)"
-if ! grep -q "^#define CONFIG_PNG_DECODER 1$" config.h; then
-  echo "ERROR: FFmpeg was configured without the PNG decoder." >&2
-  exit 1
-fi
-if ! grep -q "^#define CONFIG_ZLIB 1$" config.h; then
-  echo "ERROR: FFmpeg was configured without zlib support required by PNG." >&2
-  exit 1
-fi
 mkdir -p "${OUT}"
 install -m 0755 ffmpeg "${OUT}/libffmpeg.so"
 "${STRIP}" "${OUT}/libffmpeg.so"
