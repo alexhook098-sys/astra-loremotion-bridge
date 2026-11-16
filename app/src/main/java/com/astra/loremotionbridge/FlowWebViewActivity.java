@@ -218,6 +218,9 @@ public final class FlowWebViewActivity extends Activity {
         String url = intent.getStringExtra("url");
         if (url != null && !url.isEmpty() && webView != null) openUrl(url);
         if (pendingPrompt != null && webView != null) main.postDelayed(this::attemptFlowAutomation, 900L);
+        if (intent.getBooleanExtra("background", false)) {
+            main.postDelayed(() -> { if (!isFinishing() && !isDestroyed()) moveTaskToBack(true); }, 250L);
+        }
     }
 
 
