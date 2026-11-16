@@ -1,0 +1,208 @@
+package com.astra.loremotionbridge;
+
+import android.app.Activity;
+import android.content.ContentValues;
+import android.graphics.Color;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.MediaStore;
+import android.view.Gravity;
+import android.view.View;
+import android.webkit.CookieManager;
+import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.util.Log;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class PerchanceBrowserActivity extends Activity {
+    private static final String TAG = "ASTRA-PERCHANCE";
+    private static final String HOME = "https://perchance.org/aigen-rus-edit";
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final ExecutorService downloads = Executors.newSingleThreadExecutor();
+    private final Set<String> seen = new HashSet<>();
+    private WebView webView;
+    private TextView status;
+    private boolean observing;
+
+    private final Runnable observer = new Runnable() {
+        @Override public void run() {
+            if (webView == null || isFinishing()) { observing = false; return; }
+            String current = webView.getUrl();
+            if (isPerchance(current)) scanImages();
+            else { observing = false; return; }
+            main.postDelayed(this, 2500L);
+        }
+    };
+
+    @Override protected void onCreate(Bundle state) {
+        super.onCreate(state);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(Color.rgb(8, 11, 24));
+        LinearLayout bar = new LinearLayout(this);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(10, 4, 10, 4);
+        Button back = new Button(this);
+        back.setText("‹ ASTRA");
+        back.setTextColor(Color.WHITE);
+        back.setOnClickListener(v -> moveTaskToBack(true));
+        bar.addView(back, new LinearLayout.LayoutParams(-2, -2));
+        status = new TextView(this);
+        status.setTextColor(Color.WHITE);
+        status.setText("PERCHANCE · готов к работе");
+        status.setPadding(12, 0, 4, 0);
+        bar.addView(status, new LinearLayout.LayoutParams(0, -2, 1));
+        root.addView(bar, new LinearLayout.LayoutParams(-1, -2));
+
+        webView = new WebView(this);
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
+        settings.setLoadsImagesAutomatically(true);
+        settings.setJavaScriptCanOpenWindowsAutomatically(true);
+        settings.setSupportMultipleWindows(false);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        CookieManager cookies = CookieManager.getInstance();
+        cookies.setAcceptCookie(true);
+        cookies.setAcceptThirdPartyCookies(webView, true);
+        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebViewClient(new WebViewClient() {
+            @Override public void onPageFinished(WebView view, String url) {
+                status.setText("PERCHANCE · наблюдение за результатами");
+                startObserver();
+            }
+        });
+        root.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1));
+        setContentView(root);
+        webView.loadUrl(HOME);
+    }
+
+    private boolean isPerchance(String value) {
+        try {
+            String host = Uri.parse(value == null ? "" : value).getHost();
+            return host != null && (host.equalsIgnoreCase("perchance.org")
+                    || host.toLowerCase(Locale.US).endsWith(".perchance.org"));
+        } catch (Exception e) { return false; }
+    }
+
+    private void startObserver() {
+        if (observing) return;
+        observing = true;
+        main.removeCallbacks(observer);
+        main.post(observer);
+        Log.i(TAG, "Dedicated Perchance observer started");
+    }
+
+    private void scanImages() {
+        if (webView == null) return;
+        String js = "(function(){return JSON.stringify(Array.from(document.images).map(i=>({src:i.currentSrc||i.src,w:i.naturalWidth,h:i.naturalHeight,ok:i.complete})));})()";
+        webView.evaluateJavascript(js, value -> {
+            try {
+                if (value == null || "null".equals(value)) return;
+                String decoded = org.json.JSONTokener.class.getName() == null ? value : value;
+                if (decoded.startsWith("\"") && decoded.endsWith("\"")) {
+                    decoded = new JSONObject().put("v", decoded).getString("v");
+                }
+                JSONArray images = new JSONArray(decoded);
+                for (int i = 0; i < images.length(); i++) {
+                    JSONObject item = images.optJSONObject(i);
+                    if (item == null || !item.optBoolean("ok")) continue;
+                    if (item.optInt("w") < 256 || item.optInt("h") < 256) continue;
+                    String src = item.optString("src");
+                    if (!src.startsWith("https://") || !seen.add(src)) continue;
+                    downloads.execute(() -> saveImage(src));
+                }
+            } catch (Exception e) { Log.w(TAG, "Image scan parse failed", e); }
+        });
+    }
+
+    private void saveImage(String imageUrl) {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(imageUrl).openConnection();
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(30000);
+            connection.setInstanceFollowRedirects(true);
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0");
+            String cookie = CookieManager.getInstance().getCookie(imageUrl);
+            if (cookie != null) connection.setRequestProperty("Cookie", cookie);
+            connection.connect();
+            String mime = connection.getContentType();
+            if (mime == null || !mime.toLowerCase(Locale.US).startsWith("image/")) return;
+            long length = connection.getContentLengthLong();
+            if (length > 20L * 1024L * 1024L) return;
+            String ext = mime.toLowerCase(Locale.US).contains("png") ? ".png"
+                    : mime.toLowerCase(Locale.US).contains("webp") ? ".webp" : ".jpg";
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Images.Media.DISPLAY_NAME, "ASTRA_PERCHANCE_" + System.currentTimeMillis() + ext);
+            values.put(MediaStore.Images.Media.MIME_TYPE, mime);
+            if (Build.VERSION.SDK_INT >= 29) {
+                values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/ASTRA/Perchance");
+                values.put(MediaStore.Images.Media.IS_PENDING, 1);
+            }
+            Uri target = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+            if (target == null) return;
+            try (InputStream in = connection.getInputStream();
+                 OutputStream out = getContentResolver().openOutputStream(target)) {
+                if (out == null) throw new java.io.IOException("output stream unavailable");
+                byte[] buffer = new byte[8192];
+                int n; long total = 0;
+                while ((n = in.read(buffer)) != -1) {
+                    total += n;
+                    if (total > 20L * 1024L * 1024L) throw new java.io.IOException("image exceeds 20 MB");
+                    out.write(buffer, 0, n);
+                }
+            }
+            if (Build.VERSION.SDK_INT >= 29) {
+                ContentValues done = new ContentValues();
+                done.put(MediaStore.Images.Media.IS_PENDING, 0);
+                getContentResolver().update(target, done, null, null);
+            }
+            Log.i(TAG, "Image saved " + target);
+            ChatActivity.onPerchanceImageReady(target);
+            runOnUiThread(() -> status.setText("PERCHANCE · изображение сохранено в ASTRA/Perchance"));
+        } catch (Exception e) {
+            Log.w(TAG, "Image download failed: " + e.getMessage());
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    @Override public void onBackPressed() {
+        moveTaskToBack(true);
+    }
+
+    @Override protected void onDestroy() {
+        observing = false;
+        main.removeCallbacks(observer);
+        if (webView != null) {
+            webView.stopLoading();
+            webView.destroy();
+            webView = null;
+        }
+        downloads.shutdown();
+        super.onDestroy();
+    }
+}
