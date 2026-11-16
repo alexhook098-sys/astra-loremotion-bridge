@@ -236,10 +236,16 @@ public class ChatActivity extends Activity {
         }
         addMessage(value, true, true);
         input.setText("");
+        String localAnswer = AstraCore.handleLocal(value);
+        if (localAnswer != null) {
+            addMessage(localAnswer, false, true);
+            modelStatus.setText("● ASTRA CORE · ЛОКАЛЬНЫЙ ОТВЕТ");
+            return;
+        }
         busy = true;
-        modelStatus.setText("QWEN ОБРАБАТЫВАЕТ ЗАПРОС…");
+        modelStatus.setText("ASTRA CORE ПОДГОТАВЛИВАЕТ ЗАПРОС…");
         modelExecutor.execute(() -> {
-            JSONObject result = parse(QwenRuntime.chat(value, 32));
+            JSONObject result = parse(QwenRuntime.chat(AstraCore.preparePrompt(value), 48));
             String answer = result.optBoolean("ok")
                     ? result.optString("response", "")
                     : "Ошибка модели: " + result.optString("error", "unknown");
