@@ -376,6 +376,14 @@ public class LocalBridgeServer {
             if ("/flow/minimize".equals(p)) return FlowWebViewController.minimize();
             if ("/flow/close".equals(p)) return FlowWebViewController.close();
             if ("/flow/front".equals(p)) return FlowWebViewController.bringToFront(MainApplication.context());
+            if ("/perchance/start".equals(p)) return PerchanceBrowserController.start(
+                    MainApplication.context(),
+                    m.getOrDefault("prompt", ""),
+                    Boolean.parseBoolean(m.getOrDefault("background", "true")));
+            if ("/perchance/status".equals(p)) return PerchanceBrowserController.status();
+            if ("/perchance/eval".equals(p)) return PerchanceBrowserController.evaluate(
+                    m.getOrDefault("script", "document.title"));
+            if ("/perchance/minimize".equals(p)) return PerchanceBrowserController.minimize();
             if ("/webview/bing-close".equals(p)) return WebViewBrowserController.closeBing();
             if ("/webview/close".equals(p)) return WebViewBrowserController.close();
             if ("/motion16/status".equals(p)) return Motion16Controller.status();
