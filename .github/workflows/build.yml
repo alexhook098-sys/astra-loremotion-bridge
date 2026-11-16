@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/local-qwen-android
+      - feature/astra-chat-gif-studio
 
 jobs:
   build:
