@@ -34,6 +34,8 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ChatActivity extends Activity {
     private static volatile ChatActivity activeInstance;
@@ -456,6 +458,18 @@ public class ChatActivity extends Activity {
     private void sendMessage() {
         String value = input.getText().toString().trim();
         if (value.isEmpty() || busy) return;
+        String perchancePrompt = extractPerchancePrompt(value);
+        if (perchancePrompt != null && !perchancePrompt.isEmpty()) {
+            addMessage(value, true, true);
+            input.setText("");
+            addMessage("✦ ASTRA · открываю Perchance в фоне и запускаю генерацию…", false, true);
+            Intent generation = new Intent(this, PerchanceBrowserActivity.class);
+            generation.putExtra(PerchanceBrowserActivity.EXTRA_AUTOMATE, true);
+            generation.putExtra(PerchanceBrowserActivity.EXTRA_PROMPT, perchancePrompt);
+            startActivity(generation);
+            modelStatus.setText("● ASTRA · PERCHANCE РАБОТАЕТ В ФОНЕ");
+            return;
+        }
         if (!OpenRouterClient.hasKey()) {
             addMessage("Сначала подключи OpenRouter: нажми кнопку API KEY и вставь ключ.", false, true);
             return;
@@ -478,6 +492,34 @@ public class ChatActivity extends Activity {
                 updateProviderStatus();
             });
         });
+    }
+
+    private String extractPerchancePrompt(String text) {
+        if (text == null) return null;
+        String value = text.trim();
+        String[] prefixes = {
+                "perchance:", "перчанс:",
+                "создай изображение", "сгенерируй изображение",
+                "создай картинку", "сгенерируй картинку",
+                "создай картину", "сгенерируй картину",
+                "создай иллюстрацию", "сгенерируй иллюстрацию",
+                "нарисуй", "сделай картинку", "сделай изображение",
+                "generate image:", "create image:", "make an image:"
+        };
+        String lower = value.toLowerCase(java.util.Locale.ROOT);
+        for (String prefix : prefixes) {
+            if (lower.startsWith(prefix)) {
+                String prompt = value.substring(prefix.length()).replaceFirst("^[\\s:—-]+", "").trim();
+                if (!prompt.isEmpty()) return prompt;
+            }
+        }
+        Pattern ru = Pattern.compile("(?iu)^\\s*(?:пожалуйста[,!]?\\s*)?(?:создай|сгенерируй|сделай)\\s+(?:мне\\s+)?(?:изображение|картинку|картину|иллюстрацию|арт)\\s*[:—-]?\\s*(.+)$");
+        Matcher rm = ru.matcher(value);
+        if (rm.matches()) return rm.group(1).trim();
+        Pattern en = Pattern.compile("(?i)^\\s*(?:please\\s+)?(?:generate|create|make)\\s+(?:an?\\s+)?(?:image|picture|illustration)\\s*[:—-]?\\s*(.+)$");
+        Matcher em = en.matcher(value);
+        if (em.matches()) return em.group(1).trim();
+        return null;
     }
 
     private JSONObject parse(String raw) {
