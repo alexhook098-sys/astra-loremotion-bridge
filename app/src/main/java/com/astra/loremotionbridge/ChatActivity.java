@@ -70,7 +70,13 @@ public class ChatActivity extends Activity {
         } else {
             for (int i = 0; i < history.length(); i++) {
                 JSONObject m = history.optJSONObject(i);
-                if (m != null) addMessage(m.optString("text"), m.optBoolean("user"), false);
+                if (m != null) {
+                    if ("perchance_image".equals(m.optString("type"))) {
+                        addPerchanceImageMessage(Uri.parse(m.optString("uri", "")), false);
+                    } else {
+                        addMessage(m.optString("text"), m.optBoolean("user"), false);
+                    }
+                }
             }
         }
         updateProviderStatus();
@@ -344,20 +350,61 @@ public class ChatActivity extends Activity {
             if (item == null) continue;
             Uri image = Uri.parse(item.optString("uri", ""));
             if (image.toString().isEmpty()) continue;
-            addMessage("✦ PERCHANCE: новое изображение сохранено в Галерею. Нажми, чтобы открыть.", false, true);
-            int last = messages.getChildCount() - 1;
-            if (last >= 0) {
-                View row = messages.getChildAt(last);
-                if (row instanceof ViewGroup && ((ViewGroup) row).getChildCount() > 0) {
-                    View bubble = ((ViewGroup) row).getChildAt(0);
-                    bubble.setOnClickListener(v -> {
-                        Intent open = new Intent(Intent.ACTION_VIEW);
-                        open.setDataAndType(image, "image/*");
-                        open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                        try { startActivity(open); } catch (Exception ignored) {}
-                    });
-                }
+            addPerchanceImageMessage(image, true);
+        }
+    }
+
+    private void addPerchanceImageMessage(Uri image, boolean save) {
+        if (image == null || image.toString().isEmpty()) return;
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(10), dp(9), dp(10), dp(10));
+        card.setBackground(round(Color.rgb(30, 42, 65), Color.rgb(57, 91, 119), 17));
+
+        TextView caption = label("✦ PERCHANCE · изображение сохранено в Pictures/ASTRA/Perchance", 13, WHITE, false);
+        caption.setPadding(dp(3), dp(2), dp(3), dp(8));
+        card.addView(caption, new LinearLayout.LayoutParams(-1, -2));
+
+        ImageView preview = new ImageView(this);
+        preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        preview.setAdjustViewBounds(true);
+        preview.setMaxHeight(dp(280));
+        preview.setBackground(round(Color.rgb(16, 22, 38), Color.rgb(57, 91, 119), 12));
+        try {
+            preview.setImageURI(image);
+        } catch (Exception e) {
+            preview.setImageDrawable(null);
+        }
+        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(-1, dp(280));
+        card.addView(preview, imageParams);
+        card.setOnClickListener(v -> {
+            Intent open = new Intent(Intent.ACTION_VIEW);
+            open.setDataAndType(image, "image/*");
+            open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            try { startActivity(open); }
+            catch (Exception e) {
+                addMessage("Не удалось открыть изображение из Галереи.", false, true);
             }
+        });
+
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.LEFT);
+        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1, -2);
+        cardParams.setMargins(dp(2), dp(5), dp(2), dp(7));
+        row.addView(card, cardParams);
+        messages.addView(row);
+        messageScroll.post(() -> messageScroll.fullScroll(View.FOCUS_DOWN));
+
+        if (save) {
+            try {
+                history.put(new JSONObject()
+                        .put("type", "perchance_image")
+                        .put("text", "PERCHANCE · изображение сохранено")
+                        .put("uri", image.toString())
+                        .put("user", false));
+                getSharedPreferences("astra_chat", MODE_PRIVATE).edit()
+                        .putString("messages", history.toString()).apply();
+            } catch (Exception ignored) {}
         }
     }
 
