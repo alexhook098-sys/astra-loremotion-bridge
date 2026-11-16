@@ -76,6 +76,6 @@ make distclean >/dev/null 2>&1 || true
 make -j"$(nproc)"
 mkdir -p "${OUT}"
 install -m 0755 ffmpeg "${OUT}/libffmpeg.so"
-"${STRIP}" "${OUT}/ffmpeg"
-file "${OUT}/ffmpeg"
+"${STRIP}" "${OUT}/libffmpeg.so"
+file "${OUT}/libffmpeg.so"
 echo "ASTRA FFmpeg ARM64 ready: ${OUT}/libffmpeg.so"
