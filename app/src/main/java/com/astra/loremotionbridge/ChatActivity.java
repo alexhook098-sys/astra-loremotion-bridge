@@ -226,11 +226,6 @@ public class ChatActivity extends Activity {
         }
     }
 
-    @Override protected void onDestroy() {
-        if (activeInstance == this) activeInstance = null;
-        super.onDestroy();
-    }
-
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == PICK_MOTION_REFERENCE && resultCode == RESULT_OK && data != null && data.getData() != null) {
@@ -458,6 +453,7 @@ public class ChatActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        if (activeInstance == this) activeInstance = null;
         // Keep the native model alive for the process; do not unload on screen close.
         super.onDestroy();
     }
