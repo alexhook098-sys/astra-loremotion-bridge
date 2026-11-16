@@ -48,6 +48,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class PerchanceBrowserActivity extends Activity {
+    private static volatile PerchanceBrowserActivity instance;
     private static final String TAG = "ASTRA-PERCHANCE";
     private static final String HOME = "https://perchance.org/aigen-rus-edit";
     private static final String BRIDGE_OBJECT = "ASTRA_PERCHANCE_BRIDGE";
@@ -89,8 +90,11 @@ public class PerchanceBrowserActivity extends Activity {
         }
     };
 
+    public static PerchanceBrowserActivity getInstance() { return instance; }
+
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        instance = this;
         readAutomationIntent(getIntent());
 
         LinearLayout root = new LinearLayout(this);
@@ -711,6 +715,24 @@ public class PerchanceBrowserActivity extends Activity {
         }
     }
 
+    public void evaluateScript(String script, android.webkit.ValueCallback<String> callback) {
+        runOnUiThread(() -> {
+            if (webView == null) { if (callback != null) callback.onReceiveValue(null); return; }
+            webView.evaluateJavascript(script == null ? "document.title" : script, callback);
+        });
+    }
+
+    public String statusJson() {
+        String url = webView == null ? "" : webView.getUrl();
+        return "{\"ok\":true,\"ready\":" + (pageLoaded && webView != null)
+                + ",\"url\":\"" + (url == null ? "" : url.replace("\\", "\\\\").replace("\"", "\\\"")) + "\""
+                + ",\"promptQueued\":" + (pendingPrompt != null)
+                + ",\"promptInjected\":" + promptInjected
+                + ",\"diagnostic\":\"" + (lastAutomationDiagnostic == null ? "" : lastAutomationDiagnostic.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ")) + "\"}";
+    }
+
+    public void minimizePerchance() { runOnUiThread(() -> moveTaskToBack(true)); }
+
     private void setStatus(String text) {
         main.post(() -> {
             if (status != null) status.setText(text);
@@ -727,6 +749,7 @@ public class PerchanceBrowserActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        if (instance == this) instance = null;
         observing = false;
         main.removeCallbacks(observer);
         if (webView != null) {
