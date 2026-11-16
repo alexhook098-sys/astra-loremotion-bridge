@@ -8,8 +8,12 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Color;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -31,11 +35,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class ChatActivity extends Activity {
-    private static final int BG = Color.rgb(8, 11, 24);
-    private static final int PANEL = Color.rgb(20, 27, 49);
-    private static final int LILAC = Color.rgb(229, 199, 255);
-    private static final int CYAN = Color.rgb(101, 221, 245);
-    private static final int WHITE = Color.rgb(234, 241, 255);
+    private static int BG = Color.rgb(8, 11, 24);
+    private static int PANEL = Color.rgb(20, 27, 49);
+    private static int LILAC = Color.rgb(229, 199, 255);
+    private static int CYAN = Color.rgb(101, 221, 245);
+    private static int WHITE = Color.rgb(234, 241, 255);
+    private static final int PICK_WALLPAPER = 18768;
     private static final int PICK_MODEL = 18767;
 
     private final ExecutorService modelExecutor = Executors.newSingleThreadExecutor();
@@ -53,6 +58,7 @@ public class ChatActivity extends Activity {
                 checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 18766);
         }
+        applySavedTheme();
         history = loadHistory();
         buildScreen();
         if (history.length() == 0) {
@@ -69,7 +75,7 @@ public class ChatActivity extends Activity {
     private void buildScreen() {
         ScrollView rootScroll = new ScrollView(this);
         rootScroll.setFillViewport(true);
-        rootScroll.setBackgroundColor(BG);
+        rootScroll.setBackgroundColor(Color.TRANSPARENT);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(16), dp(16), dp(12));
@@ -89,6 +95,13 @@ public class ChatActivity extends Activity {
         header.addView(names, new LinearLayout.LayoutParams(0, -2, 1));
         header.addView(label("● CLOUD", 10, Color.rgb(131, 217, 178), true));
         root.addView(header);
+
+        Button appearance = smallButton("✧  ОБОИ И ЦВЕТОВАЯ СХЕМА", LILAC);
+        appearance.setOnClickListener(v -> showAppearanceMenu());
+        LinearLayout.LayoutParams appearanceParams = new LinearLayout.LayoutParams(-1, dp(44));
+        appearanceParams.topMargin = dp(12);
+        appearanceParams.bottomMargin = dp(8);
+        root.addView(appearance, appearanceParams);
 
         LinearLayout actions = new LinearLayout(this);
         actions.setPadding(0, dp(13), 0, dp(8));
@@ -162,7 +175,67 @@ public class ChatActivity extends Activity {
         LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
         fp.topMargin = dp(8);
         root.addView(footer, fp);
-        setContentView(rootScroll);
+        FrameLayout frame = new FrameLayout(this);
+        ImageView wallpaper = new ImageView(this);
+        wallpaper.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        File wallpaperFile = new File(getFilesDir(), "astra_chat_wallpaper.jpg");
+        if (wallpaperFile.exists()) {
+            Bitmap bitmap = BitmapFactory.decodeFile(wallpaperFile.getAbsolutePath());
+            if (bitmap != null) wallpaper.setImageBitmap(bitmap);
+        }
+        frame.addView(wallpaper, new FrameLayout.LayoutParams(-1, -1));
+        frame.addView(rootScroll, new FrameLayout.LayoutParams(-1, -1));
+        setContentView(frame);
+    }
+
+
+    private void showAppearanceMenu() {
+        new AlertDialog.Builder(this)
+                .setTitle("Внешний вид ASTRA")
+                .setItems(new String[]{"Выбрать обои из Галереи", "Тема: фиолетовая", "Тема: бирюзовая", "Тема: синяя"}, (d, which) -> {
+                    if (which == 0) {
+                        Intent pick = new Intent(Intent.ACTION_GET_CONTENT);
+                        pick.setType("image/*");
+                        pick.addCategory(Intent.CATEGORY_OPENABLE);
+                        startActivityForResult(Intent.createChooser(pick, "Выбери обои ASTRA"), PICK_WALLPAPER);
+                    } else {
+                        getSharedPreferences("astra_chat", MODE_PRIVATE).edit()
+                                .putInt("theme", which).apply();
+                        recreate();
+                    }
+                }).show();
+    }
+
+    private void applySavedTheme() {
+        int theme = getSharedPreferences("astra_chat", MODE_PRIVATE).getInt("theme", 1);
+        if (theme == 2) {
+            BG = Color.rgb(5, 18, 28); PANEL = Color.rgb(10, 31, 45);
+            LILAC = Color.rgb(111, 225, 222); CYAN = Color.rgb(88, 197, 255);
+            WHITE = Color.rgb(232, 249, 255);
+        } else if (theme == 3) {
+            BG = Color.rgb(5, 12, 29); PANEL = Color.rgb(15, 25, 49);
+            LILAC = Color.rgb(157, 190, 255); CYAN = Color.rgb(91, 160, 255);
+            WHITE = Color.rgb(237, 243, 255);
+        } else {
+            BG = Color.rgb(8, 11, 24); PANEL = Color.rgb(20, 27, 49);
+            LILAC = Color.rgb(229, 199, 255); CYAN = Color.rgb(101, 221, 245);
+            WHITE = Color.rgb(234, 241, 255);
+        }
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == PICK_WALLPAPER && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            try (InputStream in = getContentResolver().openInputStream(data.getData());
+                 FileOutputStream out = new FileOutputStream(new File(getFilesDir(), "astra_chat_wallpaper.jpg"))) {
+                byte[] buffer = new byte[8192];
+                int count;
+                while ((count = in.read(buffer)) > 0) out.write(buffer, 0, count);
+                recreate();
+            } catch (Exception e) {
+                new AlertDialog.Builder(this).setMessage("Не удалось установить обои: " + e.getMessage()).setPositiveButton("OK", null).show();
+            }
+        }
     }
 
     private void updateProviderStatus() {
