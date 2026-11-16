@@ -121,10 +121,8 @@ public class PerchanceBrowserActivity extends Activity {
         webView.evaluateJavascript(js, value -> {
             try {
                 if (value == null || "null".equals(value)) return;
-                String decoded = org.json.JSONTokener.class.getName() == null ? value : value;
-                if (decoded.startsWith("\"") && decoded.endsWith("\"")) {
-                    decoded = new JSONObject().put("v", decoded).getString("v");
-                }
+                Object parsed = new org.json.JSONTokener(value).nextValue();
+                String decoded = parsed instanceof String ? (String) parsed : String.valueOf(parsed);
                 JSONArray images = new JSONArray(decoded);
                 for (int i = 0; i < images.length(); i++) {
                     JSONObject item = images.optJSONObject(i);
@@ -132,13 +130,16 @@ public class PerchanceBrowserActivity extends Activity {
                     if (item.optInt("w") < 256 || item.optInt("h") < 256) continue;
                     String src = item.optString("src");
                     if (!src.startsWith("https://") || !seen.add(src)) continue;
-                    downloads.execute(() -> saveImage(src));
+                    downloads.execute(() -> {
+                        boolean saved = saveImage(src);
+                        if (!saved) seen.remove(src);
+                    });
                 }
             } catch (Exception e) { Log.w(TAG, "Image scan parse failed", e); }
         });
     }
 
-    private void saveImage(String imageUrl) {
+    private boolean saveImage(String imageUrl) {
         HttpURLConnection connection = null;
         try {
             connection = (HttpURLConnection) new URL(imageUrl).openConnection();
@@ -150,9 +151,9 @@ public class PerchanceBrowserActivity extends Activity {
             if (cookie != null) connection.setRequestProperty("Cookie", cookie);
             connection.connect();
             String mime = connection.getContentType();
-            if (mime == null || !mime.toLowerCase(Locale.US).startsWith("image/")) return;
+            if (mime == null || !mime.toLowerCase(Locale.US).startsWith("image/")) return false;
             long length = connection.getContentLengthLong();
-            if (length > 20L * 1024L * 1024L) return;
+            if (length > 20L * 1024L * 1024L) return false;
             String ext = mime.toLowerCase(Locale.US).contains("png") ? ".png"
                     : mime.toLowerCase(Locale.US).contains("webp") ? ".webp" : ".jpg";
             ContentValues values = new ContentValues();
@@ -163,7 +164,7 @@ public class PerchanceBrowserActivity extends Activity {
                 values.put(MediaStore.Images.Media.IS_PENDING, 1);
             }
             Uri target = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
-            if (target == null) return;
+            if (target == null) return false;
             try (InputStream in = connection.getInputStream();
                  OutputStream out = getContentResolver().openOutputStream(target)) {
                 if (out == null) throw new java.io.IOException("output stream unavailable");
@@ -183,8 +184,10 @@ public class PerchanceBrowserActivity extends Activity {
             Log.i(TAG, "Image saved " + target);
             ChatActivity.onPerchanceImageReady(target);
             runOnUiThread(() -> status.setText("PERCHANCE · изображение сохранено в ASTRA/Perchance"));
+            return true;
         } catch (Exception e) {
             Log.w(TAG, "Image download failed: " + e.getMessage());
+            return false;
         } finally {
             if (connection != null) connection.disconnect();
         }
