@@ -5,6 +5,7 @@ on:
     branches:
       - feature/local-qwen-android
       - feature/astra-chat-gif-studio
+      - feature/astra-purple-identity
 
 jobs:
   build:
