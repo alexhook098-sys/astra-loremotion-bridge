@@ -110,6 +110,12 @@ public class ChatActivity extends Activity {
         modelStatus.setPadding(dp(3), dp(8), dp(3), dp(8));
         root.addView(modelStatus);
 
+        Button gifStudio = smallButton("✦  GIF STUDIO · СОБРАТЬ ИЗ КАДРОВ", LILAC);
+        gifStudio.setOnClickListener(v -> startActivity(new Intent(this, GifStudioActivity.class)));
+        LinearLayout.LayoutParams gifParams = new LinearLayout.LayoutParams(-1, dp(44));
+        gifParams.bottomMargin = dp(8);
+        root.addView(gifStudio, gifParams);
+
         LinearLayout chatPanel = new LinearLayout(this);
         chatPanel.setOrientation(LinearLayout.VERTICAL);
         chatPanel.setPadding(dp(13), dp(13), dp(13), dp(10));
