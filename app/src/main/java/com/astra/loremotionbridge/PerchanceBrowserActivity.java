@@ -258,22 +258,49 @@ public class PerchanceBrowserActivity extends Activity {
     }
 
     private String buildPromptScript(String prompt) {
+        // Perchance UI can place its controls in nested same-origin frames or shadow roots.
+        // Search all reachable DOM roots instead of assuming the prompt is in the top document.
         return "(function(p){try{"
-                + "const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';};"
-                + "let a=Array.from(document.querySelectorAll('textarea,input[type=text],[contenteditable=true]')).filter(visible);"
-                + "a.sort((x,y)=>{const score=e=>(e.tagName==='TEXTAREA'?100:0)+(e.isContentEditable?40:0)+(/prompt|описан|изображ|image/i.test((e.getAttribute('placeholder')||'')+' '+(e.getAttribute('aria-label')||''))?30:0);return score(y)-score(x);});"
-                + "const e=a[0];if(!e)return 'FIELD_NOT_FOUND';"
-                + "if(e.isContentEditable){e.focus();e.innerText=p;e.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:p}));}"
-                + "else{e.focus();const proto=e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;const d=Object.getOwnPropertyDescriptor(proto,'value');if(d&&d.set)d.set.call(e,p);else e.value=p;e.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:p}));e.dispatchEvent(new Event('change',{bubbles:true}));}"
-                + "return 'FIELD_SET';}catch(e){return 'FIELD_ERROR:'+e.message;}})(" + JSONObject.quote(prompt) + ");";
+                + "const roots=[];function collect(root){if(!root||roots.indexOf(root)>=0)return;roots.push(root);"
+                + "try{Array.from(root.querySelectorAll('*')).forEach(n=>{if(n.shadowRoot)collect(n.shadowRoot);"
+                + "if(n.tagName==='IFRAME'){try{if(n.contentDocument)collect(n.contentDocument);}catch(x){}}});}catch(x){}}"
+                + "collect(document);"
+                + "const visible=e=>{try{const r=e.getBoundingClientRect(),s=getComputedStyle(e);"
+                + "return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none'&&!e.disabled&&!e.readOnly;}catch(x){return false;}};"
+                + "const all=[];const selectors='textarea,input:not([type=hidden]):not([type=button]):not([type=submit]),[contenteditable=true],[role=textbox],[placeholder],[data-placeholder]';"
+                + "roots.forEach(r=>{try{Array.from(r.querySelectorAll(selectors)).forEach(e=>{if(visible(e)&&all.indexOf(e)<0)all.push(e);});}catch(x){}});"
+                + "const score=e=>{const h=((e.getAttribute('placeholder')||'')+' '+(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('data-placeholder')||'')+' '+(e.getAttribute('name')||'')).toLowerCase();"
+                + "return (/введите ваш промпт|enter your prompt|type your prompt/.test(h)?1000:0)"
+                + "+(/prompt|описан|изображ|image/.test(h)?300:0)+(e.tagName==='TEXTAREA'?200:0)"
+                + "+(e.isContentEditable?100:0)+(e.getAttribute('role')==='textbox'?80:0);};"
+                + "all.sort((a,b)=>score(b)-score(a));const e=all[0];"
+                + "if(!e)return 'FIELD_NOT_FOUND roots='+roots.length+' candidates='+all.length;"
+                + "e.focus();if(e.isContentEditable||e.getAttribute('role')==='textbox'&&!('value' in e)){"
+                + "e.textContent=p;e.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:p}));}"
+                + "else{const proto=e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;"
+                + "const d=Object.getOwnPropertyDescriptor(proto,'value');if(d&&d.set)d.set.call(e,p);else e.value=p;"
+                + "try{e.setSelectionRange(p.length,p.length);}catch(x){}"
+                + "e.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:p}));"
+                + "e.dispatchEvent(new Event('change',{bubbles:true}));}"
+                + "return ((('value' in e?e.value:e.textContent)||'').trim().length>0)?'FIELD_SET':'FIELD_VERIFY_FAILED';"
+                + "}catch(e){return 'FIELD_ERROR:'+e.message;}})(" + JSONObject.quote(prompt) + ");";
     }
 
     private String buildGenerateClickScript() {
         return "(function(){try{"
-                + "const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';};"
-                + "const a=Array.from(document.querySelectorAll('button,[role=button],input[type=submit]')).filter(visible);"
-                + "const b=a.find(e=>/сгенерировать|generate|создать изображение|create image/i.test((e.innerText||e.value||'')+' '+(e.getAttribute('aria-label')||'')));"
-                + "if(!b)return 'BUTTON_NOT_FOUND';if(b.disabled||b.getAttribute('aria-disabled')==='true')return 'BUTTON_DISABLED';b.click();return 'CLICKED';"
+                + "const roots=[];function collect(root){if(!root||roots.indexOf(root)>=0)return;roots.push(root);"
+                + "try{Array.from(root.querySelectorAll('*')).forEach(n=>{if(n.shadowRoot)collect(n.shadowRoot);"
+                + "if(n.tagName==='IFRAME'){try{if(n.contentDocument)collect(n.contentDocument);}catch(x){}}});}catch(x){}}"
+                + "collect(document);"
+                + "const visible=e=>{try{const r=e.getBoundingClientRect(),s=getComputedStyle(e);"
+                + "return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';}catch(x){return false;}};"
+                + "const a=[];roots.forEach(r=>{try{Array.from(r.querySelectorAll('button,[role=button],input[type=submit],[onclick]')).forEach(e=>{"
+                + "if(visible(e)&&a.indexOf(e)<0)a.push(e);});}catch(x){}});"
+                + "const label=e=>((e.innerText||e.textContent||e.value||'')+' '+(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'')).replace(/\\s+/g,' ').trim();"
+                + "const b=a.find(e=>/сгенерировать|generate|создать изображение|create image/i.test(label(e)));"
+                + "if(!b)return 'BUTTON_NOT_FOUND candidates='+a.length;"
+                + "if(b.disabled||b.getAttribute('aria-disabled')==='true')return 'BUTTON_DISABLED';"
+                + "b.click();return 'CLICKED';"
                 + "}catch(e){return 'CLICK_ERROR:'+e.message;}})();";
     }
 
