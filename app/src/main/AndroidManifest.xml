@@ -26,6 +26,8 @@
         android:usesCleartextTraffic="true"
         android:supportsRtl="true">
 
+        <activity android:name=".GifStudioActivity" android:exported="false" />
+
         <activity
             android:name=".ChatActivity"
             android:exported="true">
