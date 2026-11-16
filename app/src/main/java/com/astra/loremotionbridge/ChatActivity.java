@@ -88,11 +88,34 @@ public class ChatActivity extends Activity {
         names.addView(label("A S T R A", 20, LILAC, true));
         names.addView(label("● ONLINE  ·  AI COMPANION", 9, CYAN, false));
         header.addView(names, new LinearLayout.LayoutParams(0, -2, 1));
-        header.addView(label("● CLOUD", 10, Color.rgb(131, 217, 178), true));
+        header.addView(label("● ONLINE", 10, Color.rgb(131, 217, 178), true));
+        header.setPadding(dp(12), dp(8), dp(12), dp(8));
+        header.setBackground(round(Color.rgb(12, 6, 22), Color.rgb(83, 45, 116), 22));
         root.addView(header);
 
+        LinearLayout identity = new LinearLayout(this);
+        identity.setOrientation(LinearLayout.VERTICAL);
+        identity.setGravity(Gravity.CENTER);
+        identity.setPadding(dp(12), dp(8), dp(12), dp(8));
+        TextView sigil = label("ᗅ", 52, LILAC, true);
+        sigil.setGravity(Gravity.CENTER);
+        sigil.setShadowLayer(dp(18), 0, 0, CYAN);
+        identity.addView(sigil, new LinearLayout.LayoutParams(-1, dp(62)));
+        TextView identityName = label("A S T R A", 17, WHITE, false);
+        identityName.setGravity(Gravity.CENTER);
+        identityName.setLetterSpacing(0.30f);
+        identity.addView(identityName);
+        TextView identityCaption = label("YOUR CREATIVE UNIVERSE", 8, CYAN, true);
+        identityCaption.setGravity(Gravity.CENTER);
+        identityCaption.setLetterSpacing(0.18f);
+        identity.addView(identityCaption);
+        LinearLayout.LayoutParams identityParams = new LinearLayout.LayoutParams(-1, dp(112));
+        identityParams.topMargin = dp(8);
+        identityParams.bottomMargin = dp(6);
+        root.addView(identity, identityParams);
+
         LinearLayout actions = new LinearLayout(this);
-        actions.setPadding(0, dp(13), 0, dp(8));
+        actions.setPadding(0, dp(7), 0, dp(6));
         Button browser = smallButton("◉ ASTRA BROWSER", CYAN);
         browser.setOnClickListener(v -> launchBrowser());
         actions.addView(browser, new LinearLayout.LayoutParams(0, dp(43), 1));
@@ -108,19 +131,19 @@ public class ChatActivity extends Activity {
         root.addView(installButton, new LinearLayout.LayoutParams(-1, dp(44)));
 
         modelStatus = label("Нужен API-ключ OpenRouter", 10, Color.rgb(160, 181, 211), false);
-        modelStatus.setPadding(dp(3), dp(8), dp(3), dp(8));
+        modelStatus.setPadding(dp(3), dp(5), dp(3), dp(5));
         root.addView(modelStatus);
 
         Button gifStudio = smallButton("✦  GIF STUDIO · СОБРАТЬ ИЗ КАДРОВ", LILAC);
         gifStudio.setOnClickListener(v -> startActivity(new Intent(this, GifStudioActivity.class)));
         LinearLayout.LayoutParams gifParams = new LinearLayout.LayoutParams(-1, dp(44));
-        gifParams.bottomMargin = dp(8);
+        gifParams.bottomMargin = dp(5);
         root.addView(gifStudio, gifParams);
 
         Button radioButton = smallButton("♫  SOUNDPARK DEEP · RADIO", CYAN);
         radioButton.setOnClickListener(v -> startActivity(new Intent(this, RadioActivity.class)));
         LinearLayout.LayoutParams radioParams = new LinearLayout.LayoutParams(-1, dp(40));
-        radioParams.bottomMargin = dp(10);
+        radioParams.bottomMargin = dp(5);
         root.addView(radioButton, radioParams);
 
         LinearLayout chatPanel = new LinearLayout(this);
@@ -132,7 +155,7 @@ public class ChatActivity extends Activity {
         messages = new LinearLayout(this);
         messages.setOrientation(LinearLayout.VERTICAL);
         messageScroll.addView(messages, new ScrollView.LayoutParams(-1, -2));
-        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, dp(360));
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, dp(290));
         sp.topMargin = dp(12);
         chatPanel.addView(messageScroll, sp);
         root.addView(chatPanel);
