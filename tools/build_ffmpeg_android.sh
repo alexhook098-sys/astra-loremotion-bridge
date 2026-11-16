@@ -70,10 +70,15 @@ make distclean >/dev/null 2>&1 || true
   --disable-doc \
   --disable-debug \
   --enable-small \
+  --enable-zlib \
   --extra-cflags="-O2 -fPIC" \
   --extra-ldflags="-Wl,-z,max-page-size=16384"
 
 make -j"$(nproc)"
+if ! ./ffmpeg -hide_banner -decoders 2>&1 | grep -E "[[:space:]]png[[:space:]]"; then
+  echo "ERROR: PNG decoder was not compiled into FFmpeg." >&2
+  exit 1
+fi
 mkdir -p "${OUT}"
 install -m 0755 ffmpeg "${OUT}/libffmpeg.so"
 "${STRIP}" "${OUT}/libffmpeg.so"
