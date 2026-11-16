@@ -4,7 +4,8 @@ on:
   push:
     branches:
       - feature/local-qwen-android
-      - feature/astra-chat-gif-studio\n      - feature/astra-one-click-motion
+      - feature/astra-chat-gif-studio
+      - feature/astra-one-click-motion
 
 jobs:
   build:
