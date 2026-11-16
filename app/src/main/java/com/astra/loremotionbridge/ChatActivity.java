@@ -170,11 +170,6 @@ public class ChatActivity extends Activity {
         composerParams.topMargin = dp(12);
         root.addView(composer, composerParams);
 
-        TextView footer = label("ASTRA  •  OPENROUTER CLOUD AI", 8, Color.rgb(117, 130, 156), false);
-        footer.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
-        fp.topMargin = dp(8);
-        root.addView(footer, fp);
         FrameLayout frame = new FrameLayout(this);
         ImageView wallpaper = new ImageView(this);
         wallpaper.setScaleType(ImageView.ScaleType.CENTER_CROP);
