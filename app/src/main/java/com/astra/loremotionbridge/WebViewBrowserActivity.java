@@ -142,7 +142,7 @@ public class WebViewBrowserActivity extends Activity {
             try {
                 Object decoded = new org.json.JSONTokener(raw).nextValue();
                 if (!(decoded instanceof String)) return;
-                JSONArray urls = new JSONArray((String) decoded);
+                org.json.JSONArray urls = new org.json.JSONArray((String) decoded);
                 for (int i = 0; i < urls.length(); i++) {
                     String imageUrl = urls.optString(i, "");
                     if (imageUrl.isEmpty() || !seenPerchanceImages.add(imageUrl)) continue;
