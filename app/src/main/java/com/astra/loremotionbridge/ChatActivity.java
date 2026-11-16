@@ -265,7 +265,8 @@ public class ChatActivity extends Activity {
                 runOnUiThread(() -> addMessage(
                         "Подготовлено 20 упорядоченных кадров (576×896). Папка: " +
                         frames.getAbsolutePath() +
-                        "\\nСледующий этап — подключение автономного интерполятора и сборка MP4.",
+                        "
+Следующий этап — подключение автономного интерполятора и сборка MP4.",
                         false, true));
             } catch (Exception e) {
                 runOnUiThread(() -> addMessage("Не удалось обработать референс: " +
