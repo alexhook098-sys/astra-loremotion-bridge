@@ -41,7 +41,8 @@ public class ChatActivity extends Activity {
     private static int CYAN = Color.rgb(101, 221, 245);
     private static int WHITE = Color.rgb(234, 241, 255);
     private static final int PICK_WALLPAPER = 18768;
-    private static final int PICK_MODEL = 18767;\n    private static final int PICK_MOTION_REFERENCE = 18769;
+    private static final int PICK_MODEL = 18767;
+    private static final int PICK_MOTION_REFERENCE = 18769;
 
     private final ExecutorService modelExecutor = Executors.newSingleThreadExecutor();
     private LinearLayout messages;
