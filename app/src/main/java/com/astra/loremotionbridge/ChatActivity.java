@@ -117,6 +117,12 @@ public class ChatActivity extends Activity {
         actions.addView(monitor, mp);
         root.addView(actions);
 
+        Button perchance = smallButton("✦  PERCHANCE · AI IMAGE GENERATOR", LILAC);
+        perchance.setOnClickListener(v -> startActivity(new Intent(this, PerchanceBrowserActivity.class)));
+        LinearLayout.LayoutParams perchanceParams = new LinearLayout.LayoutParams(-1, dp(43));
+        perchanceParams.bottomMargin = dp(8);
+        root.addView(perchance, perchanceParams);
+
         installButton = smallButton("＋  ПОДКЛЮЧИТЬ OPENROUTER · API KEY", CYAN);
         installButton.setOnClickListener(v -> showOpenRouterSetup());
         root.addView(installButton, new LinearLayout.LayoutParams(-1, dp(44)));
