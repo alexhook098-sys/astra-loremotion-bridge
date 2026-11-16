@@ -353,7 +353,6 @@ public class PerchanceBrowserActivity extends Activity {
                 + "try{Array.from(root.querySelectorAll('*')).forEach(n=>{if(n.shadowRoot)collect(n.shadowRoot);"
                 + "if(n.tagName==='IFRAME'){try{if(n.contentDocument)collect(n.contentDocument);}catch(x){}}});}catch(x){}}"
                 + "var fs=Array.from(document.querySelectorAll('iframe'));var sent=0;fs.forEach(function(f){try{var u=new URL(f.src||'',location.href);if(u.hostname.toLowerCase().endsWith('.perchance.org')&&u.hostname.toLowerCase()!=='perchance.org'){f.contentWindow.postMessage({__astraPerchanceCommand:true,id:'p'+Date.now(),action:'setPrompt',prompt:p},'*');sent++;}}catch(x){}});if(sent)return 'FIELD_SET_FRAME_COMMAND_SENT';"
-                + "var fs=Array.from(document.querySelectorAll('iframe'));var sent=0;fs.forEach(function(f){try{var u=new URL(f.src||'',location.href);if(u.hostname.toLowerCase().endsWith('.perchance.org')&&u.hostname.toLowerCase()!=='perchance.org'){f.contentWindow.postMessage({__astraPerchanceCommand:true,id:'g'+Date.now(),action:'generate'},'*');sent++;}}catch(x){}});if(sent)return 'CLICKED_FRAME_COMMAND_SENT';"
                 + "collect(document);"
                 + "const visible=e=>{try{const r=e.getBoundingClientRect(),s=getComputedStyle(e);"
                 + "return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none'&&!e.disabled&&!e.readOnly;}catch(x){return false;}};"
@@ -378,6 +377,7 @@ public class PerchanceBrowserActivity extends Activity {
 
     private String buildGenerateClickScript() {
         return "(function(){try{"
+                + "var fs=Array.from(document.querySelectorAll('iframe'));var sent=0;fs.forEach(function(f){try{var u=new URL(f.src||'',location.href);if(u.hostname.toLowerCase().endsWith('.perchance.org')&&u.hostname.toLowerCase()!=='perchance.org'){f.contentWindow.postMessage({__astraPerchanceCommand:true,id:'g'+Date.now(),action:'generate'},'*');sent++;}}catch(x){}});if(sent)return 'CLICKED_FRAME_COMMAND_SENT';"
                 + "const roots=[];function collect(root){if(!root||roots.indexOf(root)>=0)return;roots.push(root);"
                 + "try{Array.from(root.querySelectorAll('*')).forEach(n=>{if(n.shadowRoot)collect(n.shadowRoot);"
                 + "if(n.tagName==='IFRAME'){try{if(n.contentDocument)collect(n.contentDocument);}catch(x){}}});}catch(x){}}"
