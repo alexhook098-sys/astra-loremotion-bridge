@@ -15,6 +15,9 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 public final class FlowWebViewActivity extends Activity {
+    public static final String FLOW_PROJECT_URL = "https://flow.google.com/u/1/project/c311a6f3-e3de-4490-b97c-54ddd8610af1";
+    public static final String EXTRA_AUTOMATE = "astra_flow_automate";
+    public static final String EXTRA_PROMPT = "astra_flow_prompt";
     private static volatile FlowWebViewActivity instance;
     private WebView webView;
     private PowerManager.WakeLock flowWakeLock;
@@ -27,6 +30,9 @@ public final class FlowWebViewActivity extends Activity {
     private long lastDiagAt = 0L;
     private int diagPollCount = 0;
     private boolean diagRequestPending = false;
+    private String pendingPrompt;
+    private boolean promptInjected;
+    private int automationAttempts;
 
     private final Runnable diagPoll = new Runnable() {
         @Override public void run() {
@@ -99,6 +105,7 @@ public final class FlowWebViewActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         instance = this;
+        readAutomationIntent(getIntent());
 
         PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
         if (powerManager != null) {
@@ -150,6 +157,7 @@ public final class FlowWebViewActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 status.setText("ASTRA Flow: " + url);
+                if (pendingPrompt != null) main.postDelayed(this::attemptFlowAutomation, 1200L);
                 Log.i("ASTRA-FLOW", "Page finished: " + url);
                 lastLifecycleEvent = "pageFinished";
                 view.evaluateJavascript(
@@ -187,7 +195,7 @@ public final class FlowWebViewActivity extends Activity {
 
         String url = getIntent().getStringExtra("url");
         if (url == null || url.isEmpty()) {
-            url = "https://flow.google.com/u/1/project/54203513-938c-412e-9974-9ddf842bd7d5";
+            url = FLOW_PROJECT_URL;
         }
         hideAfterPageLoad = getIntent().getBooleanExtra("background", false);
         webView.loadUrl(url);
@@ -206,10 +214,62 @@ public final class FlowWebViewActivity extends Activity {
     protected void onNewIntent(android.content.Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        readAutomationIntent(intent);
         String url = intent.getStringExtra("url");
-        if (url != null && !url.isEmpty() && webView != null) {
-            openUrl(url);
+        if (url != null && !url.isEmpty() && webView != null) openUrl(url);
+        if (pendingPrompt != null && webView != null) main.postDelayed(this::attemptFlowAutomation, 900L);
+    }
+
+
+    private void readAutomationIntent(android.content.Intent intent) {
+        if (intent == null || !intent.getBooleanExtra(EXTRA_AUTOMATE, false)) return;
+        String prompt = intent.getStringExtra(EXTRA_PROMPT);
+        if (prompt == null || prompt.trim().isEmpty()) return;
+        pendingPrompt = prompt.trim();
+        promptInjected = false;
+        automationAttempts = 0;
+        Log.i("ASTRA-FLOW-AUTO", "Background prompt queued; length=" + pendingPrompt.length());
+    }
+
+    private void attemptFlowAutomation() {
+        if (webView == null || pendingPrompt == null || isFinishing() || isDestroyed()) return;
+        if (++automationAttempts > 45) {
+            Log.w("ASTRA-FLOW-AUTO", "Timeout waiting for Flow controls");
+            pendingPrompt = null;
+            return;
         }
+        webView.evaluateJavascript(buildFlowAutomationScript(pendingPrompt, promptInjected), result -> {
+            String value = result == null ? "" : result;
+            Log.i("ASTRA-FLOW-AUTO", "attempt=" + automationAttempts + " result=" + value);
+            if (value.contains("FIELD_SET")) {
+                promptInjected = true;
+                status.setText("ASTRA Flow: prompt entered");
+                main.postDelayed(this::attemptFlowAutomation, 700L);
+            } else if (value.contains("GENERATE_CLICKED")) {
+                status.setText("ASTRA Flow: generation submitted in background");
+                pendingPrompt = null;
+            } else {
+                main.postDelayed(this::attemptFlowAutomation, 1000L);
+            }
+        });
+    }
+
+    private String buildFlowAutomationScript(String prompt, boolean clickGenerate) {
+        String quoted = org.json.JSONObject.quote(prompt);
+        if (clickGenerate) {
+            return "(function(){try{const es=Array.from(document.querySelectorAll('button,[role=button]'));"
+                + "const b=es.find(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);"
+                + "const t=(e.innerText||e.textContent||e.getAttribute('aria-label')||'').trim();"
+                + "return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&!e.disabled&&/^(generate image|generate|создать|сгенерировать)$/i.test(t);});"
+                + "if(!b)return 'GENERATE_BUTTON_NOT_FOUND';b.click();return 'GENERATE_CLICKED';"
+                + "}catch(e){return 'ERROR:'+e.message;}})()";
+        }
+        return "(function(p){try{const es=Array.from(document.querySelectorAll('textarea,input:not([type=hidden]),[contenteditable=true],[role=textbox]'));"
+            + "const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&!e.disabled&&!e.readOnly;};"
+            + "const a=es.filter(vis);a.sort((x,y)=>{const q=e=>{const t=((e.getAttribute('placeholder')||'')+' '+(e.getAttribute('aria-label')||'')).toLowerCase();return (/prompt|describe|what do you want|video|create/.test(t)?100:0)+(e.tagName==='TEXTAREA'?20:0)+(e.isContentEditable?10:0);};return q(y)-q(x);});"
+            + "const e=a[0];if(!e)return 'PROMPT_FIELD_NOT_FOUND';e.focus();if(e.isContentEditable)e.textContent=p;else{const z=Object.getOwnPropertyDescriptor(e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value');if(z&&z.set)z.set.call(e,p);else e.value=p;}"
+            + "e.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:p}));e.dispatchEvent(new Event('change',{bubbles:true}));return 'FIELD_SET';"
+            + "}catch(e){return 'ERROR:'+e.message;}})(" + quoted + ")";
     }
 
     public void openUrl(String url) {
