@@ -35,6 +35,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class ChatActivity extends Activity {
+    private static volatile ChatActivity activeInstance;
     private static int BG = Color.rgb(8, 11, 24);
     private static int PANEL = Color.rgb(20, 27, 49);
     private static int LILAC = Color.rgb(229, 199, 255);
@@ -55,6 +56,7 @@ public class ChatActivity extends Activity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        activeInstance = this;
         if (Build.VERSION.SDK_INT >= 33 &&
                 checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 18766);
@@ -224,7 +226,7 @@ public class ChatActivity extends Activity {
         }
     }
 
-    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    @Override protected void onDestroy() {\n        if (activeInstance == this) activeInstance = null;\n        super.onDestroy();\n    }\n\n    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == PICK_MOTION_REFERENCE && resultCode == RESULT_OK && data != null && data.getData() != null) {
             processMotionReference(data.getData());
@@ -291,6 +293,27 @@ public class ChatActivity extends Activity {
                 });
             }
         }
+    }
+
+    public static void onPerchanceImageReady(Uri image) {
+        ChatActivity activity = activeInstance;
+        if (activity == null || image == null) return;
+        activity.runOnUiThread(() -> {
+            activity.addMessage("✦ PERCHANCE: новое изображение сохранено в Галерею. Нажми, чтобы открыть.", false, true);
+            int last = activity.messages.getChildCount() - 1;
+            if (last >= 0) {
+                View row = activity.messages.getChildAt(last);
+                if (row instanceof ViewGroup && ((ViewGroup) row).getChildCount() > 0) {
+                    View bubble = ((ViewGroup) row).getChildAt(0);
+                    bubble.setOnClickListener(v -> {
+                        Intent open = new Intent(Intent.ACTION_VIEW);
+                        open.setDataAndType(image, "image/*");
+                        open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        try { activity.startActivity(open); } catch (Exception ignored) {}
+                    });
+                }
+            }
+        });
     }
 
     private void updateProviderStatus() {
