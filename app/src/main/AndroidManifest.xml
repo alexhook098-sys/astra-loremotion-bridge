@@ -25,6 +25,7 @@
         android:allowBackup="false"
         android:usesCleartextTraffic="true"
         android:supportsRtl="true">
+        <uses-native-library android:name="libagifencoder.quram.so" android:required="false" />
 
         <activity android:name=".GifStudioActivity" android:exported="false" />
 
