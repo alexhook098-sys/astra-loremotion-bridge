@@ -280,8 +280,7 @@ public class ChatActivity extends Activity {
     }
 
     private void addVideoMessage(Uri video) {
-        String message = "✦ ASTRA MOTION: видео сохранено в Галерею · Movies/ASTRA
-Нажми здесь, чтобы открыть MP4.";
+        String message = "✦ ASTRA MOTION: видео сохранено в Галерею · Movies/ASTRA\\nНажми здесь, чтобы открыть MP4.";
         addMessage(message, false, true);
         int last = messages.getChildCount() - 1;
         if (last >= 0) {
