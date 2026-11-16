@@ -2,6 +2,8 @@ package com.astra.loremotionbridge;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.text.InputType;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
@@ -61,7 +63,7 @@ public class ChatActivity extends Activity {
                 if (m != null) addMessage(m.optString("text"), m.optBoolean("user"), false);
             }
         }
-        autoLoadStoredModel();
+        updateProviderStatus();
     }
 
     private void buildScreen() {
@@ -83,9 +85,9 @@ public class ChatActivity extends Activity {
         names.setOrientation(LinearLayout.VERTICAL);
         names.setPadding(dp(12), 0, 0, 0);
         names.addView(label("ASTRA CHAT", 20, LILAC, true));
-        names.addView(label("ЛОКАЛЬНЫЙ ИНТЕЛЛЕКТ", 9, CYAN, false));
+        names.addView(label("OPENROUTER AI", 9, CYAN, false));
         header.addView(names, new LinearLayout.LayoutParams(0, -2, 1));
-        header.addView(label("● LOCAL", 10, Color.rgb(131, 217, 178), true));
+        header.addView(label("● CLOUD", 10, Color.rgb(131, 217, 178), true));
         root.addView(header);
 
         LinearLayout actions = new LinearLayout(this);
@@ -100,11 +102,11 @@ public class ChatActivity extends Activity {
         actions.addView(monitor, mp);
         root.addView(actions);
 
-        installButton = smallButton("＋  УСТАНОВИТЬ МОДЕЛЬ (ОДИН РАЗ)", CYAN);
-        installButton.setOnClickListener(v -> chooseModel());
+        installButton = smallButton("＋  ПОДКЛЮЧИТЬ OPENROUTER · API KEY", CYAN);
+        installButton.setOnClickListener(v -> showOpenRouterSetup());
         root.addView(installButton, new LinearLayout.LayoutParams(-1, dp(44)));
 
-        modelStatus = label("Проверяю установленную модель…", 10, Color.rgb(160, 181, 211), false);
+        modelStatus = label("Нужен API-ключ OpenRouter", 10, Color.rgb(160, 181, 211), false);
         modelStatus.setPadding(dp(3), dp(8), dp(3), dp(8));
         root.addView(modelStatus);
 
@@ -143,7 +145,7 @@ public class ChatActivity extends Activity {
         composerParams.topMargin = dp(12);
         root.addView(composer, composerParams);
 
-        TextView footer = label("ASTRA  •  ON-DEVICE AI", 8, Color.rgb(117, 130, 156), false);
+        TextView footer = label("ASTRA  •  OPENROUTER CLOUD AI", 8, Color.rgb(117, 130, 156), false);
         footer.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
         fp.topMargin = dp(8);
@@ -151,73 +153,42 @@ public class ChatActivity extends Activity {
         setContentView(rootScroll);
     }
 
-    private void autoLoadStoredModel() {
-        if (!QwenRuntime.hasStoredModel()) {
-            modelStatus.setText("Модель ещё не установлена. Выбери GGUF-файл один раз.");
-            return;
-        }
-        modelStatus.setText("Модель найдена. Автоматически подключаю…");
-        modelExecutor.execute(() -> {
-            String result = QwenRuntime.loadStoredModel();
-            runOnUiThread(() -> {
-                JSONObject json = parse(result);
-                if (json.optBoolean("loaded")) {
-                    modelStatus.setText("● QWEN ГОТОВА · МОДЕЛЬ СОХРАНЕНА НА УСТРОЙСТВЕ");
-                } else {
-                    modelStatus.setText("Не удалось загрузить модель: " + json.optString("error", "unknown"));
-                }
-            });
-        });
+    private void updateProviderStatus() {
+        boolean ready = OpenRouterClient.hasKey();
+        modelStatus.setText(ready ? "● OPENROUTER ПОДКЛЮЧЁН · МОДЕЛЬ: FREE ROUTER"
+                : "Вставь API-ключ OpenRouter один раз для подключения");
+        installButton.setText(ready ? "✓ OPENROUTER ПОДКЛЮЧЁН · ИЗМЕНИТЬ КЛЮЧ" : "＋  ПОДКЛЮЧИТЬ OPENROUTER · API KEY");
     }
 
-    private void chooseModel() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("*/*");
-        startActivityForResult(intent, PICK_MODEL);
-    }
-
-    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != PICK_MODEL || resultCode != RESULT_OK || data == null || data.getData() == null) return;
-        Uri uri = data.getData();
-        modelStatus.setText("Копирую модель во внутреннее хранилище ASTRA…");
-        installButton.setEnabled(false);
-        modelExecutor.execute(() -> {
-            String error = null;
-            try {
-                File directory = new File(getFilesDir(), "models");
-                if (!directory.exists() && !directory.mkdirs()) throw new IllegalStateException("Не удалось создать папку моделей");
-                File temp = new File(directory, "qwen-model.gguf.tmp");
-                File target = new File(directory, "qwen-model.gguf");
-                try (InputStream in = getContentResolver().openInputStream(uri);
-                     FileOutputStream out = new FileOutputStream(temp)) {
-                    if (in == null) throw new IllegalStateException("Не удалось открыть выбранный файл");
-                    byte[] buffer = new byte[1024 * 1024];
-                    int read;
-                    while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
-                    out.getFD().sync();
-                }
-                if (temp.length() < 1024 * 1024) throw new IllegalStateException("Файл слишком мал для GGUF-модели");
-                if (target.exists() && !target.delete()) throw new IllegalStateException("Не удалось заменить старую модель");
-                if (!temp.renameTo(target)) throw new IllegalStateException("Не удалось сохранить модель");
-                String loaded = QwenRuntime.loadStoredModel();
-                JSONObject result = parse(loaded);
-                if (!result.optBoolean("loaded")) throw new IllegalStateException(result.optString("error", "Ошибка загрузки модели"));
-            } catch (Throwable e) {
-                error = String.valueOf(e.getMessage());
-            }
-            final String finalError = error;
-            runOnUiThread(() -> {
-                installButton.setEnabled(true);
-                if (finalError == null) {
-                    modelStatus.setText("● QWEN ГОТОВА · ФАЙЛ СОХРАНЁН, ПОВТОРНЫЙ ВЫБОР НЕ НУЖЕН");
-                    addMessage("Модель установлена и подключена. Теперь можно общаться со мной офлайн. ✦", false, true);
-                } else {
-                    modelStatus.setText("Ошибка установки: " + finalError);
-                }
-            });
-        });
+    private void showOpenRouterSetup() {
+        EditText keyInput = new EditText(this);
+        keyInput.setSingleLine(true);
+        keyInput.setHint("sk-or-v1-…");
+        keyInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        keyInput.setTextColor(WHITE);
+        keyInput.setHintTextColor(Color.GRAY);
+        LinearLayout box = new LinearLayout(this);
+        box.setPadding(dp(20), dp(8), dp(20), 0);
+        box.addView(keyInput, new LinearLayout.LayoutParams(-1, dp(54)));
+        new AlertDialog.Builder(this)
+                .setTitle("Подключить OpenRouter")
+                .setMessage("Вставь API-ключ. Он будет сохранён зашифрованным на этом устройстве. По умолчанию используется бесплатный маршрутизатор openrouter/free.")
+                .setView(box)
+                .setPositiveButton("СОХРАНИТЬ", (dialog, which) -> {
+                    try {
+                        OpenRouterClient.saveKey(keyInput.getText().toString());
+                        updateProviderStatus();
+                        addMessage("OpenRouter подключён. Теперь можно общаться без загрузки GGUF-модели. ✦", false, true);
+                    } catch (Exception e) {
+                        modelStatus.setText("Ключ не сохранён: " + e.getMessage());
+                    }
+                })
+                .setNeutralButton("УДАЛИТЬ КЛЮЧ", (dialog, which) -> {
+                    OpenRouterClient.clearKey();
+                    updateProviderStatus();
+                })
+                .setNegativeButton("ОТМЕНА", null)
+                .show();
     }
 
     private void launchBrowser() {
@@ -230,8 +201,8 @@ public class ChatActivity extends Activity {
     private void sendMessage() {
         String value = input.getText().toString().trim();
         if (value.isEmpty() || busy) return;
-        if (!QwenRuntime.isLoaded()) {
-            addMessage("Сначала установи GGUF-модель кнопкой выше. После этого ASTRA будет подключать её автоматически.", false, true);
+        if (!OpenRouterClient.hasKey()) {
+            addMessage("Сначала подключи OpenRouter: нажми кнопку API KEY и вставь ключ.", false, true);
             return;
         }
         addMessage(value, true, true);
@@ -239,22 +210,17 @@ public class ChatActivity extends Activity {
         String localAnswer = AstraCore.handleLocal(value);
         if (localAnswer != null) {
             addMessage(localAnswer, false, true);
-            modelStatus.setText("● ASTRA CORE · ЛОКАЛЬНЫЙ ОТВЕТ");
+            modelStatus.setText("● ASTRA · ЛОКАЛЬНЫЙ ОТВЕТ");
             return;
         }
         busy = true;
-        modelStatus.setText("ASTRA CORE ПОДГОТАВЛИВАЕТ ЗАПРОС…");
+        modelStatus.setText("ASTRA ОБРАЩАЕТСЯ К OPENROUTER…");
         modelExecutor.execute(() -> {
-            JSONObject result = parse(QwenRuntime.chat(AstraCore.preparePrompt(value), 48));
-            String answer = result.optBoolean("ok")
-                    ? result.optString("response", "")
-                    : "Ошибка модели: " + result.optString("error", "unknown");
+            String answer = OpenRouterClient.chat(value, history, "openrouter/free");
             runOnUiThread(() -> {
                 addMessage(answer.isEmpty() ? "Модель не вернула ответ." : answer, false, true);
                 busy = false;
-                modelStatus.setText(QwenRuntime.isLoaded()
-                        ? "● QWEN ГОТОВА · ЛОКАЛЬНЫЙ РЕЖИМ"
-                        : "Модель отключена. Открой чат повторно для восстановления.");
+                updateProviderStatus();
             });
         });
     }
