@@ -39,6 +39,44 @@ public final class FlowWebViewActivity extends Activity {
     private boolean pageLoaded;
     private boolean backgroundRequested;
     private int automationAttempts;
+    private String generationState = "idle";
+    private String generationEvidence = "";
+    private long generationStartedAt = 0L;
+    private int generationObserverPolls = 0;
+    private final Runnable generationObserver = new Runnable() {
+        @Override public void run() {
+            if (webView == null || isFinishing() || isDestroyed()
+                    || generationStartedAt == 0L) return;
+            String script = "(function(){try{const t=(document.body&&document.body.innerText)||'';"
+                + "const v=[...document.querySelectorAll('video')].filter(x=>x.getBoundingClientRect().width>0).length;"
+                + "const p=document.querySelector('[role=textbox][aria-label=\\\"Что вы хотите создать?\\\"]')||document.querySelector('.ProseMirror[contenteditable=true]');"
+                + "const q=p?(p.innerText||p.value||'').trim():'';"
+                + "const busy=document.querySelectorAll('[aria-busy=true],[role=progressbar]').length;"
+                + "return JSON.stringify({tail:t.slice(-1400),videos:v,prompt:q,busy:busy});"
+                + "}catch(e){return JSON.stringify({error:String(e)});}})()";
+            webView.evaluateJavascript(script, value -> {
+                generationObserverPolls++;
+                generationEvidence = value == null ? "" : value;
+                String v = generationEvidence.toLowerCase(java.util.Locale.ROOT);
+                if (v.contains("ошибка генерац") || v.contains("generation failed")
+                        || v.contains("не удалось создать")) {
+                    generationState = "failed";
+                } else if (v.contains("\\\"busy\\\":1")
+                        || v.contains("\\\"videos\\\":1")
+                        || v.contains("генерация") || v.contains("создание")
+                        || v.contains("processing") || v.contains("generating")) {
+                    generationState = "running";
+                } else if (!"failed".equals(generationState)
+                        && !"running".equals(generationState)) {
+                    generationState = "submitted_unconfirmed";
+                }
+                Log.i("ASTRA-FLOW-OBSERVER", "poll=" + generationObserverPolls
+                        + " state=" + generationState + " evidence=" + generationEvidence);
+                if (webView != null && !isFinishing() && !isDestroyed())
+                    main.postDelayed(this, 5000L);
+            });
+        }
+    };
 
     private final Runnable diagPoll = new Runnable() {
         @Override public void run() {
@@ -295,6 +333,7 @@ public final class FlowWebViewActivity extends Activity {
         if (webView == null || pendingPrompt == null || isFinishing() || isDestroyed()) return;
         if (++automationAttempts > 45) {
             Log.w("ASTRA-FLOW-AUTO", "Timeout waiting for Flow controls");
+            generationState = "automation_timeout";
             pendingPrompt = null;
             return;
         }
@@ -303,16 +342,22 @@ public final class FlowWebViewActivity extends Activity {
             Log.i("ASTRA-FLOW-AUTO", "attempt=" + automationAttempts + " result=" + value);
             if (value.contains("FIELD_SET")) {
                 promptInjected = true;
+                generationState = "prompt_entered";
                 status.setText("ASTRA Flow: prompt entered");
                 main.postDelayed(this::attemptFlowAutomation, 700L);
             } else if (value.contains("GENERATE_CLICKED")) {
-                status.setText("ASTRA Flow: generation submitted");
-                Log.i("ASTRA-FLOW-AUTO", "Generate action dispatched to Flow");
+                generationStartedAt = System.currentTimeMillis();
+                generationState = "submitted_unconfirmed";
+                generationEvidence = "Generate button click dispatched; awaiting page evidence";
+                status.setText("ASTRA Flow: отправлено · проверяю выполнение");
+                Log.i("ASTRA-FLOW-AUTO", "Generate click dispatched; native observer started");
                 pendingPrompt = null;
+                main.removeCallbacks(generationObserver);
+                main.postDelayed(generationObserver, 1500L);
                 if (backgroundRequested) main.postDelayed(() -> {
                     if (!isFinishing() && !isDestroyed()) {
                         moveTaskToBack(true);
-                        Log.i("ASTRA-FLOW", "Background mode: minimized after prompt submission");
+                        Log.i("ASTRA-FLOW", "Background mode: minimized after generate click; native observer remains active");
                     }
                 }, 500L);
             } else {
@@ -431,6 +476,9 @@ public final class FlowWebViewActivity extends Activity {
                 + "\",\"lifecycle\":\"" + esc(lastLifecycleEvent)
                 + "\",\"diagPollCount\":" + diagPollCount
                 + ",\"lastDiagAgeMs\":" + diagAge
+                + ",\"generationState\":\"" + esc(generationState) + "\""
+                + ",\"generationObserverPolls\":" + generationObserverPolls
+                + ",\"generationEvidence\":\"" + esc(generationEvidence) + "\""
                 + ",\"pageDiag\":\"" + esc(lastPageDiag) + "\"}";
     }
 
@@ -481,6 +529,7 @@ public final class FlowWebViewActivity extends Activity {
     protected void onDestroy() {
         lastLifecycleEvent = "onDestroy";
         main.removeCallbacks(diagPoll);
+        main.removeCallbacks(generationObserver);
         if (instance == this) {
             instance = null;
         }
