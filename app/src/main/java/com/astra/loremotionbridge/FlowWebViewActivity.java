@@ -332,7 +332,7 @@ public final class FlowWebViewActivity extends Activity {
                 + "}catch(e){return 'ERROR:'+e.message;}})()";
         }
         return "(function(p){try{"
-            + "const e=document.querySelector('[role=textbox][aria-label=\\\"Что вы хотите создать?\\\"]')||document.querySelector('.ProseMirror[contenteditable=\\\"true\\\"]');"
+            + "const e=Array.from(document.querySelectorAll('[role=textbox]')).find(x=>x.getAttribute('aria-label')==='Что вы хотите создать?')||document.querySelector('.ProseMirror[contenteditable=true]');"
             + "if(!e)return 'PROMPT_FIELD_NOT_FOUND';"
             + "e.focus();const setter=Object.getOwnPropertyDescriptor(HTMLElement.prototype,'innerText')?.set;"
             + "if(setter)setter.call(e,p);else e.innerText=p;"
