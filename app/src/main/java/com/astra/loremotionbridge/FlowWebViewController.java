@@ -5,7 +5,7 @@ import android.content.Intent;
 
 public final class FlowWebViewController {
     private static final String PROJECT_URL =
-            "https://flow.google.com/u/1/project/54203513-938c-412e-9974-9ddf842bd7d5";
+            "https://flow.google.com/u/1/project/c311a6f3-e3de-4490-b97c-54ddd8610af1";
 
     private FlowWebViewController() {}
 
