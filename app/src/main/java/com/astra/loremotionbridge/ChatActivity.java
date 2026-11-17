@@ -56,6 +56,7 @@ public class ChatActivity extends Activity {
     private Button installButton;
     private JSONArray history;
     private volatile boolean busy = false;
+    private boolean chatResumed = false;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -75,6 +76,8 @@ public class ChatActivity extends Activity {
                 if (m != null) {
                     if ("perchance_image".equals(m.optString("type"))) {
                         addPerchanceImageMessage(Uri.parse(m.optString("uri", "")), false);
+                    } else if ("flow_video".equals(m.optString("type"))) {
+                        addVideoMessage(Uri.parse(m.optString("uri", "")), false);
                     } else {
                         addMessage(m.optString("text"), m.optBoolean("user"), false);
                     }
@@ -88,7 +91,14 @@ public class ChatActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        chatResumed = true;
         consumePendingPerchanceImages();
+        consumePendingFlowVideos();
+    }
+
+    @Override protected void onPause() {
+        chatResumed = false;
+        super.onPause();
     }
 
     private void buildScreen() {
@@ -307,8 +317,13 @@ public class ChatActivity extends Activity {
     }
 
     private void addVideoMessage(Uri video) {
-        String message = "✦ ASTRA MOTION: видео сохранено в Галерею · Movies/ASTRA\\nНажми здесь, чтобы открыть MP4.";
-        addMessage(message, false, true);
+        addVideoMessage(video, true);
+    }
+
+    private void addVideoMessage(Uri video, boolean save) {
+        if (video == null || video.toString().isEmpty() || messages == null) return;
+        String message = "✦ ASTRA FLOW: видео сохранено · Movies/ASTRA/Flow\\nНажми здесь, чтобы открыть MP4.";
+        addMessage(message, false, false);
         int last = messages.getChildCount() - 1;
         if (last >= 0) {
             View row = messages.getChildAt(last);
@@ -323,6 +338,19 @@ public class ChatActivity extends Activity {
                         addMessage("Не найдено приложение для просмотра MP4.", false, true);
                     }
                 });
+            }
+        }
+        if (save) {
+            try {
+                history.put(new JSONObject()
+                        .put("type", "flow_video")
+                        .put("text", message)
+                        .put("uri", video.toString())
+                        .put("user", false));
+                getSharedPreferences("astra_chat", MODE_PRIVATE).edit()
+                        .putString("messages", history.toString()).apply();
+            } catch (Exception e) {
+                android.util.Log.e("ASTRA-FLOW-CHAT", "Could not persist video message", e);
             }
         }
     }
@@ -363,7 +391,11 @@ public class ChatActivity extends Activity {
             prefs.edit().putString("flow_pending_videos", pending.toString()).apply();
         } catch (Exception ignored) {}
         ChatActivity activity = activeInstance;
-        if (activity != null) activity.runOnUiThread(activity::consumePendingFlowVideos);
+        if (activity != null && activity.chatResumed) {
+            activity.runOnUiThread(() -> {
+                if (activity.chatResumed) activity.consumePendingFlowVideos();
+            });
+        }
     }
 
     private void consumePendingFlowVideos() {
@@ -378,7 +410,7 @@ public class ChatActivity extends Activity {
             JSONObject item = pending.optJSONObject(i);
             if (item == null) continue;
             String value = item.optString("uri", "");
-            if (!value.isEmpty()) addVideoMessage(Uri.parse(value));
+            if (!value.isEmpty()) addVideoMessage(Uri.parse(value), true);
         }
     }
 
