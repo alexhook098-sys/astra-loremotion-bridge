@@ -255,6 +255,7 @@ public final class FlowWebViewActivity extends Activity {
                 pageLoaded = true;
                 main.postDelayed(FlowWebViewActivity.this::diagnoseFlowPage, 700L);
                 main.postDelayed(FlowWebViewActivity.this::installVideoCapture, 1400L);
+                main.postDelayed(FlowWebViewActivity.this::installNetworkDiagnostics, 1700L);
                 if (pendingPrompt != null) main.postDelayed(FlowWebViewActivity.this::attemptFlowAutomation, 1200L);
                 Log.i("ASTRA-FLOW", "Page finished: " + url);
                 lastLifecycleEvent = "pageFinished";
@@ -436,6 +437,23 @@ public final class FlowWebViewActivity extends Activity {
         private OutputStream output;
         private long written;
         private static final long MAX_VIDEO_BYTES = 250L * 1024L * 1024L;
+
+        // Diagnostic only: report a signed Flow video URL found in a network response.
+        // Never log or persist the temporary signature/query string.
+        @JavascriptInterface
+        public void reportNetworkCandidate(String videoUrl, String source) {
+            if (videoUrl == null || videoUrl.length() > 8192) return;
+            try {
+                Uri parsed = Uri.parse(videoUrl);
+                if (!"https".equalsIgnoreCase(parsed.getScheme())
+                        || !"flow-content.google".equalsIgnoreCase(parsed.getHost())
+                        || parsed.getPath() == null
+                        || !parsed.getPath().startsWith("/video/")) return;
+                String safeSource = source == null ? "unknown" : source.replaceAll("[^A-Za-z0-9_:/.-]", "_");
+                Log.i("ASTRA-FLOW-NET", "VIDEO_URL_CANDIDATE source=" + safeSource
+                        + " host=" + parsed.getHost() + " path=" + parsed.getPath());
+            } catch (Exception ignored) {}
+        }
 
         // Downloads the signed MP4 URL exposed by Flow's active video element.
         // The URL is short-lived; consume it immediately and never persist it in app state.
@@ -626,6 +644,40 @@ public final class FlowWebViewActivity extends Activity {
             target = null;
             written = 0L;
         }
+    }
+
+    private void installNetworkDiagnostics() {
+        if (webView == null || isFinishing() || isDestroyed()) return;
+        String js = "(function(){try{"
+            + "if(window.__astraFlowNetDiagInstalled)return 'already-installed';"
+            + "window.__astraFlowNetDiagInstalled=true;"
+            + "const report=(src,value)=>{try{if(value==null)return;const text=typeof value==='string'?value:JSON.stringify(value);"
+            + "const re=/https:\\/\\/flow-content\\.google\\/video\\/[A-Za-z0-9._~!    private String videoCaptureScanScript() {
+        return "(function(){try{window.__astraFlowVideoScan&&window.__astraFlowVideoScan();return 'scan';}catch(e){return String(e);}})()";
+    }
+
+    private void installVideoCapture() {'()*+,;=:@%/?#-]+/g;"
+            + "let m;while((m=re.exec(text))!==null){try{window.ASTRAFlowVideo.reportNetworkCandidate(m[0],src);}catch(e){}}"
+            + "}catch(e){}};"
+            + "const originalFetch=window.fetch;"
+            + "if(originalFetch){window.fetch=function(){const args=arguments;let requestUrl='';try{const q=args[0];requestUrl=typeof q==='string'?q:(q&&q.url)||'';}catch(e){}"
+            + "const promise=originalFetch.apply(this,args);promise.then(response=>{try{"
+            + "if(requestUrl)report('fetch-request',requestUrl);"
+            + "const type=response.headers&&response.headers.get('content-type')||'';"
+            + "if(/json|text|javascript/i.test(type))response.clone().text().then(body=>report('fetch-response',body));"
+            + "}catch(e){}}).catch(()=>{});return promise;};}"
+            + "const XHR=window.XMLHttpRequest;"
+            + "if(XHR&&XHR.prototype){const oldOpen=XHR.prototype.open;const oldSend=XHR.prototype.send;"
+            + "XHR.prototype.open=function(method,url){this.__astraFlowUrl=String(url||'');return oldOpen.apply(this,arguments);};"
+            + "XHR.prototype.send=function(){this.addEventListener('load',function(){try{"
+            + "if(this.__astraFlowUrl)report('xhr-request',this.__astraFlowUrl);"
+            + "if(this.responseType===''||this.responseType==='text')report('xhr-response',this.responseText);"
+            + "else if(this.responseType==='json')report('xhr-response',this.response);"
+            + "}catch(e){}},{once:true});return oldSend.apply(this,arguments);};}"
+            + "return 'network-diagnostics-installed';"
+            + "}catch(e){return 'network-diagnostics-error:'+String(e);}})()";
+        webView.evaluateJavascript(js, value ->
+                Log.i("ASTRA-FLOW-NET", "Network diagnostics setup=" + value));
     }
 
     private String videoCaptureScanScript() {
