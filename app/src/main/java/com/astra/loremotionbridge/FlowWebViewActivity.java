@@ -2,6 +2,7 @@ package com.astra.loremotionbridge;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
