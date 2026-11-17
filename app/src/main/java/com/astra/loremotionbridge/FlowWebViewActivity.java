@@ -36,6 +36,8 @@ public final class FlowWebViewActivity extends Activity {
     private boolean diagRequestPending = false;
     private String pendingPrompt;
     private boolean promptInjected;
+    private boolean pageLoaded;
+    private boolean backgroundRequested;
     private int automationAttempts;
 
     private final Runnable diagPoll = new Runnable() {
@@ -190,6 +192,7 @@ public final class FlowWebViewActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 status.setText("ASTRA Flow: " + url);
+                pageLoaded = true;
                 main.postDelayed(FlowWebViewActivity.this::diagnoseFlowPage, 700L);
                 if (pendingPrompt != null) main.postDelayed(FlowWebViewActivity.this::attemptFlowAutomation, 1200L);
                 Log.i("ASTRA-FLOW", "Page finished: " + url);
@@ -231,17 +234,10 @@ public final class FlowWebViewActivity extends Activity {
         if (url == null || url.isEmpty()) {
             url = FLOW_PROJECT_URL;
         }
-        hideAfterPageLoad = getIntent().getBooleanExtra("background", false);
+        backgroundRequested = getIntent().getBooleanExtra("background", false);
+        hideAfterPageLoad = backgroundRequested && pendingPrompt == null;
+        pageLoaded = false;
         webView.loadUrl(url);
-        if (hideAfterPageLoad) {
-            hideAfterPageLoad = false;
-            main.postDelayed(() -> {
-                if (!isFinishing() && !isDestroyed()) {
-                    moveTaskToBack(true);
-                    Log.i("ASTRA-FLOW", "Background mode: moved task to back after load start");
-                }
-            }, 250L);
-        }
     }
 
     @Override
@@ -249,10 +245,15 @@ public final class FlowWebViewActivity extends Activity {
         super.onNewIntent(intent);
         setIntent(intent);
         readAutomationIntent(intent);
+        backgroundRequested = intent.getBooleanExtra("background", backgroundRequested);
         String url = intent.getStringExtra("url");
-        if (url != null && !url.isEmpty() && webView != null) openUrl(url);
-        if (pendingPrompt != null && webView != null) main.postDelayed(this::attemptFlowAutomation, 900L);
-        if (intent.getBooleanExtra("background", false)) {
+        if (url != null && !url.isEmpty() && webView != null && !url.equals(webView.getUrl())) {
+            pageLoaded = false;
+            hideAfterPageLoad = backgroundRequested && pendingPrompt == null;
+            webView.loadUrl(url);
+        } else if (pendingPrompt != null && webView != null && pageLoaded) {
+            main.postDelayed(this::attemptFlowAutomation, 500L);
+        } else if (pendingPrompt == null && backgroundRequested && pageLoaded) {
             main.postDelayed(() -> { if (!isFinishing() && !isDestroyed()) moveTaskToBack(true); }, 250L);
         }
     }
@@ -283,6 +284,8 @@ public final class FlowWebViewActivity extends Activity {
         String prompt = intent.getStringExtra(EXTRA_PROMPT);
         if (prompt == null || prompt.trim().isEmpty()) return;
         pendingPrompt = prompt.trim();
+        backgroundRequested = intent.getBooleanExtra("background", true);
+        hideAfterPageLoad = false;
         promptInjected = false;
         automationAttempts = 0;
         Log.i("ASTRA-FLOW-AUTO", "Background prompt queued; length=" + pendingPrompt.length());
@@ -303,8 +306,15 @@ public final class FlowWebViewActivity extends Activity {
                 status.setText("ASTRA Flow: prompt entered");
                 main.postDelayed(this::attemptFlowAutomation, 700L);
             } else if (value.contains("GENERATE_CLICKED")) {
-                status.setText("ASTRA Flow: submit button clicked");
+                status.setText("ASTRA Flow: generation submitted");
+                Log.i("ASTRA-FLOW-AUTO", "Generate action dispatched to Flow");
                 pendingPrompt = null;
+                if (backgroundRequested) main.postDelayed(() -> {
+                    if (!isFinishing() && !isDestroyed()) {
+                        moveTaskToBack(true);
+                        Log.i("ASTRA-FLOW", "Background mode: minimized after prompt submission");
+                    }
+                }, 500L);
             } else {
                 main.postDelayed(this::attemptFlowAutomation, 1000L);
             }
@@ -315,33 +325,20 @@ public final class FlowWebViewActivity extends Activity {
         String quoted = org.json.JSONObject.quote(prompt);
         if (clickGenerate) {
             return "(function(){try{"
-                + "const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&s.opacity!=='0'&&!e.disabled&&e.getAttribute('aria-disabled')!=='true';};"
-                + "const fields=Array.from(document.querySelectorAll('textarea,input:not([type=hidden]),[contenteditable=true],[role=textbox]')).filter(visible);"
-                + "if(!fields.length)return 'PROMPT_FIELD_NOT_FOUND_FOR_SUBMIT';"
-                + "fields.sort((a,b)=>{const q=e=>{const t=((e.getAttribute('placeholder')||'')+' '+(e.getAttribute('aria-label')||'')).toLowerCase();return (/prompt|describe|video|create/.test(t)?100:0)+(e.tagName==='TEXTAREA'?20:0)+(e.isContentEditable?10:0);};return q(b)-q(a);});"
-                + "const field=fields[0],fr=field.getBoundingClientRect();"
-                + "const ancestors=[];let n=field;for(let i=0;n&&i<7;i++,n=n.parentElement)ancestors.push(n);"
-                + "let candidates=[];ancestors.forEach((root,depth)=>{Array.from(root.querySelectorAll('button,[role=button]')).forEach(b=>{if(!visible(b))return;const r=b.getBoundingClientRect(),s=getComputedStyle(b);"
-                + "const label=((b.innerText||b.textContent||'')+' '+(b.getAttribute('aria-label')||'')+' '+(b.getAttribute('title')||'')+' '+(b.getAttribute('data-testid')||'')).toLowerCase();"
-                + "const svg=!!b.querySelector('svg');const iconText=(b.querySelector('svg')?.getAttribute('aria-label')||'').toLowerCase();"
-                + "const round=Math.min(r.width,r.height)>0&&Math.max(r.width,r.height)/Math.min(r.width,r.height)<1.35&&parseFloat(s.borderTopLeftRadius||'0')>=Math.min(r.width,r.height)*0.25;"
-                + "const nearComposer=Math.abs(r.top-fr.bottom)<180&&r.left>=fr.left-20&&r.right<=fr.right+220;"
-                + "let score=0;if(/send|submit|generate|создать|сгенерировать|отправить/.test(label))score+=1000;"
-                + "if(/arrow.?up|send|submit|generate/.test(label+' '+iconText))score+=500;"
-                + "if(round)score+=80;if(svg)score+=25;if(nearComposer)score+=160;"
-                + "score-=depth*12;score-=Math.max(0,Math.abs(r.right-fr.right))*0.5;"
-                + "if(score>0)candidates.push({b,score,label,round,nearComposer,depth});});});"
-                + "candidates.sort((a,b)=>b.score-a.score);"
-                + "let chosen=candidates[0];"
-                + "if(!chosen||chosen.score<180)return 'SUBMIT_ARROW_NOT_FOUND';"
-                + "chosen.b.click();return 'GENERATE_CLICKED score='+chosen.score+' label='+chosen.label.slice(0,80);"
+                + "const b=Array.from(document.querySelectorAll('button,[role=button]')).find(x=>x.getAttribute('aria-label')==='Начать генерацию');"
+                + "if(!b)return 'GENERATE_BUTTON_NOT_FOUND';"
+                + "if(b.disabled||b.getAttribute('aria-disabled')==='true')return 'GENERATE_BUTTON_DISABLED';"
+                + "b.click();return 'GENERATE_CLICKED';"
                 + "}catch(e){return 'ERROR:'+e.message;}})()";
         }
-        return "(function(p){try{const es=Array.from(document.querySelectorAll('textarea,input:not([type=hidden]),[contenteditable=true],[role=textbox]'));"
-            + "const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&!e.disabled&&!e.readOnly;};"
-            + "const a=es.filter(vis);a.sort((x,y)=>{const q=e=>{const t=((e.getAttribute('placeholder')||'')+' '+(e.getAttribute('aria-label')||'')).toLowerCase();return (/prompt|describe|what do you want|video|create/.test(t)?100:0)+(e.tagName==='TEXTAREA'?20:0)+(e.isContentEditable?10:0);};return q(y)-q(x);});"
-            + "const e=a[0];if(!e)return 'PROMPT_FIELD_NOT_FOUND';e.focus();if(e.isContentEditable)e.textContent=p;else{const z=Object.getOwnPropertyDescriptor(e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value');if(z&&z.set)z.set.call(e,p);else e.value=p;}"
-            + "e.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:p}));e.dispatchEvent(new Event('change',{bubbles:true}));return 'FIELD_SET';"
+        return "(function(p){try{"
+            + "const e=document.querySelector('[role=textbox][aria-label=\\\"Что вы хотите создать?\\\"]')||document.querySelector('.ProseMirror[contenteditable=\\\"true\\\"]');"
+            + "if(!e)return 'PROMPT_FIELD_NOT_FOUND';"
+            + "e.focus();const setter=Object.getOwnPropertyDescriptor(HTMLElement.prototype,'innerText')?.set;"
+            + "if(setter)setter.call(e,p);else e.innerText=p;"
+            + "e.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:p}));"
+            + "e.dispatchEvent(new Event('change',{bubbles:true}));"
+            + "return 'FIELD_SET';"
             + "}catch(e){return 'ERROR:'+e.message;}})(" + quoted + ")";
     }
     public void openUrl(String url) {
