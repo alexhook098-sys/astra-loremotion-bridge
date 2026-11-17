@@ -191,8 +191,8 @@ public final class FlowWebViewActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 status.setText("ASTRA Flow: " + url);
-                main.postDelayed(this::diagnoseFlowPage, 700L);
-                if (pendingPrompt != null) main.postDelayed(this::attemptFlowAutomation, 1200L);
+                main.postDelayed(FlowWebViewActivity.this::diagnoseFlowPage, 700L);
+                if (pendingPrompt != null) main.postDelayed(FlowWebViewActivity.this::attemptFlowAutomation, 1200L);
                 Log.i("ASTRA-FLOW", "Page finished: " + url);
                 lastLifecycleEvent = "pageFinished";
                 view.evaluateJavascript(
