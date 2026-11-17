@@ -83,6 +83,7 @@ public class ChatActivity extends Activity {
         }
         updateProviderStatus();
         consumePendingPerchanceImages();
+        consumePendingFlowVideos();
     }
 
     @Override protected void onResume() {
@@ -347,6 +348,38 @@ public class ChatActivity extends Activity {
         } catch (Exception ignored) {}
         ChatActivity activity = activeInstance;
         if (activity != null) activity.runOnUiThread(activity::consumePendingPerchanceImages);
+    }
+
+
+    // Persist Flow video delivery while the chat screen is in the background.
+    public static void onFlowVideoReady(Context context, Uri video) {
+        if (context == null || video == null) return;
+        android.content.SharedPreferences prefs = context.getSharedPreferences("astra_chat", MODE_PRIVATE);
+        JSONArray pending;
+        try { pending = new JSONArray(prefs.getString("flow_pending_videos", "[]")); }
+        catch (Exception e) { pending = new JSONArray(); }
+        try {
+            pending.put(new JSONObject().put("uri", video.toString()));
+            prefs.edit().putString("flow_pending_videos", pending.toString()).apply();
+        } catch (Exception ignored) {}
+        ChatActivity activity = activeInstance;
+        if (activity != null) activity.runOnUiThread(activity::consumePendingFlowVideos);
+    }
+
+    private void consumePendingFlowVideos() {
+        if (isFinishing() || messages == null) return;
+        android.content.SharedPreferences prefs = getSharedPreferences("astra_chat", MODE_PRIVATE);
+        JSONArray pending;
+        try { pending = new JSONArray(prefs.getString("flow_pending_videos", "[]")); }
+        catch (Exception e) { pending = new JSONArray(); }
+        if (pending.length() == 0) return;
+        prefs.edit().remove("flow_pending_videos").apply();
+        for (int i = 0; i < pending.length(); i++) {
+            JSONObject item = pending.optJSONObject(i);
+            if (item == null) continue;
+            String value = item.optString("uri", "");
+            if (!value.isEmpty()) addVideoMessage(Uri.parse(value));
+        }
     }
 
     private void consumePendingPerchanceImages() {
