@@ -276,6 +276,18 @@ public final class FlowWebViewActivity extends Activity {
         hideAfterPageLoad = backgroundRequested && pendingPrompt == null;
         pageLoaded = false;
         webView.loadUrl(url);
+
+        // Perchance pattern: retain the dedicated generator Activity while
+        // immediately returning the user to ASTRA. Automation and observation
+        // continue in this hidden task.
+        if (backgroundRequested) {
+            main.postDelayed(() -> {
+                if (!isFinishing() && !isDestroyed()) {
+                    moveTaskToBack(true);
+                    Log.i("ASTRA-FLOW", "Perchance-style background task started; WebView retained");
+                }
+            }, 120L);
+        }
     }
 
     @Override
@@ -290,6 +302,12 @@ public final class FlowWebViewActivity extends Activity {
             hideAfterPageLoad = backgroundRequested && pendingPrompt == null;
             webView.loadUrl(url);
         } else if (pendingPrompt != null && webView != null && pageLoaded) {
+            // Match Perchance: hide the task first, then automate the loaded page.
+            if (backgroundRequested) {
+                main.postDelayed(() -> {
+                    if (!isFinishing() && !isDestroyed()) moveTaskToBack(true);
+                }, 120L);
+            }
             main.postDelayed(this::attemptFlowAutomation, 500L);
         } else if (pendingPrompt == null && backgroundRequested && pageLoaded) {
             main.postDelayed(() -> { if (!isFinishing() && !isDestroyed()) moveTaskToBack(true); }, 250L);
@@ -357,9 +375,9 @@ public final class FlowWebViewActivity extends Activity {
                 if (backgroundRequested) main.postDelayed(() -> {
                     if (!isFinishing() && !isDestroyed()) {
                         moveTaskToBack(true);
-                        Log.i("ASTRA-FLOW", "Background mode: minimized after generate click; native observer remains active");
+                        Log.i("ASTRA-FLOW", "Background task reaffirmed after generate click; native observer remains active");
                     }
-                }, 500L);
+                }, 250L);
             } else {
                 main.postDelayed(this::attemptFlowAutomation, 1000L);
             }
