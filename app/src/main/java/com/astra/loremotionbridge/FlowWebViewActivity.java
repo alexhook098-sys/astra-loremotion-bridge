@@ -175,8 +175,8 @@ public final class FlowWebViewActivity extends Activity {
                 request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
                 request.setDestinationInExternalPublicDir(Environment.DIRECTORY_MOVIES,
                         "ASTRA/Flow/flow_" + System.currentTimeMillis() + ".mp4");
-                String cookies = CookieManager.getInstance().getCookie(downloadUrl);
-                if (cookies != null && !cookies.isEmpty()) request.addRequestHeader("Cookie", cookies);
+                String downloadCookies = CookieManager.getInstance().getCookie(downloadUrl);
+                if (downloadCookies != null && !downloadCookies.isEmpty()) request.addRequestHeader("Cookie", downloadCookies);
                 if (userAgent != null && !userAgent.isEmpty()) request.addRequestHeader("User-Agent", userAgent);
                 manager.enqueue(request);
                 status.setText("ASTRA Flow: загрузка видео в Movies/ASTRA/Flow");
