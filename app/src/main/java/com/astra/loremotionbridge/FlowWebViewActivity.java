@@ -398,6 +398,16 @@ public final class FlowWebViewActivity extends Activity {
                 pendingPrompt = null;
                 main.removeCallbacks(generationObserver);
                 main.postDelayed(generationObserver, 1500L);
+                // Try opening the newest result while Flow is still in the background.
+                // This is a native Handler callback, not an onResume-only action.
+                main.postDelayed(() -> {
+                    if (!isFinishing() && !isDestroyed() && !autoOpenCompleted) {
+                        autoOpenAttempts = 0;
+                        Log.i("ASTRA-FLOW-AUTOOPEN",
+                                "Background card-open attempt started after 120 seconds");
+                        tryAutoOpenLatestFlowVideo();
+                    }
+                }, 120000L);
                 if (backgroundRequested) main.postDelayed(() -> {
                     if (!isFinishing() && !isDestroyed()) {
                         moveTaskToBack(true);
@@ -850,8 +860,8 @@ public final class FlowWebViewActivity extends Activity {
     // automatically. The existing video bridge then downloads video.currentSrc.
     private void tryAutoOpenLatestFlowVideo() {
         if (webView == null || isFinishing() || isDestroyed() || autoOpenCompleted) return;
-        if (++autoOpenAttempts > 8) {
-            Log.w("ASTRA-FLOW-AUTOOPEN", "No ready video tile after resume; attempts=" + autoOpenAttempts);
+        if (++autoOpenAttempts > 120) {
+            Log.w("ASTRA-FLOW-AUTOOPEN", "No ready video tile after background polling; attempts=" + autoOpenAttempts);
             return;
         }
         String js = "(function(){try{"
@@ -875,8 +885,9 @@ public final class FlowWebViewActivity extends Activity {
                 }, 1200L);
             } else if (result.contains("NOT_PROJECT")) {
                 Log.w("ASTRA-FLOW-AUTOOPEN", "Current page is not the Flow project grid");
-            } else if (autoOpenAttempts < 8) {
-                main.postDelayed(this::tryAutoOpenLatestFlowVideo, 1500L);
+            } else if (autoOpenAttempts < 120) {
+                // Keep checking while the Activity is backgrounded; Flow may finish later.
+                main.postDelayed(this::tryAutoOpenLatestFlowVideo, 5000L);
             }
         });
     }
