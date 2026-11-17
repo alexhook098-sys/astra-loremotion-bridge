@@ -11,6 +11,11 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.JavascriptInterface;
+import android.content.ContentValues;
+import android.provider.MediaStore;
+import android.util.Base64;
+import java.io.OutputStream;
 import android.webkit.DownloadListener;
 import android.app.DownloadManager;
 import android.net.Uri;
@@ -24,6 +29,7 @@ public final class FlowWebViewActivity extends Activity {
     public static final String EXTRA_PROMPT = "astra_flow_prompt";
     private static volatile FlowWebViewActivity instance;
     private WebView webView;
+    private FlowVideoCaptureBridge videoCaptureBridge;
     private PowerManager.WakeLock flowWakeLock;
     private TextView status;
     private boolean hideAfterPageLoad;
@@ -56,6 +62,7 @@ public final class FlowWebViewActivity extends Activity {
                 + "}catch(e){return JSON.stringify({error:String(e)});}})()";
             webView.evaluateJavascript(script, value -> {
                 generationObserverPolls++;
+                if (webView != null) webView.evaluateJavascript(videoCaptureScanScript(), null);
                 generationEvidence = value == null ? "" : value;
                 String v = generationEvidence.toLowerCase(java.util.Locale.ROOT);
                 if (v.contains("ошибка генерац") || v.contains("generation failed")
@@ -170,6 +177,8 @@ public final class FlowWebViewActivity extends Activity {
         root.addView(status);
 
         webView = new WebView(this);
+        videoCaptureBridge = new FlowVideoCaptureBridge();
+        webView.addJavascriptInterface(videoCaptureBridge, "ASTRAFlowVideo");
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             webView.setRendererPriorityPolicy(
                 WebView.RENDERER_PRIORITY_IMPORTANT, false
@@ -232,6 +241,7 @@ public final class FlowWebViewActivity extends Activity {
                 status.setText("ASTRA Flow: " + url);
                 pageLoaded = true;
                 main.postDelayed(FlowWebViewActivity.this::diagnoseFlowPage, 700L);
+                main.postDelayed(FlowWebViewActivity.this::installVideoCapture, 1400L);
                 if (pendingPrompt != null) main.postDelayed(FlowWebViewActivity.this::attemptFlowAutomation, 1200L);
                 Log.i("ASTRA-FLOW", "Page finished: " + url);
                 lastLifecycleEvent = "pageFinished";
@@ -404,6 +414,126 @@ public final class FlowWebViewActivity extends Activity {
             + "return 'FIELD_SET';"
             + "}catch(e){return 'ERROR:'+e.message;}})(" + quoted + ")";
     }
+
+    // Captures Flow's page-owned blob: video and streams it to MediaStore in bounded chunks.
+    private final class FlowVideoCaptureBridge {
+        private Uri target;
+        private OutputStream output;
+        private long written;
+        private static final long MAX_VIDEO_BYTES = 250L * 1024L * 1024L;
+
+        @JavascriptInterface
+        public synchronized boolean beginVideo(String mime, String fileName) {
+            try {
+                if (output != null) return false;
+                String cleanMime = (mime == null || !mime.startsWith("video/")) ? "video/mp4" : mime.split(";")[0];
+                ContentValues values = new ContentValues();
+                String safeName = (fileName == null || !fileName.matches("[A-Za-z0-9_.-]+"))
+                        ? "flow_" + System.currentTimeMillis() + ".mp4" : fileName;
+                values.put(MediaStore.Video.Media.DISPLAY_NAME, safeName);
+                values.put(MediaStore.Video.Media.MIME_TYPE, cleanMime);
+                if (Build.VERSION.SDK_INT >= 29) {
+                    values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/ASTRA/Flow");
+                    values.put(MediaStore.Video.Media.IS_PENDING, 1);
+                }
+                target = getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
+                if (target == null) throw new java.io.IOException("MediaStore insert failed");
+                output = getContentResolver().openOutputStream(target, "w");
+                if (output == null) throw new java.io.IOException("MediaStore stream unavailable");
+                written = 0L;
+                Log.i("ASTRA-FLOW-CAPTURE", "Video capture started: " + target);
+                return true;
+            } catch (Exception e) {
+                Log.e("ASTRA-FLOW-CAPTURE", "beginVideo failed", e);
+                cleanupVideo(true);
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public synchronized boolean appendChunk(String base64) {
+            try {
+                if (output == null || base64 == null) return false;
+                byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
+                if (bytes.length == 0) return true;
+                if (written + bytes.length > MAX_VIDEO_BYTES) throw new java.io.IOException("video exceeds 250 MB");
+                output.write(bytes);
+                written += bytes.length;
+                return true;
+            } catch (Exception e) {
+                Log.e("ASTRA-FLOW-CAPTURE", "appendChunk failed", e);
+                cleanupVideo(true);
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public synchronized boolean finishVideo() {
+            try {
+                if (output == null || target == null || written == 0L) throw new java.io.IOException("empty video");
+                output.flush();
+                output.close();
+                output = null;
+                if (Build.VERSION.SDK_INT >= 29) {
+                    ContentValues ready = new ContentValues();
+                    ready.put(MediaStore.Video.Media.IS_PENDING, 0);
+                    if (getContentResolver().update(target, ready, null, null) <= 0)
+                        throw new java.io.IOException("publish failed");
+                }
+                Uri saved = target;
+                target = null;
+                Log.i("ASTRA-FLOW-CAPTURE", "Video saved: " + saved + " bytes=" + written);
+                ChatActivity.onFlowVideoReady(FlowWebViewActivity.this, saved);
+                written = 0L;
+                return true;
+            } catch (Exception e) {
+                Log.e("ASTRA-FLOW-CAPTURE", "finishVideo failed", e);
+                cleanupVideo(true);
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public synchronized void failVideo(String reason) {
+            Log.w("ASTRA-FLOW-CAPTURE", "Page capture failed: " + reason);
+            cleanupVideo(true);
+        }
+
+        private void cleanupVideo(boolean deleteTarget) {
+            try { if (output != null) output.close(); } catch (Exception ignored) {}
+            output = null;
+            if (deleteTarget && target != null) {
+                try { getContentResolver().delete(target, null, null); } catch (Exception ignored) {}
+            }
+            target = null;
+            written = 0L;
+        }
+    }
+
+    private String videoCaptureScanScript() {
+        return "(function(){try{window.__astraFlowVideoScan&&window.__astraFlowVideoScan();return 'scan';}catch(e){return String(e);}})()";
+    }
+
+    private void installVideoCapture() {
+        if (webView == null || isFinishing() || isDestroyed()) return;
+        String js = "(function(){if(window.__astraFlowVideoCaptureInstalled)return 'already-installed';"
+            + "window.__astraFlowVideoCaptureInstalled=true;window.__astraFlowCapturedVideos=window.__astraFlowCapturedVideos||new Set();"
+            + "async function capture(v){try{let u=v.currentSrc||v.src||'';if(!u){let s=v.querySelector('source[src]');u=s?s.src:'';}"
+            + "if(!u||!u.startsWith('blob:')||window.__astraFlowCapturedVideos.has(u))return;"
+            + "window.__astraFlowCapturedVideos.add(u);let r=await fetch(u);if(!r.ok)throw new Error('blob_http_'+r.status);"
+            + "let b=await r.blob();if(!b.size)throw new Error('empty_blob');let mime=b.type||'video/mp4';"
+            + "let name='flow_'+Date.now()+'.mp4';if(!window.ASTRAFlowVideo.beginVideo(mime,name))throw new Error('native_begin_failed');"
+            + "let size=48*1024;for(let i=0;i<b.size;i+=size){let a=new Uint8Array(await b.slice(i,Math.min(i+size,b.size)).arrayBuffer());"
+            + "let bin='';for(let j=0;j<a.length;j++)bin+=String.fromCharCode(a[j]);"
+            + "if(!window.ASTRAFlowVideo.appendChunk(btoa(bin)))throw new Error('native_chunk_failed_'+i);}"
+            + "if(!window.ASTRAFlowVideo.finishVideo())throw new Error('native_finish_failed');"
+            + "}catch(e){try{window.ASTRAFlowVideo.failVideo(String(e));}catch(x){}console.error('ASTRA_FLOW_VIDEO_CAPTURE:'+e);}}"
+            + "window.__astraFlowVideoScan=function(){document.querySelectorAll('video').forEach(v=>{if(v.readyState>=1)capture(v);});};"
+            + "window.__astraFlowVideoScan();new MutationObserver(()=>window.__astraFlowVideoScan()).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});"
+            + "setInterval(window.__astraFlowVideoScan,2500);return 'video-capture-installed';})()";
+        webView.evaluateJavascript(js, value -> Log.i("ASTRA-FLOW-CAPTURE", "Capture bridge setup=" + value));
+    }
+
     public void openUrl(String url) {
         main.post(() -> {
             if (webView != null && url != null && !url.isEmpty()) {
