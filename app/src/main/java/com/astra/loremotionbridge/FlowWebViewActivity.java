@@ -478,6 +478,18 @@ public final class FlowWebViewActivity extends Activity {
             return true;
         }
 
+        private void reportVideoDownloadResult(String videoUrl, boolean success) {
+            String quoted = org.json.JSONObject.quote(videoUrl);
+            main.post(() -> {
+                if (webView == null || isFinishing() || isDestroyed()) return;
+                webView.evaluateJavascript(
+                    "(function(){if(window.__astraFlowVideoDownloadResult)"
+                    + "window.__astraFlowVideoDownloadResult(" + quoted + "," + success + ");return 'reported';})()",
+                    value -> Log.i("ASTRA-FLOW-DOWNLOAD", "Capture result reported=" + value
+                            + " success=" + success));
+            });
+        }
+
         private void downloadSignedFlowVideo(String videoUrl) {
             Uri target = null;
             boolean published = false;
@@ -539,10 +551,12 @@ public final class FlowWebViewActivity extends Activity {
                 published = true;
                 Log.i("ASTRA-FLOW-DOWNLOAD", "Direct MP4 saved: " + target + " bytes=" + written);
                 ChatActivity.onFlowVideoReady(FlowWebViewActivity.this, target);
+                reportVideoDownloadResult(videoUrl, true);
                 main.post(() -> {
                     if (status != null) status.setText("ASTRA Flow: видео сохранено и передано в чат");
                 });
             } catch (Exception e) {
+                reportVideoDownloadResult(videoUrl, false);
                 Log.e("ASTRA-FLOW-DOWNLOAD", "Direct Flow MP4 download failed", e);
                 main.post(() -> {
                     if (status != null) status.setText("ASTRA Flow: ошибка загрузки · "
@@ -682,24 +696,37 @@ public final class FlowWebViewActivity extends Activity {
 
     private void installVideoCapture() {
         if (webView == null || isFinishing() || isDestroyed()) return;
-        String js = "(function(){if(window.__astraFlowVideoCaptureInstalled)return 'already-installed';"
-            + "window.__astraFlowVideoCaptureInstalled=true;window.__astraFlowCapturedVideos=window.__astraFlowCapturedVideos||new Set();"
-            + "async function capture(v){try{let u=v.currentSrc||v.src||'';if(!u){let s=v.querySelector('source[src]');u=s?s.src:'';}"
-            + "if(!u||window.__astraFlowCapturedVideos.has(u))return;"
-            + "if(u.startsWith('https://flow-content.google/video/')){"
-            + "window.__astraFlowCapturedVideos.add(u);if(!window.ASTRAFlowVideo.downloadVideo(u))window.__astraFlowCapturedVideos.delete(u);return;}"
-            + "if(!u.startsWith('blob:'))return;"
-            + "window.__astraFlowCapturedVideos.add(u);let r=await fetch(u);if(!r.ok)throw new Error('blob_http_'+r.status);"
-            + "let b=await r.blob();if(!b.size)throw new Error('empty_blob');let mime=b.type||'video/mp4';"
-            + "let name='flow_'+Date.now()+'.mp4';if(!window.ASTRAFlowVideo.beginVideo(mime,name))throw new Error('native_begin_failed');"
-            + "let size=48*1024;for(let i=0;i<b.size;i+=size){let a=new Uint8Array(await b.slice(i,Math.min(i+size,b.size)).arrayBuffer());"
+        String js = "(function(){"
+            + "if(window.__astraFlowVideoCaptureInstalled){window.__astraFlowVideoScan&&window.__astraFlowVideoScan();return 'already-installed-rescanned';}"
+            + "window.__astraFlowVideoCaptureInstalled=true;"
+            + "window.__astraFlowCaptureDone=window.__astraFlowCaptureDone||new Set();"
+            + "window.__astraFlowCaptureBusy=window.__astraFlowCaptureBusy||new Set();"
+            + "const observed=window.__astraFlowObservedRoots=window.__astraFlowObservedRoots||new WeakSet();"
+            + "async function capture(v){let u='';try{u=v.currentSrc||v.src||'';if(!u){const s=v.querySelector('source[src]');u=s?s.src:'';}"
+            + "if(!u||window.__astraFlowCaptureDone.has(u)||window.__astraFlowCaptureBusy.has(u))return;"
+            + "if(!u.startsWith('blob:')&&!u.startsWith('https://flow-content.google/video/'))return;"
+            + "window.__astraFlowCaptureBusy.add(u);"
+            + "if(u.startsWith('https://flow-content.google/video/')){if(!window.ASTRAFlowVideo.downloadVideo(u)){window.__astraFlowCaptureBusy.delete(u);console.warn('ASTRA_FLOW_DOWNLOAD_QUEUE_REJECTED');}return;}"
+            + "const r=await fetch(u);if(!r.ok)throw new Error('blob_http_'+r.status);"
+            + "const b=await r.blob();if(!b.size)throw new Error('empty_blob');"
+            + "if(!window.ASTRAFlowVideo.beginVideo(b.type||'video/mp4','flow_'+Date.now()+'.mp4'))throw new Error('native_begin_failed');"
+            + "const size=48*1024;for(let i=0;i<b.size;i+=size){const a=new Uint8Array(await b.slice(i,Math.min(i+size,b.size)).arrayBuffer());"
             + "let bin='';for(let j=0;j<a.length;j++)bin+=String.fromCharCode(a[j]);"
             + "if(!window.ASTRAFlowVideo.appendChunk(btoa(bin)))throw new Error('native_chunk_failed_'+i);}"
             + "if(!window.ASTRAFlowVideo.finishVideo())throw new Error('native_finish_failed');"
-            + "}catch(e){try{window.ASTRAFlowVideo.failVideo(String(e));}catch(x){}console.error('ASTRA_FLOW_VIDEO_CAPTURE:'+e);}}"
-            + "window.__astraFlowVideoScan=function(){document.querySelectorAll('video').forEach(v=>{if(v.readyState>=1)capture(v);});};"
-            + "window.__astraFlowVideoScan();new MutationObserver(()=>window.__astraFlowVideoScan()).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});"
-            + "setInterval(window.__astraFlowVideoScan,2500);return 'video-capture-installed';})()";
+            + "window.__astraFlowCaptureDone.add(u);window.__astraFlowCaptureBusy.delete(u);"
+            + "}catch(e){window.__astraFlowCaptureBusy.delete(u);try{window.ASTRAFlowVideo.failVideo(String(e));}catch(x){}"
+            + "console.error('ASTRA_FLOW_VIDEO_CAPTURE:'+e);}}"
+            + "function scanRoot(root){if(!root)return;try{root.querySelectorAll('video').forEach(v=>{if(v.readyState>=1)capture(v);});"
+            + "if(!observed.has(root)){observed.add(root);new MutationObserver(()=>window.__astraFlowVideoScan()).observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});}"
+            + "root.querySelectorAll('*').forEach(n=>{if(n.shadowRoot)scanRoot(n.shadowRoot);});"
+            + "root.querySelectorAll('iframe').forEach(f=>{try{if(f.contentDocument)scanRoot(f.contentDocument);}catch(e){}});"
+            + "}catch(e){console.warn('ASTRA_FLOW_SCAN_ROOT:'+e);}}"
+            + "window.__astraFlowVideoScan=function(){scanRoot(document);};"
+            + "window.__astraFlowVideoDownloadResult=function(u,ok){if(!u)return;if(window.__astraFlowCaptureBusy)window.__astraFlowCaptureBusy.delete(u);"
+            + "if(ok)window.__astraFlowCaptureDone.add(u);else console.warn('ASTRA_FLOW_DIRECT_DOWNLOAD_FAILED; retrying');};"
+            + "window.__astraFlowVideoScan();setInterval(window.__astraFlowVideoScan,2500);"
+            + "return 'video-capture-installed-shadow-aware-retryable';})()";
         webView.evaluateJavascript(js, value -> Log.i("ASTRA-FLOW-CAPTURE", "Capture bridge setup=" + value));
     }
 
