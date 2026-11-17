@@ -60,6 +60,8 @@ public final class FlowWebViewActivity extends Activity {
     private String generationEvidence = "";
     private long generationStartedAt = 0L;
     private int generationObserverPolls = 0;
+    private int autoOpenAttempts = 0;
+    private boolean autoOpenCompleted = false;
     private final Runnable generationObserver = new Runnable() {
         @Override public void run() {
             if (webView == null || isFinishing() || isDestroyed()
@@ -386,6 +388,8 @@ public final class FlowWebViewActivity extends Activity {
                 main.postDelayed(this::attemptFlowAutomation, 700L);
             } else if (value.contains("GENERATE_CLICKED")) {
                 generationStartedAt = System.currentTimeMillis();
+                autoOpenAttempts = 0;
+                autoOpenCompleted = false;
                 generationState = "submitted_unconfirmed";
                 generationEvidence = "Generate button click dispatched; awaiting page evidence";
                 status.setText("ASTRA Flow: отправлено · проверяю выполнение");
@@ -787,7 +791,46 @@ public final class FlowWebViewActivity extends Activity {
             webView.onResume();
             webView.resumeTimers();
             Log.i("ASTRA-FLOW", "WebView resumed");
+            if (generationStartedAt > 0L && !autoOpenCompleted) {
+                autoOpenAttempts = 0;
+                main.postDelayed(this::tryAutoOpenLatestFlowVideo, 1200L);
+            }
         }
+    }
+
+    // When the user returns to Flow after generation, open the newest project tile
+    // automatically. The existing video bridge then downloads video.currentSrc.
+    private void tryAutoOpenLatestFlowVideo() {
+        if (webView == null || isFinishing() || isDestroyed() || autoOpenCompleted) return;
+        if (++autoOpenAttempts > 8) {
+            Log.w("ASTRA-FLOW-AUTOOPEN", "No ready video tile after resume; attempts=" + autoOpenAttempts);
+            return;
+        }
+        String js = "(function(){try{"
+            + "if(!location.href.includes('/project/'))return 'NOT_PROJECT';"
+            + "const v=document.querySelector('video');"
+            + "if(v&&(v.currentSrc||v.src)){return 'ALREADY_OPEN';}"
+            + "const t=document.querySelector('flow-grid-tile-container flow-video-tile');"
+            + "if(!t)return 'NO_CARD';"
+            + "t.click();return 'OPENED';"
+            + "}catch(e){return 'ERROR:'+String(e);}})()";
+        webView.evaluateJavascript(js, value -> {
+            String result = value == null ? "" : value;
+            Log.i("ASTRA-FLOW-AUTOOPEN", "attempt=" + autoOpenAttempts + " result=" + result);
+            if (result.contains("OPENED") || result.contains("ALREADY_OPEN")) {
+                autoOpenCompleted = true;
+                main.postDelayed(() -> {
+                    if (webView != null && !isFinishing() && !isDestroyed()) {
+                        webView.evaluateJavascript(videoCaptureScanScript(), null);
+                        main.postDelayed(FlowWebViewActivity.this::installVideoCapture, 900L);
+                    }
+                }, 1200L);
+            } else if (result.contains("NOT_PROJECT")) {
+                Log.w("ASTRA-FLOW-AUTOOPEN", "Current page is not the Flow project grid");
+            } else if (autoOpenAttempts < 8) {
+                main.postDelayed(this::tryAutoOpenLatestFlowVideo, 1500L);
+            }
+        });
     }
 
     @Override
