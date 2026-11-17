@@ -8,6 +8,7 @@ on:
       - feature/astra-one-click-motion
       - feature/perchance-background-agent
       - feature/google-flow-background-agent
+      - flow-321-background-card-click
 
 jobs:
   build:
