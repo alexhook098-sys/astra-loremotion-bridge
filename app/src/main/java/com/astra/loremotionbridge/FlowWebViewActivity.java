@@ -258,6 +258,26 @@ public final class FlowWebViewActivity extends Activity {
     }
 
 
+    private void diagnoseFlowPage() {
+        if (webView == null || isFinishing() || isDestroyed()) return;
+        String script = "(function(){try{const roots=[],frames=[],seen=new Set();"
+            + "function collect(root){if(!root||seen.has(root))return;seen.add(root);roots.push(root);"
+            + "try{Array.from(root.querySelectorAll('iframe')).forEach((f,i)=>{let same=false;try{same=!!f.contentDocument;}catch(e){}"
+            + "frames.push({index:i,src:f.src||'',title:f.title||'',sameOrigin:same});if(same)collect(f.contentDocument);});"
+            + "Array.from(root.querySelectorAll('*')).forEach(n=>{if(n.shadowRoot)collect(n.shadowRoot);});}catch(e){}}"
+            + "collect(document);const visible=e=>{try{const r=e.getBoundingClientRect(),s=e.ownerDocument.defaultView.getComputedStyle(e);"
+            + "return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden';}catch(x){return false;}};"
+            + "const fields=[],buttons=[];roots.forEach((r,i)=>{try{Array.from(r.querySelectorAll('textarea,input,[contenteditable],[role=textbox]')).filter(visible).slice(0,35).forEach(e=>fields.push({root:i,tag:e.tagName,placeholder:e.getAttribute('placeholder')||'',aria:e.getAttribute('aria-label')||'',role:e.getAttribute('role')||'',disabled:!!e.disabled}));"
+            + "Array.from(r.querySelectorAll('button,[role=button],[role=tab]')).filter(visible).slice(0,60).forEach(e=>buttons.push({root:i,text:((e.innerText||e.textContent||'').replace(/\\s+/g,' ').trim()).slice(0,90),aria:e.getAttribute('aria-label')||'',disabled:!!e.disabled}));}catch(e){}});"
+            + "return JSON.stringify({url:location.href,title:document.title,ready:document.readyState,frameCount:frames.length,rootCount:roots.length,fields:fields,buttons:buttons,frames:frames});"
+            + "}catch(e){return JSON.stringify({error:String(e),url:location.href});}})();";
+        webView.evaluateJavascript(script, value -> {
+            lastPageDiag = value == null ? "" : value;
+            Log.i("ASTRA-FLOW-DIAG", "FLOW_PAGE_DIAGNOSTIC " + lastPageDiag);
+            status.setText("ASTRA Flow: диагностика интерфейса записана");
+        });
+    }
+
     private void readAutomationIntent(android.content.Intent intent) {
         if (intent == null || !intent.getBooleanExtra(EXTRA_AUTOMATE, false)) return;
         String prompt = intent.getStringExtra(EXTRA_PROMPT);
