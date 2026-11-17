@@ -177,6 +177,7 @@ public class LocalBridgeServer {
                     "/webview/bing-image-chunk".equals(routeOnlyPath) ||
                     "/flow/backup/start".equals(routeOnlyPath) ||
                     "/flow/start".equals(routeOnlyPath) ||
+                    "/flow/generate".equals(routeOnlyPath) ||
                     "/flow/open".equals(routeOnlyPath) ||
                     "/flow/eval".equals(routeOnlyPath) ||
                     "/flow/front".equals(routeOnlyPath) ||
@@ -363,9 +364,11 @@ public class LocalBridgeServer {
             }
             if ("/headless/open".equals(p)) return HeadlessBrowserRuntime.openUrl(m.getOrDefault("url", "https://loremotion.com/generate/"));
             if ("/flow/backup/start".equals(p)) return FlowWebViewController.startBackup(MainApplication.context());
-                        if ("/flow/start".equals(p)) return FlowWebViewController.start(
+            if ("/flow/start".equals(p) || "/flow/generate".equals(p)) return FlowWebViewController.start(
                     MainApplication.context(),
-                    m.getOrDefault("url", "https://flow.google.com/u/1/project/54203513-938c-412e-9974-9ddf842bd7d5"));
+                    m.getOrDefault("url", "https://flow.google.com/u/1/project/54203513-938c-412e-9974-9ddf842bd7d5"),
+                    m.getOrDefault("prompt", ""),
+                    Boolean.parseBoolean(m.getOrDefault("background", "true")));
             if ("/flow/open".equals(p)) return FlowWebViewController.open(
                     MainApplication.context(),
                     m.getOrDefault("url", "https://flow.google.com/u/1/project/54203513-938c-412e-9974-9ddf842bd7d5"));
