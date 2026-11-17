@@ -8,6 +8,7 @@ on:
       - feature/astra-one-click-motion
       - feature/perchance-background-agent
       - feature/google-flow-background-agent
+      - fix/flow-video-capture-retry
 
 jobs:
   build:
