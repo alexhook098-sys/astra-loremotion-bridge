@@ -10,28 +10,35 @@ public final class FlowWebViewController {
     private FlowWebViewController() {}
 
     public static String start(Context context, String url) {
+        return start(context, url, null, true);
+    }
+
+    public static String start(Context context, String url, String prompt, boolean background) {
         if (url == null || url.isEmpty()) url = PROJECT_URL;
-        FlowWebViewActivity activity = FlowWebViewActivity.getInstance();
-        if (activity != null) {
-            activity.openUrlInBackground(url);
-            return "{\"ok\":true,\"action\":\"flow-start-reused\",\"url\":\"" + esc(url) + "\"}";
-        }
         try {
             Intent intent = new Intent(context, FlowWebViewActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                    | Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                    | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             intent.putExtra("url", url);
-            intent.putExtra("background", true);
+            intent.putExtra("background", background);
+            boolean automate = prompt != null && !prompt.trim().isEmpty();
+            intent.putExtra(FlowWebViewActivity.EXTRA_AUTOMATE, automate);
+            if (automate) intent.putExtra(FlowWebViewActivity.EXTRA_PROMPT, prompt.trim());
+
             android.content.pm.ResolveInfo resolved =
                 context.getPackageManager().resolveActivity(intent, 0);
             if (resolved == null)
                 return "{\"ok\":false,\"error\":\"flow_activity_not_resolvable\"}";
-            android.util.Log.i("ASTRA-FLOW", "start(): launching URL=" + url
-                + " activity=" + resolved.activityInfo.name);
+
             context.startActivity(intent);
-            android.util.Log.i("ASTRA-FLOW", "start(): startActivity returned normally");
-            return "{\"ok\":true,\"action\":\"flow-start-requested\",\"resolved\":true,\"activity\":\""
-                + esc(String.valueOf(resolved.activityInfo.name)) + "\",\"url\":\""
-                + esc(url) + "\"}";
+            android.util.Log.i("ASTRA-FLOW", "start(): url=" + url
+                    + " automate=" + automate + " background=" + background);
+            return "{\"ok\":true,\"action\":\"flow-start-requested\",\"resolved\":true,"
+                    + "\"background\":" + background + ",\"automationQueued\":" + automate
+                    + ",\"activity\":\"" + esc(resolved.activityInfo.name)
+                    + "\",\"url\":\"" + esc(url) + "\"}";
         } catch (Exception e) {
             android.util.Log.e("ASTRA-FLOW", "start(): startActivity failed", e);
             return "{\"ok\":false,\"error\":\"" + esc(String.valueOf(e)) + "\"}";
@@ -78,41 +85,31 @@ public final class FlowWebViewController {
 
     public static String reload() {
         FlowWebViewActivity activity = FlowWebViewActivity.getInstance();
-        if (activity == null) {
-            return "{\"ok\":false,\"error\":\"flow_not_started\"}";
-        }
+        if (activity == null) return "{\"ok\":false,\"error\":\"flow_not_started\"}";
         activity.reloadInBackground();
         return "{\"ok\":true,\"action\":\"flow-reload-requested\"}";
     }
 
     public static String minimize() {
         FlowWebViewActivity activity = FlowWebViewActivity.getInstance();
-        if (activity == null) {
-            return "{\"ok\":false,\"error\":\"flow_not_started\"}";
-        }
+        if (activity == null) return "{\"ok\":false,\"error\":\"flow_not_started\"}";
         activity.minimizeFlow();
         return "{\"ok\":true,\"action\":\"flow-minimize-requested\"}";
     }
 
     public static String close() {
         FlowWebViewActivity activity = FlowWebViewActivity.getInstance();
-        if (activity == null) {
-            return "{\"ok\":true,\"action\":\"flow-already-closed\"}";
-        }
+        if (activity == null) return "{\"ok\":true,\"action\":\"flow-already-closed\"}";
         activity.closeFlow();
         return "{\"ok\":true,\"action\":\"flow-close-requested\"}";
     }
 
     public static String evaluate(String script) {
         FlowWebViewActivity activity = FlowWebViewActivity.getInstance();
-        if (activity == null) {
-            return "{\"ok\":false,\"error\":\"flow_not_started\"}";
-        }
-
+        if (activity == null) return "{\"ok\":false,\"error\":\"flow_not_started\"}";
         final Object lock = new Object();
         final String[] result = new String[1];
         final boolean[] done = new boolean[1];
-
         activity.evaluate(script == null ? "document.title" : script, value -> {
             synchronized (lock) {
                 result[0] = value;
@@ -120,28 +117,22 @@ public final class FlowWebViewController {
                 lock.notifyAll();
             }
         });
-
         synchronized (lock) {
-            try {
-                if (!done[0]) lock.wait(15000L);
-            } catch (InterruptedException e) {
+            try { if (!done[0]) lock.wait(15000L); }
+            catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return "{\"ok\":false,\"error\":\"interrupted\"}";
             }
         }
-
-        if (!done[0]) {
-            return "{\"ok\":false,\"error\":\"flow_eval_timeout\"}";
-        }
-        return "{\"ok\":true,\"value\":"
-                + (result[0] == null ? "null" : result[0]) + "}";
+        return done[0]
+                ? "{\"ok\":true,\"value\":" + (result[0] == null ? "null" : result[0]) + "}"
+                : "{\"ok\":false,\"error\":\"flow_eval_timeout\"}";
     }
 
     private static String esc(String value) {
         if (value == null) return "";
         return value.replace("\\", "\\\\")
                 .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r");
+                .replace("\n", "\\n").replace("\r", "\\r");
     }
 }
