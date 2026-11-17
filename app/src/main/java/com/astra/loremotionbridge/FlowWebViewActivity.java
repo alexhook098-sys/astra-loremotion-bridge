@@ -36,7 +36,6 @@ public final class FlowWebViewActivity extends Activity {
     private boolean diagRequestPending = false;
     private String pendingPrompt;
     private boolean promptInjected;
-    private boolean videoModeSelected;
     private int automationAttempts;
 
     private final Runnable diagPoll = new Runnable() {
@@ -285,7 +284,6 @@ public final class FlowWebViewActivity extends Activity {
         if (prompt == null || prompt.trim().isEmpty()) return;
         pendingPrompt = prompt.trim();
         promptInjected = false;
-        videoModeSelected = false;
         automationAttempts = 0;
         Log.i("ASTRA-FLOW-AUTO", "Background prompt queued; length=" + pendingPrompt.length());
     }
@@ -297,19 +295,15 @@ public final class FlowWebViewActivity extends Activity {
             pendingPrompt = null;
             return;
         }
-        webView.evaluateJavascript(buildFlowAutomationScript(pendingPrompt, promptInjected, videoModeSelected), result -> {
+        webView.evaluateJavascript(buildFlowAutomationScript(pendingPrompt, promptInjected), result -> {
             String value = result == null ? "" : result;
             Log.i("ASTRA-FLOW-AUTO", "attempt=" + automationAttempts + " result=" + value);
             if (value.contains("FIELD_SET")) {
                 promptInjected = true;
                 status.setText("ASTRA Flow: prompt entered");
                 main.postDelayed(this::attemptFlowAutomation, 700L);
-            } else if (value.contains("VIDEO_MODE_SELECTED")) {
-                videoModeSelected = true;
-                status.setText("ASTRA Flow: Video mode selected");
-                main.postDelayed(this::attemptFlowAutomation, 500L);
             } else if (value.contains("GENERATE_CLICKED")) {
-                status.setText("ASTRA Flow: generation submitted in background");
+                status.setText("ASTRA Flow: submit button clicked");
                 pendingPrompt = null;
             } else {
                 main.postDelayed(this::attemptFlowAutomation, 1000L);
@@ -317,22 +311,30 @@ public final class FlowWebViewActivity extends Activity {
         });
     }
 
-    private String buildFlowAutomationScript(String prompt, boolean clickGenerate, boolean selectVideo) {
+    private String buildFlowAutomationScript(String prompt, boolean clickGenerate) {
         String quoted = org.json.JSONObject.quote(prompt);
-        if (clickGenerate && !selectVideo) {
-            return "(function(){try{const es=Array.from(document.querySelectorAll('button,[role=button],[role=tab],[aria-label]'));"
-                + "const b=es.find(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);"
-                + "const t=((e.innerText||e.textContent||'')+' '+(e.getAttribute('aria-label')||'')).trim();"
-                + "return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&!e.disabled&&/^video$/i.test(t);});"
-                + "if(!b)return 'VIDEO_MODE_NOT_FOUND';b.click();return 'VIDEO_MODE_SELECTED';"
-                + "}catch(e){return 'ERROR:'+e.message;}})()";
-        }
         if (clickGenerate) {
-            return "(function(){try{const es=Array.from(document.querySelectorAll('button,[role=button]'));"
-                + "const b=es.find(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);"
-                + "const t=(e.innerText||e.textContent||e.getAttribute('aria-label')||'').trim();"
-                + "return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&!e.disabled&&/^(generate image|generate|создать|сгенерировать)$/i.test(t);});"
-                + "if(!b)return 'GENERATE_BUTTON_NOT_FOUND';b.click();return 'GENERATE_CLICKED';"
+            return "(function(){try{"
+                + "const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&s.opacity!=='0'&&!e.disabled&&e.getAttribute('aria-disabled')!=='true';};"
+                + "const fields=Array.from(document.querySelectorAll('textarea,input:not([type=hidden]),[contenteditable=true],[role=textbox]')).filter(visible);"
+                + "if(!fields.length)return 'PROMPT_FIELD_NOT_FOUND_FOR_SUBMIT';"
+                + "fields.sort((a,b)=>{const q=e=>{const t=((e.getAttribute('placeholder')||'')+' '+(e.getAttribute('aria-label')||'')).toLowerCase();return (/prompt|describe|video|create/.test(t)?100:0)+(e.tagName==='TEXTAREA'?20:0)+(e.isContentEditable?10:0);};return q(b)-q(a);});"
+                + "const field=fields[0],fr=field.getBoundingClientRect();"
+                + "const ancestors=[];let n=field;for(let i=0;n&&i<7;i++,n=n.parentElement)ancestors.push(n);"
+                + "let candidates=[];ancestors.forEach((root,depth)=>{Array.from(root.querySelectorAll('button,[role=button]')).forEach(b=>{if(!visible(b))return;const r=b.getBoundingClientRect(),s=getComputedStyle(b);"
+                + "const label=((b.innerText||b.textContent||'')+' '+(b.getAttribute('aria-label')||'')+' '+(b.getAttribute('title')||'')+' '+(b.getAttribute('data-testid')||'')).toLowerCase();"
+                + "const svg=!!b.querySelector('svg');const iconText=(b.querySelector('svg')?.getAttribute('aria-label')||'').toLowerCase();"
+                + "const round=Math.min(r.width,r.height)>0&&Math.max(r.width,r.height)/Math.min(r.width,r.height)<1.35&&parseFloat(s.borderTopLeftRadius||'0')>=Math.min(r.width,r.height)*0.25;"
+                + "const nearComposer=Math.abs(r.top-fr.bottom)<180&&r.left>=fr.left-20&&r.right<=fr.right+220;"
+                + "let score=0;if(/send|submit|generate|создать|сгенерировать|отправить/.test(label))score+=1000;"
+                + "if(/arrow.?up|send|submit|generate/.test(label+' '+iconText))score+=500;"
+                + "if(round)score+=80;if(svg)score+=25;if(nearComposer)score+=160;"
+                + "score-=depth*12;score-=Math.max(0,Math.abs(r.right-fr.right))*0.5;"
+                + "if(score>0)candidates.push({b,score,label,round,nearComposer,depth});});});"
+                + "candidates.sort((a,b)=>b.score-a.score);"
+                + "let chosen=candidates[0];"
+                + "if(!chosen||chosen.score<180)return 'SUBMIT_ARROW_NOT_FOUND';"
+                + "chosen.b.click();return 'GENERATE_CLICKED score='+chosen.score+' label='+chosen.label.slice(0,80);"
                 + "}catch(e){return 'ERROR:'+e.message;}})()";
         }
         return "(function(p){try{const es=Array.from(document.querySelectorAll('textarea,input:not([type=hidden]),[contenteditable=true],[role=textbox]'));"
@@ -342,7 +344,6 @@ public final class FlowWebViewActivity extends Activity {
             + "e.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:p}));e.dispatchEvent(new Event('change',{bubbles:true}));return 'FIELD_SET';"
             + "}catch(e){return 'ERROR:'+e.message;}})(" + quoted + ")";
     }
-
     public void openUrl(String url) {
         main.post(() -> {
             if (webView != null && url != null && !url.isEmpty()) {
