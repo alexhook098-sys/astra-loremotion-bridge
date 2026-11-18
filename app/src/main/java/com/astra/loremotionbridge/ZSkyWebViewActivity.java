@@ -362,8 +362,28 @@ public final class ZSkyWebViewActivity extends Activity {
         return "{\"ok\":true,\"action\":\"zsky-brought-to-front\"}";
     }
 
+    @Override protected void onPause() {
+        lastLifecycleEvent = "onPause";
+        super.onPause();
+    }
+
+    @Override protected void onStop() {
+        lastLifecycleEvent = "onStop";
+        super.onStop();
+    }
+
+    @Override protected void onResume() {
+        lastLifecycleEvent = "onResume";
+        super.onResume();
+        if (webView != null) {
+            webView.onResume();
+            webView.resumeTimers();
+        }
+    }
+
     @Override protected void onDestroy() {
         lastLifecycleEvent = "destroyed";
+        main.removeCallbacks(generationObserver);
         if (zskyWakeLock != null && zskyWakeLock.isHeld()) zskyWakeLock.release();
         zskyWakeLock = null;
         if (instance == this) instance = null;
