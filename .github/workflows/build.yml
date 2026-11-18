@@ -10,6 +10,7 @@ on:
       - feature/google-flow-background-agent
       - fix/flow-video-capture-retry
       - fix/flow-download-auth-response
+      - feature/zsky-chat-background-from-362
 
 jobs:
   build:
