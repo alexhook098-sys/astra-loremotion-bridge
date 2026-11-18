@@ -24,8 +24,6 @@ import java.net.URL;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import android.webkit.DownloadListener;
@@ -43,7 +41,6 @@ public final class FlowWebViewActivity extends Activity {
     private WebView webView;
     private FlowVideoCaptureBridge videoCaptureBridge;
     private final Set<String> directDownloads = Collections.synchronizedSet(new HashSet<>());
-    private final Set<String> projectDownloads = Collections.synchronizedSet(new HashSet<>());
     private final ExecutorService flowDownloadExecutor = Executors.newSingleThreadExecutor();
     private PowerManager.WakeLock flowWakeLock;
     private TextView status;
@@ -577,7 +574,8 @@ public final class FlowWebViewActivity extends Activity {
                 return false;
             }
             if (!directDownloads.add(videoUrl)) return true;
-            flowDownloadExecutor.execute(() -> downloadSignedFlowVideo(videoUrl));
+            flowDownloadExecutor.execute(() -> downloadSignedFlowVideo(videoUrl, videoUrl,
+                    "flow_" + System.currentTimeMillis() + ".mp4"));
             return true;
         }
 
@@ -826,7 +824,39 @@ public final class FlowWebViewActivity extends Activity {
             + "window.__astraFlowCaptureDone=window.__astraFlowCaptureDone||new Set();"
             + "window.__astraFlowCaptureBusy=window.__astraFlowCaptureBusy||new Set();"
             + "const observed=window.__astraFlowObservedRoots=window.__astraFlowObservedRoots||new WeakSet();"
+            + "function isUuid(x){return typeof x==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);}"
+            + "function scanEnd(t,start){let d=0,q=false,e=false;for(let i=start;i<t.length;i++){const c=t[i];if(q){if(e)e=false;else if(c==='\\\\')e=true;else if(c==='\\\"')q=false;continue;}if(c==='\\\"')q=true;else if(c==='['||c==='{')d++;else if(c===']'||c==='}'){d--;if(d===0)return i+1;}}return -1;}"
+            + "function walkFrames(node,rpc,out){if(!Array.isArray(node))return;if(node[0]==='wrb.fr'&&node[1]===rpc&&typeof node[2]==='string'){try{out.push(JSON.parse(node[2]));}catch(e){}}for(const x of node)walkFrames(x,rpc,out);}"
+            + "function parseBatch(t,rpc){if(t.startsWith(\")]}'\")){const n=t.indexOf('\\n');t=n<0?'':t.slice(n+1);}const out=[];let i=0;while(i<t.length){const p=t.indexOf('[',i);if(p<0)break;const e=scanEnd(t,p);if(e<0)break;try{walkFrames(JSON.parse(t.slice(p,e)),rpc,out);}catch(x){}i=e;}if(!out.length)throw new Error('Flow не вернул ответ RPC '+rpc);return out[0];}"
+            + "function collectUrls(n,out,depth){out=out||[];depth=depth||0;if(depth>40||n==null)return out;if(typeof n==='string'){if(n.startsWith('https://')||n.startsWith('http://'))out.push(n);}else if(Array.isArray(n)){n.forEach(x=>collectUrls(x,out,depth+1));}else if(typeof n==='object'){Object.keys(n).forEach(k=>collectUrls(n[k],out,depth+1));}return out;}"
+            + "function pairTime(x){if(!Array.isArray(x)||x.length<1||typeof x[0]!=='number')return 0;const sec=x[0];if(sec>1000000000&&sec<4000000000)return sec*1000+(typeof x[1]==='number'?x[1]/1000000:0);return 0;}"
+            + "async function flowRpc(rpc,inner){const w=window.WIZ_global_data||{};let at=w.SNlM0e,sid=String(w.FdrFJe||''),bl=w.cfb2h||'';if(!at)throw new Error('Нет токена сессии Flow. Перезагрузи страницу проекта.');"
+            + "const seen=performance.getEntriesByType('resource').map(e=>e.name).filter(n=>n.includes('/data/batchexecute'));const pref=(location.pathname.match(/^\\/u\\/\\d+/)||[])[0]||'';const paths=[];"
+            + "if(seen.length){try{paths.push(new URL(seen[seen.length-1]).pathname);}catch(e){}}"
+            + "paths.push(pref+'/_/AiSandboxAngularFrontend/data/batchexecute',pref+'/_/FlowUi/data/batchexecute');if(pref)paths.push('/_/AiSandboxAngularFrontend/data/batchexecute');"
+            + "const unique=[...new Set(paths)];const hl=(document.documentElement.lang||navigator.language||'en').split('-')[0];let last='не удалось обратиться к Flow';"
+            + "for(const path of unique){try{const reqid=Math.floor(Math.random()*900000)+100000;const query=path+'?rpcids='+encodeURIComponent(rpc)+'&source-path='+encodeURIComponent(location.pathname||'/')+'&bl='+encodeURIComponent(bl)+'&f.sid='+encodeURIComponent(sid)+'&hl='+encodeURIComponent(hl)+'&_reqid='+reqid+'&rt=c';"
+            + "const payload=JSON.stringify([[[rpc,JSON.stringify(inner),null,'generic']]]);const response=await fetch(query,{method:'POST',credentials:'include',headers:{'content-type':'application/x-www-form-urlencoded;charset=UTF-8','x-same-domain':'1'},body:new URLSearchParams({'f.req':payload,at})});"
+            + "const body=await response.text();if(response.status===404){last='RPC Flow: HTTP 404';continue;}if(body.trimStart().startsWith('<'))throw new Error('Flow вернул страницу входа. Проверь авторизацию Google.');if(!response.ok)throw new Error('RPC '+rpc+': HTTP '+response.status);return parseBatch(body,rpc);"
+            + "}catch(e){last=String(e.message||e);}}throw new Error(last);}"
+            + "async function requestProjectVideo(){if(window.__astraFlowRpcBusy)return;const match=location.pathname.match(/\\/project\\/([0-9a-f-]{36})/i);if(!match){window.ASTRAFlowVideo.reportDownloadProgress('Не найден ID открытого проекта Flow');return;}window.__astraFlowRpcBusy=true;"
+            + "try{window.ASTRAFlowVideo.reportDownloadProgress('Читаю список материалов проекта…');const projectId=match[1];const listing=await flowRpc('Zzl0ze',['projects/'+projectId,null,null,null,[1]]);"
+            + "const entries=new Map(),records=new Map();let order=0;function walk(n,depth){if(!Array.isArray(n)||depth>40)return;order++;"
+            + "if(n.length>=4&&isUuid(n[0])&&Array.isArray(n[3])&&n[3].length>=5&&isUuid(n[3][4])){const d=n[3];if(d[2]!==true)entries.set(d[4],{title:typeof d[0]==='string'?d[0]:'',time:pairTime(d[6])||pairTime(d[1]),order});}"
+            + "if(n.length>=6&&n.length<=10&&isUuid(n[0])&&isUuid(n[1])&&isUuid(n[2])&&Array.isArray(n[5])){const urls=collectUrls(n);const video=(n.length>=8&&n[7]!=null)||urls.some(u=>u.includes('flow-content.google/video/'));if(video&&!records.has(n[0]))records.set(n[0],{id:n[0],order,urls});}"
+            + "n.forEach(x=>walk(x,depth+1));}walk(listing,0);const candidates=[];for(const [id,record] of records){const entry=entries.get(id)||{};candidates.push({id,title:entry.title||'flow_'+id.slice(0,8),time:entry.time||0,order:entry.order||record.order});}"
+            + "if(!candidates.length)throw new Error('В проекте не найдено готовое видео (Flow вернул '+records.size+' видеозаписей). Открой результат в проекте и повтори.');"
+            + "candidates.sort((a,b)=>(b.time-a.time)||(a.order-b.order));const item=candidates[0];window.ASTRAFlowVideo.reportDownloadProgress('Найдено видео. Получаю оригинальный MP4…');"
+            + "const resolved=await flowRpc('as29s',[item.id]);const links=collectUrls(resolved).filter(u=>u.startsWith('https://flow-content.google/video/'));if(!links.length)throw new Error('Flow не выдал прямую ссылку на MP4 (as29s).');"
+            + "if(!window.ASTRAFlowVideo.downloadResolvedVideo(item.id,links[0],item.title)){throw new Error('ASTRA отклонила прямую ссылку на видео.');}"
+            + "}catch(e){const reason=String(e&&e.message||e).slice(0,200);window.ASTRAFlowVideo.reportDownloadProgress('Ошибка: '+reason);console.error('ASTRA_FLOW_RPC_DOWNLOAD:'+reason);}"
+            + "finally{window.__astraFlowRpcBusy=false;}}"
             + "async function capture(v){let u='';try{u=v.currentSrc||v.src||'';if(!u){const s=v.querySelector('source[src]');u=s?s.src:'';}"
+            + "if(!u||window.__astraFlowCaptureDone.has(u)||window.__astraFlowCaptureBusy.has(u))return;"
+            + "if(!u.startsWith('blob:')&&!u.startsWith('https://flow-content.google/video/')&&!u.startsWith('https://flow.google.com/asb/')&&!u.startsWith('https://labs.google/asb/'))return;"
+            + "window.__astraFlowCaptureBusy.add(u);"
+            + "if(u.startsWith('https://flow.google.com/asb/')||u.startsWith('https://labs.google/asb/')){window.__astraFlowCaptureBusy.delete(u);if(!window.__astraFlowRpcStarted){window.__astraFlowRpcStarted=true;requestProjectVideo();}return;}"
+            + "if(u.startsWith('https://flow-content.google/video/')){if(!window.ASTRAFlowVideo.downloadVideo(u)){window.__astraFlowCaptureBusy.delete(u);console.warn('ASTRA_FLOW_DOWNLOAD_QUEUE_REJECTED');}return;}"
             + "if(!u||window.__astraFlowCaptureDone.has(u)||window.__astraFlowCaptureBusy.has(u))return;"
             + "if(!u.startsWith('blob:')&&!u.startsWith('https://flow-content.google/video/')&&!u.startsWith('https://flow.google.com/asb/')&&!u.startsWith('https://labs.google/asb/'))return;"
             + "window.__astraFlowCaptureBusy.add(u);"
