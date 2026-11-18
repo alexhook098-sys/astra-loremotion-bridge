@@ -363,6 +363,19 @@ public class LocalBridgeServer {
                 return "{\"ok\":true,\"state\":\"STARTING\"}";
             }
             if ("/headless/open".equals(p)) return HeadlessBrowserRuntime.openUrl(m.getOrDefault("url", "https://loremotion.com/generate/"));
+            if ("/zsky/start".equals(p)) return ZSkyWebViewActivity.start(
+                    MainApplication.context(),
+                    m.getOrDefault("url", ZSkyWebViewActivity.ZSKY_URL),
+                    Boolean.parseBoolean(m.getOrDefault("background", "false")));
+            if ("/zsky/open".equals(p)) return ZSkyWebViewActivity.open(
+                    MainApplication.context(), m.getOrDefault("url", ZSkyWebViewActivity.ZSKY_URL));
+            if ("/zsky/status".equals(p)) return ZSkyWebViewActivity.status();
+            if ("/zsky/eval".equals(p)) return ZSkyWebViewActivity.evaluateScript(
+                    m.getOrDefault("script", "document.title"));
+            if ("/zsky/inspect".equals(p)) return ZSkyWebViewActivity.inspect();
+            if ("/zsky/minimize".equals(p)) return ZSkyWebViewActivity.minimize();
+            if ("/zsky/close".equals(p)) return ZSkyWebViewActivity.close();
+            if ("/zsky/front".equals(p)) return ZSkyWebViewActivity.bringToFront(MainApplication.context());
             if ("/flow/backup/start".equals(p)) return FlowWebViewController.startBackup(MainApplication.context());
             if ("/flow/start".equals(p) || "/flow/generate".equals(p)) return FlowWebViewController.start(
                     MainApplication.context(),
