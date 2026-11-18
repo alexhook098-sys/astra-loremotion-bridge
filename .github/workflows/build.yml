@@ -12,6 +12,7 @@ on:
       - fix/flow-download-auth-response
       - fix/flow-card-video-capture
       - diagnostic/flow-video-capture
+      - feature/zsky-webview-integration
 
 jobs:
   build:
