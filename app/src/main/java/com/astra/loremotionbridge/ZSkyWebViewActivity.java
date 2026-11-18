@@ -44,6 +44,25 @@ public final class ZSkyWebViewActivity extends Activity {
     private String generationState = "idle";
     private String generationEvidence = "";
 
+    private final Runnable generationObserver = new Runnable() {
+        @Override public void run() {
+            if (webView == null || generationStartedAt == 0L || isFinishing() || isDestroyed()) return;
+            String js = "(function(){const t=(document.body&&document.body.innerText)||'';return JSON.stringify({tail:t.slice(-1400),videos:document.querySelectorAll('video').length,busy:document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,visibility:document.visibilityState});})()";
+            webView.evaluateJavascript(js, value -> {
+                observerPolls++;
+                generationEvidence = value == null ? "" : value;
+                try {
+                    org.json.JSONObject e = new org.json.JSONObject(generationEvidence);
+                    String tail = e.optString("tail", "").toLowerCase(java.util.Locale.ROOT);
+                    if (tail.contains("generation failed") || tail.contains("ошибка генерации")) generationState = "failed";
+                    else if (e.optInt("busy", 0) > 0) generationState = "running";
+                    else if (baselineVideoCount >= 0 && e.optInt("videos", 0) > baselineVideoCount) generationState = "completed_unconfirmed";
+                } catch (Exception ex) { Log.w("ASTRA-ZSKY-OBSERVER", "Evidence parse failed", ex); }
+                Log.i("ASTRA-ZSKY-OBSERVER", "poll=" + observerPolls + " state=" + generationState + " evidence=" + generationEvidence);
+                if (webView != null && !isFinishing() && !isDestroyed()) main.postDelayed(this, 5000L);
+            });
+        }
+    };
     public static ZSkyWebViewActivity getInstance() { return instance; }
 
     @Override protected void onCreate(Bundle state) {
