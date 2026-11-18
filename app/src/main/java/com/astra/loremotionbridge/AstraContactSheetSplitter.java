@@ -12,16 +12,10 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 
-/** Splits supported 5x4, 4x5, 4x4 or 2x5 ASTRA contact sheets into normalized, ordered frames. */
+/** Splits only 5x4 ASTRA contact sheets into normalized, ordered frames. */
 public final class AstraContactSheetSplitter {
-    private static final int DEFAULT_COLUMNS = 5;
-    private static final int DEFAULT_ROWS = 4;
-    private static final int ALT_COLUMNS = 4;
-    private static final int ALT_ROWS = 5;
-    private static final int SQUARE_COLUMNS = 4;
-    private static final int SQUARE_ROWS = 4;
-    private static final int STORY_COLUMNS = 2;
-    private static final int STORY_ROWS = 5;
+    private static final int COLUMNS = 5;
+    private static final int ROWS = 4;
     public static final int FRAME_WIDTH = 576;
     public static final int FRAME_HEIGHT = 896;
     private static final int CELL_INSET = 2;
@@ -58,46 +52,30 @@ public final class AstraContactSheetSplitter {
         }
         if (sheet == null) throw new IllegalArgumentException("Не удалось декодировать изображение");
         try {
-            // Select the closest supported grid by expected sheet aspect ratio.
-            // Portrait cells are normalized to FRAME_WIDTH × FRAME_HEIGHT after splitting.
+            // One Click Motion accepts only a 5-column × 4-row portrait contact sheet.
+            final int columns = COLUMNS;
+            final int rows = ROWS;
             double sheetRatio = (double) sheet.getWidth() / sheet.getHeight();
-            int[][] grids = {
-                    {DEFAULT_COLUMNS, DEFAULT_ROWS},
-                    {ALT_COLUMNS, ALT_ROWS},
-                    {SQUARE_COLUMNS, SQUARE_ROWS},
-                    // The 2×5 storyboards use near-square panels in the supplied examples.
-                    {STORY_COLUMNS, STORY_ROWS}
-            };
-            int columns = DEFAULT_COLUMNS;
-            int rows = DEFAULT_ROWS;
-            double bestError = Double.POSITIVE_INFINITY;
-            for (int[] grid : grids) {
-                double expectedRatio = (grid[0] == STORY_COLUMNS && grid[1] == STORY_ROWS)
-                        ? (double) STORY_COLUMNS / STORY_ROWS
-                        : (double) grid[0] * FRAME_WIDTH / (grid[1] * FRAME_HEIGHT);
-                double error = Math.abs(Math.log(sheetRatio / expectedRatio));
-                if (error < bestError) {
-                    bestError = error;
-                    columns = grid[0];
-                    rows = grid[1];
-                }
+            double expectedRatio = (double) columns * FRAME_WIDTH / (rows * FRAME_HEIGHT);
+            if (Math.abs(Math.log(sheetRatio / expectedRatio)) > 0.20) {
+                throw new IllegalArgumentException("Нужен вертикальный контактный лист 5×4 (5 столбцов × 4 ряда)");
             }
             int cellW = sheet.getWidth() / columns;
             int cellH = sheet.getHeight() / rows;
             if (cellW < 8 || cellH < 8) throw new IllegalArgumentException("Контактный лист слишком маленький");
-            File dir = new File(context.getFilesDir(), "astra_motion/frames");
-            if (dir.exists()) {
-                File[] old = dir.listFiles();
-                if (old != null) for (File f : old) if (f.isFile()) f.delete();
-            }
-            if (!dir.exists() && !dir.mkdirs()) throw new IllegalStateException("Не удалось создать рабочую папку");
+            // Every run owns its frame directory; concurrent/previous jobs cannot overwrite it.
+            File jobsRoot = new File(context.getCacheDir(), "astra_motion_jobs");
+            if (!jobsRoot.exists() && !jobsRoot.mkdirs())
+                throw new IllegalStateException("Не удалось создать рабочую папку One Click Motion");
+            File dir = new File(jobsRoot, "frames_" + System.nanoTime());
+            if (!dir.mkdirs()) throw new IllegalStateException("Не удалось создать папку кадров текущего запуска");
             for (int i = 0; i < rows * columns; i++) {
                 int col = i % columns, row = i / columns;
                 int left = col * cellW + CELL_INSET;
                 int top = row * cellH + CELL_INSET;
                 int right = (col == columns - 1 ? sheet.getWidth() : (col + 1) * cellW) - CELL_INSET;
                 int bottom = (row == rows - 1 ? sheet.getHeight() : (row + 1) * cellH) - CELL_INSET;
-                if (right <= left || bottom <= top) throw new IllegalArgumentException("Некорректная сетка контактного листа 5×4, 4×5, 4×4 или 2×5");
+                if (right <= left || bottom <= top) throw new IllegalArgumentException("Некорректная сетка контактного листа 5×4");
                 Bitmap cell = Bitmap.createBitmap(sheet, left, top, right-left, bottom-top);
                 Bitmap frame = Bitmap.createBitmap(FRAME_WIDTH, FRAME_HEIGHT, Bitmap.Config.ARGB_8888);
                 Canvas canvas = new Canvas(frame);
