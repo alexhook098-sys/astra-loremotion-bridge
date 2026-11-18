@@ -259,6 +259,9 @@ public final class ZSkyWebViewActivity extends Activity {
                 + ",\"state\":\"" + (pageLoaded ? "loaded" : "loading")
                 + "\",\"background\":" + backgroundRequested
                 + ",\"lifecycle\":\"" + lastLifecycleEvent
+                + "\",\"generationState\":\"" + esc(generationState)
+                + "\",\"observerPolls\":" + observerPolls
+                + ",\"generationEvidence\":\"" + esc(generationEvidence)
                 + "\",\"url\":\"" + esc(url) + "\"}";
     }
 
