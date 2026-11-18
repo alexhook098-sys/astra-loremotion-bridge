@@ -20,54 +20,61 @@ public final class AstraMotionEngine {
 
     public static Uri createVideo(Context context, Uri reference) throws Exception {
         File frames = AstraContactSheetSplitter.split(context, reference);
-        File binary = new File(context.getApplicationInfo().nativeLibraryDir, "libffmpeg.so");
-        if (!binary.isFile() || !binary.canExecute())
-            throw new IllegalStateException("Встроенный FFmpeg не найден в nativeLibraryDir или недоступен для запуска");
-        File temp = new File(context.getCacheDir(), "astra_motion_" + System.currentTimeMillis() + ".mp4");
-        if (temp.exists()) temp.delete();
+        File temp = new File(context.getCacheDir(), "astra_motion_" + System.nanoTime() + ".mp4");
+        try {
+            File binary = new File(context.getApplicationInfo().nativeLibraryDir, "libffmpeg.so");
+            if (!binary.isFile() || !binary.canExecute())
+                throw new IllegalStateException("Встроенный FFmpeg не найден в nativeLibraryDir или недоступен для запуска");
 
-        File[] frameFiles = frames.listFiles((dir, name) ->
-                name.startsWith("frame_") && name.endsWith(".png"));
-        int inputFrameCount = frameFiles == null ? 0 : frameFiles.length;
-        if (inputFrameCount < 2)
-            throw new IllegalStateException("Недостаточно кадров для создания видео");
-        // 2×5 storyboards are intentionally shorter: 1.0 s / 20 frames.
-        // The 4×4, 4×5 and 5×4 formats retain the 1.5 s / 30 frame output.
-        double durationSeconds = inputFrameCount == 10 ? 1.0 : 1.5;
-        int outputFrames = inputFrameCount == 10 ? 20 : 30;
-        String inputRate = String.format(Locale.US, "%.6f", inputFrameCount / durationSeconds);
-        String filter = "minterpolate=fps=20:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1," +
-                "tpad=stop_mode=clone:stop_duration=1,trim=end_frame=" + outputFrames + ",setpts=N/(20*TB)";
-        Process process = new ProcessBuilder(
-                binary.getAbsolutePath(),
-                "-hide_banner", "-loglevel", "error", "-y",
-                "-framerate", inputRate, "-start_number", "1",
-                "-i", new File(frames, "frame_%04d.png").getAbsolutePath(),
-                "-vf", filter,
-                "-frames:v", String.valueOf(outputFrames),
-                "-r", String.valueOf(FPS),
-                "-an", "-c:v", "mpeg4", "-q:v", "3",
-                "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                "-f", "mp4", temp.getAbsolutePath()
-        ).redirectErrorStream(true).start();
+            File[] frameFiles = frames.listFiles((dir, name) ->
+                    name.startsWith("frame_") && name.endsWith(".png"));
+            int inputFrameCount = frameFiles == null ? 0 : frameFiles.length;
+            if (inputFrameCount != 20)
+                throw new IllegalStateException("Для One Click Motion нужны ровно 20 кадров из листа 5×4");
 
-        StringBuilder log = new StringBuilder();
-        try (InputStream in = process.getInputStream()) {
-            byte[] buffer = new byte[2048];
-            int count;
-            while ((count = in.read(buffer)) != -1) {
-                if (log.length() < 12000) log.append(new String(buffer, 0, count, "UTF-8"));
+            final double durationSeconds = 1.5;
+            final int outputFrames = 30;
+            String inputRate = String.format(Locale.US, "%.6f", inputFrameCount / durationSeconds);
+            String filter = "minterpolate=fps=20:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1," +
+                    "tpad=stop_mode=clone:stop_duration=1,trim=end_frame=" + outputFrames + ",setpts=N/(20*TB)";
+            Process process = new ProcessBuilder(
+                    binary.getAbsolutePath(),
+                    "-hide_banner", "-loglevel", "error", "-y",
+                    "-framerate", inputRate, "-start_number", "1",
+                    "-i", new File(frames, "frame_%04d.png").getAbsolutePath(),
+                    "-vf", filter,
+                    "-frames:v", String.valueOf(outputFrames),
+                    "-r", String.valueOf(FPS),
+                    "-an", "-c:v", "mpeg4", "-q:v", "3",
+                    "-pix_fmt", "yuv420p",
+                    // Avoid the faststart second-pass reopen that fails on this Android build.
+                    "-f", "mp4", temp.getAbsolutePath()
+            ).redirectErrorStream(true).start();
+
+            StringBuilder log = new StringBuilder();
+            try (InputStream in = process.getInputStream()) {
+                byte[] buffer = new byte[2048];
+                int count;
+                while ((count = in.read(buffer)) != -1) {
+                    if (log.length() < 12000) log.append(new String(buffer, 0, count, "UTF-8"));
+                }
             }
-        }
-        int exit = process.waitFor();
-        if (exit != 0 || !temp.isFile() || temp.length() < 1024) {
-            temp.delete();
-            throw new IllegalStateException("FFmpeg завершился с кодом " + exit + ": " + log);
-        }
+            int exit = process.waitFor();
+            if (exit != 0 || !temp.isFile() || temp.length() < 1024)
+                throw new IllegalStateException("FFmpeg завершился с кодом " + exit + ": " + log);
 
-        Uri saved = publishVideo(context, temp);
-        temp.delete();
-        return saved;
+            return publishVideo(context, temp);
+        } finally {
+            if (temp.exists()) temp.delete();
+            deleteTree(frames);
+        }
+    }
+
+    private static void deleteTree(File file) {
+        if (file == null || !file.exists()) return;
+        File[] children = file.listFiles();
+        if (children != null) for (File child : children) deleteTree(child);
+        file.delete();
     }
 
     private static Uri publishVideo(Context context, File source) throws Exception {
@@ -75,7 +82,7 @@ public final class AstraMotionEngine {
         values.put(MediaStore.Video.Media.DISPLAY_NAME, "ASTRA_MOTION_" + System.currentTimeMillis() + ".mp4");
         values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
         if (Build.VERSION.SDK_INT >= 29) {
-            values.put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/ASTRA");
+            values.put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/ASTRA/OneClickMotion");
             values.put(MediaStore.Video.Media.IS_PENDING, 1);
         }
         Uri collection = Build.VERSION.SDK_INT >= 29
