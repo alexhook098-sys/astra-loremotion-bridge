@@ -36,6 +36,13 @@ public final class ZSkyWebViewActivity extends Activity {
     private String lastLifecycleEvent = "created";
     private PowerManager.WakeLock zskyWakeLock;
     private String pendingPrompt;
+    private boolean promptInjected;
+    private int automationAttempts;
+    private int observerPolls;
+    private long generationStartedAt;
+    private int baselineVideoCount = -1;
+    private String generationState = "idle";
+    private String generationEvidence = "";
 
     public static ZSkyWebViewActivity getInstance() { return instance; }
 
