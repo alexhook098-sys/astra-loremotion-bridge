@@ -124,7 +124,6 @@ public final class ZSkyWebViewActivity extends Activity {
                 status.setText("ASTRA ZSky: студия загружена");
                 main.postDelayed(ZSkyWebViewActivity.this::inspectPage, 900L);
                 if (pendingPrompt != null) main.postDelayed(ZSkyWebViewActivity.this::runPendingPrompt, 1200L);
-                if (pendingPrompt != null) main.postDelayed(ZSkyWebViewActivity.this::runPendingPrompt, 1200L);
                 if (backgroundRequested) {
                     main.postDelayed(() -> {
                         if (!isFinishing() && !isDestroyed()) moveTaskToBack(true);
@@ -151,7 +150,13 @@ public final class ZSkyWebViewActivity extends Activity {
         setIntent(intent);
         backgroundRequested = intent.getBooleanExtra("background", backgroundRequested);
         String prompt = intent.getStringExtra("prompt");
-        if (prompt != null && !prompt.trim().isEmpty()) pendingPrompt = prompt.trim();
+        if (prompt != null && !prompt.trim().isEmpty()) {
+            pendingPrompt = prompt.trim();
+            promptInjected = false;
+            automationAttempts = 0;
+            generationState = "queued";
+            if (pageLoaded) main.postDelayed(this::runPendingPrompt, 400L);
+        }
         String url = intent.getStringExtra("url");
         if (url != null && !url.trim().isEmpty() && webView != null
                 && !url.equals(webView.getUrl())) {
