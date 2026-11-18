@@ -53,7 +53,7 @@ public final class ZSkyWebViewActivity extends Activity {
                 generationEvidence = value == null ? "" : value;
                 try {
                     String payload = generationEvidence;
-                    if (payload.startsWith("\\\"")) {
+                    if (payload.startsWith("\"")) {
                         Object decoded = new org.json.JSONTokener(payload).nextValue();
                         if (decoded instanceof String) payload = (String) decoded;
                     }
