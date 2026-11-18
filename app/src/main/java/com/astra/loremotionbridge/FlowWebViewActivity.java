@@ -33,7 +33,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 public final class FlowWebViewActivity extends Activity {
-    public static final String FLOW_PROJECT_URL = "https://flow.google.com/u/1/project/c311a6f3-e3de-4490-b97c-54ddd8610af1";
+    public static final String FLOW_PROJECT_URL = "https://flow.google.com/u/0/project/c311a6f3-e3de-4490-b97c-54ddd8610af1";
     public static final String EXTRA_AUTOMATE = "astra_flow_automate";
     public static final String EXTRA_PROMPT = "astra_flow_prompt";
     private static volatile FlowWebViewActivity instance;
@@ -731,11 +731,11 @@ public final class FlowWebViewActivity extends Activity {
             + "const observed=window.__astraFlowObservedRoots=window.__astraFlowObservedRoots||new WeakSet();"
             + "async function capture(v){let u='';try{u=v.currentSrc||v.src||'';if(!u){const s=v.querySelector('source[src]');u=s?s.src:'';}"
             + "if(!u||window.__astraFlowCaptureDone.has(u)||window.__astraFlowCaptureBusy.has(u))return;"
-            + "if(!u.startsWith('blob:')&&!u.startsWith('https://flow-content.google/video/'))return;"
+            + "if(!u.startsWith('blob:')&&!u.startsWith('https://flow-content.google/video/')&&!u.startsWith('https://flow.google.com/asb/'))return;"
             + "window.__astraFlowCaptureBusy.add(u);"
             + "if(u.startsWith('https://flow-content.google/video/')){if(!window.ASTRAFlowVideo.downloadVideo(u)){window.__astraFlowCaptureBusy.delete(u);console.warn('ASTRA_FLOW_DOWNLOAD_QUEUE_REJECTED');}return;}"
-            + "const r=await fetch(u);if(!r.ok)throw new Error('blob_http_'+r.status);"
-            + "const b=await r.blob();if(!b.size)throw new Error('empty_blob');"
+            + "const r=await fetch(u,{credentials:'include'});if(!r.ok)throw new Error('media_http_'+r.status);"
+            + "const b=await r.blob();if(!b.size)throw new Error('empty_media_blob');if(!/^video\\//i.test(b.type||'')&&!u.startsWith('blob:'))throw new Error('unexpected_media_type_'+(b.type||'unknown'));"
             + "if(!window.ASTRAFlowVideo.beginVideo(b.type||'video/mp4','flow_'+Date.now()+'.mp4'))throw new Error('native_begin_failed');"
             + "const size=48*1024;for(let i=0;i<b.size;i+=size){const a=new Uint8Array(await b.slice(i,Math.min(i+size,b.size)).arrayBuffer());"
             + "let bin='';for(let j=0;j<a.length;j++)bin+=String.fromCharCode(a[j]);"
