@@ -175,6 +175,10 @@ public class LocalBridgeServer {
                     "/webview/bing-eval".equals(routeOnlyPath) ||
                 "/webview/bing-save-image".equals(routeOnlyPath) ||
                     "/webview/bing-image-chunk".equals(routeOnlyPath) ||
+                    "/zsky/start".equals(routeOnlyPath) ||
+                    "/zsky/generate".equals(routeOnlyPath) ||
+                    "/zsky/open".equals(routeOnlyPath) ||
+                    "/zsky/eval".equals(routeOnlyPath) ||
                     "/flow/backup/start".equals(routeOnlyPath) ||
                     "/flow/start".equals(routeOnlyPath) ||
                     "/flow/generate".equals(routeOnlyPath) ||
@@ -367,6 +371,11 @@ public class LocalBridgeServer {
                     MainApplication.context(),
                     m.getOrDefault("url", ZSkyWebViewActivity.ZSKY_URL),
                     Boolean.parseBoolean(m.getOrDefault("background", "false")));
+            if ("/zsky/generate".equals(p)) return ZSkyWebViewActivity.start(
+                    MainApplication.context(),
+                    m.getOrDefault("url", ZSkyWebViewActivity.ZSKY_URL),
+                    m.getOrDefault("prompt", ""),
+                    Boolean.parseBoolean(m.getOrDefault("background", "true")));
             if ("/zsky/open".equals(p)) return ZSkyWebViewActivity.open(
                     MainApplication.context(), m.getOrDefault("url", ZSkyWebViewActivity.ZSKY_URL));
             if ("/zsky/status".equals(p)) return ZSkyWebViewActivity.status();
