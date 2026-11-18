@@ -464,6 +464,15 @@ public final class FlowWebViewActivity extends Activity {
             + "}catch(e){return 'ERROR:'+e.message;}})(" + quoted + ")";
     }
 
+    private void publishFlowDownloadProgress(String message) {
+        if (message == null || message.trim().isEmpty()) return;
+        Log.i("ASTRA-FLOW-DOWNLOAD", message);
+        main.post(() -> {
+            if (status != null) status.setText("ASTRA Flow: " + message);
+            ChatActivity.onFlowDownloadProgress(FlowWebViewActivity.this, message);
+        });
+    }
+
     // Called on Chromium's request thread. Do not block or alter the request;
     // hand only signed Flow MP4 URLs to the existing bounded downloader.
     private void captureNativeFlowVideoRequest(String requestUrl, String source) {
@@ -510,7 +519,43 @@ public final class FlowWebViewActivity extends Activity {
             } catch (Exception ignored) {}
         }
 
-        // Downloads the signed MP4 URL exposed by Flow's active video element.
+        // Accept only a signed MP4 URL resolved by Flow's own authenticated
+        // batchexecute RPCs in the page context. The /asb/ HTMLMediaElement URL
+        // is a preview rendition, never the source file.
+        @JavascriptInterface
+        public boolean downloadResolvedVideo(String mediaId, String videoUrl, String title) {
+            if (mediaId == null || !mediaId.matches("(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+                    || videoUrl == null || videoUrl.length() > 8192) {
+                publishFlowDownloadProgress("Ошибка: Flow вернул некорректный ID или ссылку на видео");
+                return false;
+            }
+            try {
+                Uri parsed = Uri.parse(videoUrl);
+                if (!"https".equalsIgnoreCase(parsed.getScheme())
+                        || !"flow-content.google".equalsIgnoreCase(parsed.getHost())
+                        || parsed.getPath() == null || !parsed.getPath().startsWith("/video/")) {
+                    publishFlowDownloadProgress("Ошибка: Flow не выдал прямую ссылку на MP4");
+                    return false;
+                }
+                if (!directDownloads.add(mediaId)) return true;
+                publishFlowDownloadProgress("Прямая ссылка получена. Подключаюсь к видеохранилищу…");
+                flowDownloadExecutor.execute(() -> downloadSignedFlowVideo(videoUrl, mediaId, title));
+                return true;
+            } catch (Exception e) {
+                Log.e("ASTRA-FLOW-DOWNLOAD", "Could not queue resolved video", e);
+                publishFlowDownloadProgress("Ошибка запуска загрузки: " +
+                        (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public void reportDownloadProgress(String message) {
+            if (message == null || message.length() > 240) return;
+            publishFlowDownloadProgress(message);
+        }
+
+        // Downloads a signed MP4 URL exposed by Flow's current batchexecute API.
         // The URL is short-lived; consume it immediately and never persist it in app state.
         @JavascriptInterface
         public boolean downloadVideo(String videoUrl) {
@@ -529,7 +574,8 @@ public final class FlowWebViewActivity extends Activity {
                 return false;
             }
             if (!directDownloads.add(videoUrl)) return true;
-            flowDownloadExecutor.execute(() -> downloadSignedFlowVideo(videoUrl));
+            flowDownloadExecutor.execute(() -> downloadSignedFlowVideo(videoUrl, videoUrl,
+                    "flow_" + System.currentTimeMillis() + ".mp4"));
             return true;
         }
 
@@ -545,7 +591,7 @@ public final class FlowWebViewActivity extends Activity {
             });
         }
 
-        private void downloadSignedFlowVideo(String videoUrl) {
+        private void downloadSignedFlowVideo(String videoUrl, String mediaId, String title) {
             Uri target = null;
             boolean published = false;
             HttpURLConnection connection = null;
@@ -556,20 +602,31 @@ public final class FlowWebViewActivity extends Activity {
                 connection.setConnectTimeout(20000);
                 connection.setReadTimeout(30000);
                 connection.setInstanceFollowRedirects(true);
-                connection.setRequestProperty("Accept", "video/mp4,*/*");
+                connection.setRequestProperty("Accept", "video/mp4,video/*,application/octet-stream,*/*");
+                if (flowUserAgent != null && !flowUserAgent.isEmpty())
+                    connection.setRequestProperty("User-Agent", flowUserAgent);
+                connection.setRequestProperty("Referer", "https://flow.google.com/");
                 int code = connection.getResponseCode();
-                if (code != HttpURLConnection.HTTP_OK)
-                    throw new java.io.IOException("Flow CDN HTTP " + code);
+                if (code == 401 || code == 403)
+                    throw new java.io.IOException("CDN отклонил подписанную ссылку (HTTP " + code + "). Запроси новую ссылку и повтори");
+                if (code != HttpURLConnection.HTTP_OK && code != HttpURLConnection.HTTP_PARTIAL)
+                    throw new java.io.IOException("Видеохранилище Flow вернуло HTTP " + code);
                 String mime = connection.getContentType();
-                if (mime == null || !mime.toLowerCase(java.util.Locale.ROOT).startsWith("video/"))
-                    throw new java.io.IOException("Unexpected Flow content type: " + mime);
+                String normalizedMime = mime == null ? "" : mime.split(";")[0].trim().toLowerCase(java.util.Locale.ROOT);
+                if (!normalizedMime.startsWith("video/")
+                        && !"application/octet-stream".equals(normalizedMime)
+                        && !"binary/octet-stream".equals(normalizedMime))
+                    throw new java.io.IOException("Flow вернул не видео, а " + (mime == null ? "неизвестный тип" : mime));
                 long expected = connection.getContentLengthLong();
                 if (expected > FlowVideoCaptureBridge.MAX_VIDEO_BYTES)
                     throw new java.io.IOException("Flow video exceeds 250 MB");
 
                 ContentValues values = new ContentValues();
-                values.put(MediaStore.Video.Media.DISPLAY_NAME,
-                        "flow_" + System.currentTimeMillis() + ".mp4");
+                String safeTitle = title == null ? "" : title.trim().replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_");
+                if (safeTitle.length() > 64) safeTitle = safeTitle.substring(0, 64).trim();
+                if (safeTitle.isEmpty()) safeTitle = "flow_" + System.currentTimeMillis();
+                if (!safeTitle.toLowerCase(java.util.Locale.ROOT).endsWith(".mp4")) safeTitle += ".mp4";
+                values.put(MediaStore.Video.Media.DISPLAY_NAME, safeTitle);
                 values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
                 if (Build.VERSION.SDK_INT >= 29) {
                     values.put(MediaStore.Video.Media.RELATIVE_PATH,
@@ -581,21 +638,34 @@ public final class FlowWebViewActivity extends Activity {
                 if (target == null) throw new java.io.IOException("MediaStore insert failed");
 
                 long written = 0L;
+                long lastUpdate = 0L;
+                int lastPercent = -1;
                 try (InputStream input = connection.getInputStream();
                      OutputStream output = getContentResolver().openOutputStream(target, "w")) {
-                    if (output == null) throw new java.io.IOException("MediaStore output unavailable");
+                    if (output == null) throw new java.io.IOException("Android не открыл файл для записи");
                     byte[] buffer = new byte[64 * 1024];
                     int count;
                     while ((count = input.read(buffer)) != -1) {
                         written += count;
                         if (written > FlowVideoCaptureBridge.MAX_VIDEO_BYTES)
-                            throw new java.io.IOException("Flow video exceeds 250 MB");
+                            throw new java.io.IOException("Видео Flow превысило лимит 250 МБ");
                         output.write(buffer, 0, count);
+                        long now = android.os.SystemClock.elapsedRealtime();
+                        int percent = expected > 0L ? (int) Math.min(100L, (written * 100L) / expected) : -1;
+                        if (now - lastUpdate >= 450L || (percent >= 0 && percent != lastPercent)) {
+                            lastUpdate = now;
+                            lastPercent = percent;
+                            String amount = String.format(java.util.Locale.US, "%.1f МБ", written / (1024.0 * 1024.0));
+                            String total = expected > 0L ? String.format(java.util.Locale.US, " / %.1f МБ", expected / (1024.0 * 1024.0)) : "";
+                            publishFlowDownloadProgress("Скачиваю MP4: " + amount + total + (percent >= 0 ? " · " + percent + "%" : ""));
+                        }
                     }
                     output.flush();
                 }
-                if (written == 0L || (expected > 0L && written != expected))
-                    throw new java.io.IOException("Incomplete Flow video: " + written + "/" + expected);
+                if (written == 0L)
+                    throw new java.io.IOException("Flow вернул пустой файл");
+                if (expected > 0L && written != expected)
+                    throw new java.io.IOException("Загрузка оборвалась: получено " + written + " из " + expected + " байт");
 
                 if (Build.VERSION.SDK_INT >= 29) {
                     ContentValues ready = new ContentValues();
@@ -607,23 +677,20 @@ public final class FlowWebViewActivity extends Activity {
                 Log.i("ASTRA-FLOW-DOWNLOAD", "Direct MP4 saved: " + target + " bytes=" + written);
                 ChatActivity.onFlowVideoReady(FlowWebViewActivity.this, target);
                 reportVideoDownloadResult(videoUrl, true);
-                main.post(() -> {
-                    if (status != null) status.setText("ASTRA Flow: видео сохранено и передано в чат");
-                });
+                publishFlowDownloadProgress("Готово · MP4 сохранён в Movies/ASTRA/Flow и отправлен в чат");
             } catch (Exception e) {
                 reportVideoDownloadResult(videoUrl, false);
-                Log.e("ASTRA-FLOW-DOWNLOAD", "Direct Flow MP4 download failed", e);
-                main.post(() -> {
-                    if (status != null) status.setText("ASTRA Flow: ошибка загрузки · "
-                            + e.getClass().getSimpleName());
-                });
+                Log.e("ASTRA-FLOW-DOWNLOAD", "Direct Flow MP4 download failed media=" + mediaId, e);
+                String reason = e.getMessage();
+                if (reason == null || reason.trim().isEmpty()) reason = e.getClass().getSimpleName();
+                publishFlowDownloadProgress("Ошибка скачивания: " + reason);
             } finally {
                 if (!published && target != null) {
                     try { getContentResolver().delete(target, null, null); }
                     catch (Exception ignored) {}
                 }
                 if (connection != null) connection.disconnect();
-                directDownloads.remove(videoUrl);
+                directDownloads.remove(mediaId);
             }
         }
 
@@ -757,10 +824,39 @@ public final class FlowWebViewActivity extends Activity {
             + "window.__astraFlowCaptureDone=window.__astraFlowCaptureDone||new Set();"
             + "window.__astraFlowCaptureBusy=window.__astraFlowCaptureBusy||new Set();"
             + "const observed=window.__astraFlowObservedRoots=window.__astraFlowObservedRoots||new WeakSet();"
+            + "function isUuid(x){return typeof x==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);}"
+            + "function scanEnd(t,start){let d=0,q=false,e=false;for(let i=start;i<t.length;i++){const c=t[i];if(q){if(e)e=false;else if(c==='\\\\')e=true;else if(c==='\\\"')q=false;continue;}if(c==='\\\"')q=true;else if(c==='['||c==='{')d++;else if(c===']'||c==='}'){d--;if(d===0)return i+1;}}return -1;}"
+            + "function walkFrames(node,rpc,out){if(!Array.isArray(node))return;if(node[0]==='wrb.fr'&&node[1]===rpc&&typeof node[2]==='string'){try{out.push(JSON.parse(node[2]));}catch(e){}}for(const x of node)walkFrames(x,rpc,out);}"
+            + "function parseBatch(t,rpc){if(t.startsWith(\")]}'\")){const n=t.indexOf('\\n');t=n<0?'':t.slice(n+1);}const out=[];let i=0;while(i<t.length){const p=t.indexOf('[',i);if(p<0)break;const e=scanEnd(t,p);if(e<0)break;try{walkFrames(JSON.parse(t.slice(p,e)),rpc,out);}catch(x){}i=e;}if(!out.length)throw new Error('Flow не вернул ответ RPC '+rpc);return out[0];}"
+            + "function collectUrls(n,out,depth){out=out||[];depth=depth||0;if(depth>40||n==null)return out;if(typeof n==='string'){if(n.startsWith('https://')||n.startsWith('http://'))out.push(n);}else if(Array.isArray(n)){n.forEach(x=>collectUrls(x,out,depth+1));}else if(typeof n==='object'){Object.keys(n).forEach(k=>collectUrls(n[k],out,depth+1));}return out;}"
+            + "function pairTime(x){if(!Array.isArray(x)||x.length<1||typeof x[0]!=='number')return 0;const sec=x[0];if(sec>1000000000&&sec<4000000000)return sec*1000+(typeof x[1]==='number'?x[1]/1000000:0);return 0;}"
+            + "async function flowRpc(rpc,inner){const w=window.WIZ_global_data||{};let at=w.SNlM0e,sid=String(w.FdrFJe||''),bl=w.cfb2h||'';if(!at)throw new Error('Нет токена сессии Flow. Перезагрузи страницу проекта.');"
+            + "const seen=performance.getEntriesByType('resource').map(e=>e.name).filter(n=>n.includes('/data/batchexecute'));const pref=(location.pathname.match(/^\\/u\\/\\d+/)||[])[0]||'';const paths=[];"
+            + "if(seen.length){try{paths.push(new URL(seen[seen.length-1]).pathname);}catch(e){}}"
+            + "paths.push(pref+'/_/AiSandboxAngularFrontend/data/batchexecute',pref+'/_/FlowUi/data/batchexecute');if(pref)paths.push('/_/AiSandboxAngularFrontend/data/batchexecute');"
+            + "const unique=[...new Set(paths)];const hl=(document.documentElement.lang||navigator.language||'en').split('-')[0];let last='не удалось обратиться к Flow';"
+            + "for(const path of unique){try{const reqid=Math.floor(Math.random()*900000)+100000;const query=path+'?rpcids='+encodeURIComponent(rpc)+'&source-path='+encodeURIComponent(location.pathname||'/')+'&bl='+encodeURIComponent(bl)+'&f.sid='+encodeURIComponent(sid)+'&hl='+encodeURIComponent(hl)+'&_reqid='+reqid+'&rt=c';"
+            + "const payload=JSON.stringify([[[rpc,JSON.stringify(inner),null,'generic']]]);const response=await fetch(query,{method:'POST',credentials:'include',headers:{'content-type':'application/x-www-form-urlencoded;charset=UTF-8','x-same-domain':'1'},body:new URLSearchParams({'f.req':payload,at})});"
+            + "const body=await response.text();if(response.status===404){last='RPC Flow: HTTP 404';continue;}if(body.trimStart().startsWith('<'))throw new Error('Flow вернул страницу входа. Проверь авторизацию Google.');if(!response.ok)throw new Error('RPC '+rpc+': HTTP '+response.status);return parseBatch(body,rpc);"
+            + "}catch(e){last=String(e.message||e);}}throw new Error(last);}"
+            + "async function requestProjectVideo(){if(window.__astraFlowRpcBusy)return;const match=location.pathname.match(/\\/project\\/([0-9a-f-]{36})/i);if(!match){window.ASTRAFlowVideo.reportDownloadProgress('Не найден ID открытого проекта Flow');return;}window.__astraFlowRpcBusy=true;"
+            + "try{window.ASTRAFlowVideo.reportDownloadProgress('Читаю список материалов проекта…');const projectId=match[1];const listing=await flowRpc('Zzl0ze',['projects/'+projectId,null,null,null,[1]]);"
+            + "const entries=new Map(),records=new Map(),trashed=new Set();let order=0;function walk(n,depth){if(!Array.isArray(n)||depth>40)return;order++;"
+            + "if(n.length>=4&&isUuid(n[0])&&Array.isArray(n[3])&&n[3].length>=5&&isUuid(n[3][4])){const d=n[3];if(d[2]===true)trashed.add(d[4]);else entries.set(d[4],{title:typeof d[0]==='string'?d[0]:'',time:pairTime(d[6])||pairTime(d[1]),order});}"
+            + "if(n.length>=6&&n.length<=10&&isUuid(n[0])&&isUuid(n[1])&&isUuid(n[2])&&Array.isArray(n[5])){const urls=collectUrls(n);const video=(n.length>=8&&n[7]!=null)||urls.some(u=>u.includes('flow-content.google/video/'));if(video&&!records.has(n[0]))records.set(n[0],{id:n[0],order,urls});}"
+            + "n.forEach(x=>walk(x,depth+1));}walk(listing,0);const candidates=[];for(const [id,record] of records){const entry=entries.get(id)||{};candidates.push({id,title:entry.title||'flow_'+id.slice(0,8),time:entry.time||0,order:entry.order||record.order});}"
+            + "for(let i=candidates.length-1;i>=0;i--)if(trashed.has(candidates[i].id))candidates.splice(i,1);"
+            + "if(!candidates.length)throw new Error('В проекте не найдено готовое видео (найдено записей: '+records.size+'). Открой готовый результат и повтори.');"
+            + "candidates.sort((a,b)=>(b.time-a.time)||(a.order-b.order));const item=candidates[0];window.ASTRAFlowVideo.reportDownloadProgress('Найдено видео. Получаю оригинальный MP4…');"
+            + "const resolved=await flowRpc('as29s',[item.id]);const links=collectUrls(resolved).filter(u=>u.startsWith('https://flow-content.google/video/'));if(!links.length)throw new Error('Flow не выдал прямую ссылку на MP4 (as29s).');"
+            + "if(!window.ASTRAFlowVideo.downloadResolvedVideo(item.id,links[0],item.title)){throw new Error('ASTRA отклонила прямую ссылку на видео.');}"
+            + "}catch(e){const reason=String(e&&e.message||e).slice(0,200);window.ASTRAFlowVideo.reportDownloadProgress('Ошибка: '+reason);console.error('ASTRA_FLOW_RPC_DOWNLOAD:'+reason);const failedPreview=window.__astraFlowRpcLastPreview;setTimeout(()=>{if(window.__astraFlowRpcLastPreview===failedPreview)window.__astraFlowRpcLastPreview=null;},10000);}"
+            + "finally{window.__astraFlowRpcBusy=false;}}"
             + "async function capture(v){let u='';try{u=v.currentSrc||v.src||'';if(!u){const s=v.querySelector('source[src]');u=s?s.src:'';}"
             + "if(!u||window.__astraFlowCaptureDone.has(u)||window.__astraFlowCaptureBusy.has(u))return;"
-            + "if(!u.startsWith('blob:')&&!u.startsWith('https://flow-content.google/video/')&&!u.startsWith('https://flow.google.com/asb/'))return;"
+            + "if(!u.startsWith('blob:')&&!u.startsWith('https://flow-content.google/video/')&&!u.startsWith('https://flow.google.com/asb/')&&!u.startsWith('https://labs.google/asb/'))return;"
             + "window.__astraFlowCaptureBusy.add(u);"
+            + "if(u.startsWith('https://flow.google.com/asb/')||u.startsWith('https://labs.google/asb/')){window.__astraFlowCaptureBusy.delete(u);if(window.__astraFlowRpcLastPreview!==u){window.__astraFlowRpcLastPreview=u;requestProjectVideo();}return;}"
             + "if(u.startsWith('https://flow-content.google/video/')){if(!window.ASTRAFlowVideo.downloadVideo(u)){window.__astraFlowCaptureBusy.delete(u);console.warn('ASTRA_FLOW_DOWNLOAD_QUEUE_REJECTED');}return;}"
             + "const r=await fetch(u,{credentials:'include'});if(!r.ok)throw new Error('media_http_'+r.status);"
             + "const b=await r.blob();if(!b.size)throw new Error('empty_media_blob');if(!/^video\\//i.test(b.type||'')&&!u.startsWith('blob:'))throw new Error('unexpected_media_type_'+(b.type||'unknown'));"
