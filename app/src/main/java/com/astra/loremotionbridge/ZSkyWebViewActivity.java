@@ -434,7 +434,7 @@ public final class ZSkyWebViewActivity extends Activity {
     @Override protected void onDestroy() {
         lastLifecycleEvent = "destroyed";
         main.removeCallbacks(generationObserver);
-        if (zskyWakeLock != null && zskyWakeLock.isHeld()) zskyWakeLock.release();
+        if (videoCaptureBridge != null) videoCaptureBridge.abortVideo();\n        if (zskyWakeLock != null && zskyWakeLock.isHeld()) zskyWakeLock.release();
         zskyWakeLock = null;
         if (instance == this) instance = null;
         if (webView != null) {
