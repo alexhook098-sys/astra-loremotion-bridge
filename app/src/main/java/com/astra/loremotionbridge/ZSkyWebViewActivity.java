@@ -166,11 +166,7 @@ public final class ZSkyWebViewActivity extends Activity {
         if (url != null && !url.trim().isEmpty() && webView != null
                 && !url.equals(webView.getUrl())) {
             webView.loadUrl(url);
-        } else if (backgroundRequested && pageLoaded) {
-            main.postDelayed(() -> {
-                if (!isFinishing() && !isDestroyed()) moveTaskToBack(true);
-            }, 150L);
-        }
+        } // Minimize only after the Generate click is confirmed.
     }
 
     private void runPendingPrompt() {
@@ -195,7 +191,7 @@ public final class ZSkyWebViewActivity extends Activity {
                     + "}catch(x){return 'ERROR:'+x.message;}})(" + org.json.JSONObject.quote(pendingPrompt) + ")";
         } else {
             script = "(function(){const b=Array.from(document.querySelectorAll('button,[role=button]'))"
-                    + ".find(x=>(x.getAttribute('aria-label')||'').trim().toLowerCase()==='generate'"
+                    + ".find(x=>x.matches('button[aria-label="Generate"]')||(x.getAttribute('aria-label')||'').trim().toLowerCase()==='generate'"
                     + "||((x.innerText||x.textContent||'').trim().toLowerCase()==='generate'));"
                     + "return (!b?'BUTTON_NOT_FOUND':(b.disabled||b.getAttribute('aria-disabled')==='true'?'BUTTON_DISABLED':'BUTTON_READY'));})()";
         }
