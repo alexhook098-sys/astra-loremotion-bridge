@@ -53,6 +53,7 @@ public class ChatActivity extends Activity {
     private ScrollView messageScroll;
     private EditText input;
     private TextView modelStatus;
+    private TextView flowDownloadStatus;
     private Button installButton;
     private JSONArray history;
     private volatile boolean busy = false;
@@ -68,6 +69,8 @@ public class ChatActivity extends Activity {
         applySavedTheme();
         history = loadHistory();
         buildScreen();
+        renderFlowDownloadProgress(getSharedPreferences("astra_chat", MODE_PRIVATE)
+                .getString("flow_download_status", ""));
         if (history.length() == 0) {
             addMessage("Привет. Я ASTRA. Подключи OpenRouter один раз — скачивать модель на телефон не нужно. ✦", false, true);
         } else {
@@ -190,6 +193,10 @@ public class ChatActivity extends Activity {
         chatPanel.setPadding(dp(13), dp(13), dp(13), dp(10));
         chatPanel.setBackground(round(Color.rgb(20, 23, 45), Color.rgb(65, 103, 140), 22));
         chatPanel.addView(label("ПЕРЕПИСКА  ·  ASTRA SESSION", 10, CYAN, true));
+        flowDownloadStatus = label("", 11, Color.rgb(174, 224, 255), false);
+        flowDownloadStatus.setPadding(dp(2), dp(7), dp(2), dp(4));
+        flowDownloadStatus.setVisibility(View.GONE);
+        chatPanel.addView(flowDownloadStatus, new LinearLayout.LayoutParams(-1, -2));
         messageScroll = new ScrollView(this);
         messages = new LinearLayout(this);
         messages.setOrientation(LinearLayout.VERTICAL);
@@ -378,6 +385,26 @@ public class ChatActivity extends Activity {
         if (activity != null) activity.runOnUiThread(activity::consumePendingPerchanceImages);
     }
 
+
+    public static void onFlowDownloadProgress(Context context, String message) {
+        if (context == null || message == null) return;
+        context.getSharedPreferences("astra_chat", MODE_PRIVATE).edit()
+                .putString("flow_download_status", message).apply();
+        ChatActivity activity = activeInstance;
+        if (activity != null) {
+            activity.runOnUiThread(() -> activity.renderFlowDownloadProgress(message));
+        }
+    }
+
+    private void renderFlowDownloadProgress(String message) {
+        if (flowDownloadStatus == null) return;
+        if (message == null || message.trim().isEmpty()) {
+            flowDownloadStatus.setVisibility(View.GONE);
+            return;
+        }
+        flowDownloadStatus.setText("⬇  FLOW · " + message);
+        flowDownloadStatus.setVisibility(View.VISIBLE);
+    }
 
     // Persist Flow video delivery while the chat screen is in the background.
     public static void onFlowVideoReady(Context context, Uri video) {
