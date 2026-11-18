@@ -33,7 +33,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 public final class FlowWebViewActivity extends Activity {
-    public static final String FLOW_PROJECT_URL = "https://flow.google.com/u/0/project/c311a6f3-e3de-4490-b97c-54ddd8610af1";
+    public static final String FLOW_PROJECT_URL = "https://flow.google.com/u/1/project/c311a6f3-e3de-4490-b97c-54ddd8610af1";
     public static final String EXTRA_AUTOMATE = "astra_flow_automate";
     public static final String EXTRA_PROMPT = "astra_flow_prompt";
     private static volatile FlowWebViewActivity instance;
