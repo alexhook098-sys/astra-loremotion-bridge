@@ -62,7 +62,6 @@ public final class FlowWebViewActivity extends Activity {
     private int generationObserverPolls = 0;
     private int autoOpenAttempts = 0;
     private boolean autoOpenCompleted = false;
-    private boolean generationWasRunning = false;
     private int baselineFlowTileCount = -1;
     private String flowUserAgent = "";
     private final Runnable generationObserver = new Runnable() {
@@ -89,16 +88,14 @@ public final class FlowWebViewActivity extends Activity {
                     if (tail.contains("ошибка генерац") || tail.contains("generation failed")
                             || tail.contains("не удалось создать")) {
                         generationState = "failed";
-                    } else if (busy > 0 || tail.contains("генерация") || tail.contains("создание")
-                            || tail.contains("processing") || tail.contains("generating")) {
-                        generationWasRunning = true;
-                        generationState = "running";
-                    } else if (generationWasRunning && baselineFlowTileCount >= 0
+                    } else if (busy == 0 && baselineFlowTileCount >= 0
                             && tiles > baselineFlowTileCount && !autoOpenCompleted) {
                         generationState = "completed_waiting_for_card";
                         Log.i("ASTRA-FLOW-OBSERVER", "New Flow result tile detected; opening from background observer");
                         main.post(FlowWebViewActivity.this::tryAutoOpenLatestFlowVideo);
-                    } else if (!generationWasRunning) {
+                    } else if (busy > 0) {
+                        generationState = "running";
+                    } else {
                         generationState = "submitted_unconfirmed";
                     }
                 } catch (Exception parseError) {
@@ -406,7 +403,6 @@ public final class FlowWebViewActivity extends Activity {
                 generationStartedAt = System.currentTimeMillis();
                 autoOpenAttempts = 0;
                 autoOpenCompleted = false;
-                generationWasRunning = false;
                 baselineFlowTileCount = -1;
                 generationState = "submitted_unconfirmed";
                 generationEvidence = "Generate button click dispatched; awaiting page evidence";
