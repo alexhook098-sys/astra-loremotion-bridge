@@ -97,6 +97,7 @@ public final class ZSkyWebViewActivity extends Activity {
                 lastLifecycleEvent = "pageFinished";
                 status.setText("ASTRA ZSky: студия загружена");
                 main.postDelayed(ZSkyWebViewActivity.this::inspectPage, 900L);
+                if (pendingPrompt != null) main.postDelayed(ZSkyWebViewActivity.this::runPendingPrompt, 1200L);
                 if (backgroundRequested) {
                     main.postDelayed(() -> {
                         if (!isFinishing() && !isDestroyed()) moveTaskToBack(true);
@@ -133,6 +134,18 @@ public final class ZSkyWebViewActivity extends Activity {
         }
     }
 
+    private void runPendingPrompt() {
+        if (webView == null || pendingPrompt == null || !pageLoaded || isFinishing() || isDestroyed()) return;
+        String p = pendingPrompt;
+        String script = "(function(p){try{const e=document.querySelector('input[placeholder=\\\"Describe the scene...\\\"]');if(!e)return 'FIELD_NOT_FOUND';if(e.disabled)return 'FIELD_DISABLED';e.focus();Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,p);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));if(e.value!==p)return 'FIELD_VERIFY_FAILED';const b=Array.from(document.querySelectorAll('button,[role=button]')).find(x=>(x.getAttribute('aria-label')||'').toLowerCase()==='generate'||(x.innerText||'').trim().toLowerCase()==='generate');if(!b)return 'BUTTON_NOT_FOUND';if(b.disabled||b.getAttribute('aria-disabled')==='true')return 'BUTTON_DISABLED';b.click();return 'GENERATE_CLICKED';}catch(x){return 'ERROR:'+x.message;}})(" + org.json.JSONObject.quote(p) + ")";
+        webView.evaluateJavascript(script, value -> {
+            String result = value == null ? "" : value;
+            Log.i("ASTRA-ZSKY-AUTO", "automation result=" + result);
+            if (result.contains("GENERATE_CLICKED")) pendingPrompt = null;
+            else if (result.contains("FIELD_NOT_FOUND") || result.contains("BUTTON_NOT_FOUND") || result.contains("BUTTON_DISABLED"))
+                main.postDelayed(this::runPendingPrompt, 1500L);
+        });
+    }
     private void inspectPage() {
         if (webView == null || isFinishing() || isDestroyed()) return;
         String js = "(function(){try{const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'};"
