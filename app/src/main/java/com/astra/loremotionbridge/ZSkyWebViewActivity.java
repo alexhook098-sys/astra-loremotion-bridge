@@ -449,6 +449,7 @@ public final class ZSkyWebViewActivity extends Activity {
     private static String esc(String value) {
         if (value == null) return "";
         return value.replace("\\", "\\\\").replace("\"", "\\\"")
-                .replace("\n", "\\n").replace("\r", "\\r");
+                .replace("\n", "
+").replace("\r", "\\r");
     }
 }
