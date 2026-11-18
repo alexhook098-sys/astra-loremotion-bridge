@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
@@ -33,12 +34,20 @@ public final class ZSkyWebViewActivity extends Activity {
     private volatile String currentUrl = "";
     private String lastPageDiagnostic = "{}";
     private String lastLifecycleEvent = "created";
+    private PowerManager.WakeLock zskyWakeLock;
 
     public static ZSkyWebViewActivity getInstance() { return instance; }
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         instance = this;
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        if (pm != null) {
+            zskyWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ASTRA:ZSkyGeneration");
+            zskyWakeLock.setReferenceCounted(false);
+            zskyWakeLock.acquire();
+            Log.i("ASTRA-ZSKY", "Partial WakeLock acquired");
+        }
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -54,6 +63,11 @@ public final class ZSkyWebViewActivity extends Activity {
         root.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1f));
         setContentView(root);
 
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
+        }
+        webView.setFocusable(true);
+        webView.setFocusableInTouchMode(true);
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -243,6 +257,8 @@ public final class ZSkyWebViewActivity extends Activity {
 
     @Override protected void onDestroy() {
         lastLifecycleEvent = "destroyed";
+        if (zskyWakeLock != null && zskyWakeLock.isHeld()) zskyWakeLock.release();
+        zskyWakeLock = null;
         if (instance == this) instance = null;
         if (webView != null) {
             webView.stopLoading();
