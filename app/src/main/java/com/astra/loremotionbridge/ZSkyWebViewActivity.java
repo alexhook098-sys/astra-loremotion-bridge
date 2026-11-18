@@ -35,6 +35,7 @@ public final class ZSkyWebViewActivity extends Activity {
     private String lastPageDiagnostic = "{}";
     private String lastLifecycleEvent = "created";
     private PowerManager.WakeLock zskyWakeLock;
+    private String pendingPrompt;
 
     public static ZSkyWebViewActivity getInstance() { return instance; }
 
@@ -119,6 +120,8 @@ public final class ZSkyWebViewActivity extends Activity {
         super.onNewIntent(intent);
         setIntent(intent);
         backgroundRequested = intent.getBooleanExtra("background", backgroundRequested);
+        String prompt = intent.getStringExtra("prompt");
+        if (prompt != null && !prompt.trim().isEmpty()) pendingPrompt = prompt.trim();
         String url = intent.getStringExtra("url");
         if (url != null && !url.trim().isEmpty() && webView != null
                 && !url.equals(webView.getUrl())) {
@@ -180,12 +183,17 @@ public final class ZSkyWebViewActivity extends Activity {
     }
 
     public static String start(Context context, String url, boolean background) {
+        return start(context, url, null, background);
+    }
+
+    public static String start(Context context, String url, String prompt, boolean background) {
         try {
             Intent intent = new Intent(context, ZSkyWebViewActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP
                     | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             intent.putExtra("url", url == null || url.isEmpty() ? ZSKY_URL : url);
             intent.putExtra("background", background);
+            if (prompt != null && !prompt.trim().isEmpty()) intent.putExtra("prompt", prompt.trim());
             context.startActivity(intent);
             return "{\"ok\":true,\"action\":\"zsky-start-requested\",\"background\":"
                     + background + "}";
