@@ -62,6 +62,7 @@ public final class FlowWebViewActivity extends Activity {
     private int generationObserverPolls = 0;
     private int autoOpenAttempts = 0;
     private boolean autoOpenCompleted = false;
+    private String flowUserAgent = "";
     private final Runnable generationObserver = new Runnable() {
         @Override public void run() {
             if (webView == null || isFinishing() || isDestroyed()
@@ -212,6 +213,7 @@ public final class FlowWebViewActivity extends Activity {
         settings.setSupportMultipleWindows(false);
         settings.setLoadsImagesAutomatically(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
+        flowUserAgent = settings.getUserAgentString();
 
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
@@ -501,12 +503,21 @@ public final class FlowWebViewActivity extends Activity {
                 connection.setConnectTimeout(20000);
                 connection.setReadTimeout(30000);
                 connection.setInstanceFollowRedirects(true);
-                connection.setRequestProperty("Accept", "video/mp4,*/*");
+                connection.setRequestProperty("Accept", "video/mp4,video/*,application/octet-stream,*/*");
+                connection.setRequestProperty("Referer", "https://flow.google.com/");
+                if (flowUserAgent != null && !flowUserAgent.isEmpty())
+                    connection.setRequestProperty("User-Agent", flowUserAgent);
+                String flowCookies = CookieManager.getInstance().getCookie(videoUrl);
+                if (flowCookies != null && !flowCookies.isEmpty())
+                    connection.setRequestProperty("Cookie", flowCookies);
                 int code = connection.getResponseCode();
-                if (code != HttpURLConnection.HTTP_OK)
+                if (code != HttpURLConnection.HTTP_OK && code != HttpURLConnection.HTTP_PARTIAL)
                     throw new java.io.IOException("Flow CDN HTTP " + code);
                 String mime = connection.getContentType();
-                if (mime == null || !mime.toLowerCase(java.util.Locale.ROOT).startsWith("video/"))
+                String normalizedMime = mime == null ? "" : mime.split(";")[0].trim().toLowerCase(java.util.Locale.ROOT);
+                if (!normalizedMime.startsWith("video/")
+                        && !"application/octet-stream".equals(normalizedMime)
+                        && !"binary/octet-stream".equals(normalizedMime))
                     throw new java.io.IOException("Unexpected Flow content type: " + mime);
                 long expected = connection.getContentLengthLong();
                 if (expected > FlowVideoCaptureBridge.MAX_VIDEO_BYTES)
