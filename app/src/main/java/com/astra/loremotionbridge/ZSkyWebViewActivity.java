@@ -52,7 +52,12 @@ public final class ZSkyWebViewActivity extends Activity {
                 observerPolls++;
                 generationEvidence = value == null ? "" : value;
                 try {
-                    org.json.JSONObject e = new org.json.JSONObject(generationEvidence);
+                    String payload = generationEvidence;
+                    if (payload.startsWith("\\\"")) {
+                        Object decoded = new org.json.JSONTokener(payload).nextValue();
+                        if (decoded instanceof String) payload = (String) decoded;
+                    }
+                    org.json.JSONObject e = new org.json.JSONObject(payload);
                     String tail = e.optString("tail", "").toLowerCase(java.util.Locale.ROOT);
                     if (tail.contains("generation failed") || tail.contains("ошибка генерации")) generationState = "failed";
                     else if (e.optInt("busy", 0) > 0) generationState = "running";
