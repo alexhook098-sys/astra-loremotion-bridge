@@ -466,6 +466,10 @@ public final class FlowWebViewActivity extends Activity {
                 String safeSource = source == null ? "unknown" : source.replaceAll("[^A-Za-z0-9_:/.-]", "_");
                 Log.i("ASTRA-FLOW-NET", "VIDEO_URL_CANDIDATE source=" + safeSource
                         + " host=" + parsed.getHost() + " path=" + parsed.getPath());
+                // A network response can expose the real MP4 URL even when the visible
+                // <video> element only points at Flow's /asb preview rendition.
+                // Consume the signed URL immediately; never log or persist it.
+                downloadVideo(videoUrl);
             } catch (Exception ignored) {}
         }
 
@@ -689,7 +693,7 @@ public final class FlowWebViewActivity extends Activity {
             + "if(window.__astraFlowNetDiagInstalled)return 'already-installed';"
             + "window.__astraFlowNetDiagInstalled=true;"
             + "const report=(src,value)=>{try{if(value==null)return;const text=typeof value==='string'?value:JSON.stringify(value);"
-            + "const re=new RegExp('https://flow-content\\\\.google/video/[A-Za-z0-9_-]+','g');"
+            + "const re=/https:\\/\\/flow-content\\.google\\/video\\/[^\\\"'\\\\\\s<>]+/g;"
             + "let m;while((m=re.exec(text))!==null){try{window.ASTRAFlowVideo.reportNetworkCandidate(m[0],src);}catch(e){}}"
             + "}catch(e){}};"
             + "const originalFetch=window.fetch;"
