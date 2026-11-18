@@ -12,6 +12,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -27,6 +28,7 @@ public final class ZSkyWebViewActivity extends Activity {
     private static volatile ZSkyWebViewActivity instance;
 
     private WebView webView;
+    private ZSkyVideoCaptureBridge videoCaptureBridge;
     private TextView status;
     private final Handler main = new Handler(Looper.getMainLooper());
     private boolean backgroundRequested;
@@ -50,6 +52,7 @@ public final class ZSkyWebViewActivity extends Activity {
             String js = "(function(){const t=(document.body&&document.body.innerText)||'';return JSON.stringify({tail:t.slice(-1400),videos:document.querySelectorAll('video').length,busy:document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,visibility:document.visibilityState});})()";
             webView.evaluateJavascript(js, value -> {
                 observerPolls++;
+                if (webView != null) webView.evaluateJavascript(videoCaptureScanScript(), null);
                 generationEvidence = value == null ? "" : value;
                 try {
                     String payload = generationEvidence;
@@ -92,6 +95,8 @@ public final class ZSkyWebViewActivity extends Activity {
         root.addView(status, new LinearLayout.LayoutParams(-1, -2));
 
         webView = new WebView(this);
+        videoCaptureBridge = new ZSkyVideoCaptureBridge(this);
+        webView.addJavascriptInterface(videoCaptureBridge, "ASTRAZSkyVideo");
         root.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1f));
         setContentView(root);
 
@@ -128,6 +133,7 @@ public final class ZSkyWebViewActivity extends Activity {
                 lastLifecycleEvent = "pageFinished";
                 status.setText("ASTRA ZSky: студия загружена");
                 main.postDelayed(ZSkyWebViewActivity.this::inspectPage, 900L);
+                main.postDelayed(ZSkyWebViewActivity.this::installVideoCapture, 1400L);
                 if (pendingPrompt != null) main.postDelayed(ZSkyWebViewActivity.this::runPendingPrompt, 1200L);
                 if (backgroundRequested) {
                     main.postDelayed(() -> {
@@ -233,6 +239,44 @@ public final class ZSkyWebViewActivity extends Activity {
                 main.postDelayed(this::runPendingPrompt, 1000L);
             }
         });
+    }
+
+
+    private String videoCaptureScanScript() {
+        return "(function(){try{window.__astraZSkyVideoScan&&window.__astraZSkyVideoScan();return 'scan';}catch(e){return String(e);}})()";
+    }
+
+    // Flow-style page-owned Blob capture, streamed in bounded chunks to native MediaStore.
+    private void installVideoCapture() {
+        if (webView == null || isFinishing() || isDestroyed()) return;
+        String js = "(function(){"
+            + "if(window.__astraZSkyCaptureInstalled){window.__astraZSkyVideoScan&&window.__astraZSkyVideoScan();return 'already-installed-rescanned';}"
+            + "window.__astraZSkyCaptureInstalled=true;"
+            + "window.__astraZSkyCaptureDone=window.__astraZSkyCaptureDone||new Set();"
+            + "window.__astraZSkyCaptureBusy=window.__astraZSkyCaptureBusy||new Set();"
+            + "const roots=new WeakSet(),videos=new WeakSet();"
+            + "async function capture(v){let u='';try{u=v.currentSrc||v.src||'';if(!u){const q=v.querySelector('source[src]');u=q?q.src:'';}"
+            + "if(!u||!u.startsWith('blob:'))return;"
+            + "if(window.__astraZSkyCaptureDone.has(u)||window.__astraZSkyCaptureBusy.has(u))return;"
+            + "window.__astraZSkyCaptureBusy.add(u);const r=await fetch(u);if(!r.ok)throw new Error('blob_http_'+r.status);"
+            + "const b=await r.blob();if(!b.size)throw new Error('empty_blob');"
+            + "if(!window.ASTRAZSkyVideo.beginVideo(b.type||'video/mp4','zsky_'+Date.now()+'.mp4'))throw new Error('native_begin_failed');"
+            + "const size=48*1024;for(let i=0;i<b.size;i+=size){const a=new Uint8Array(await b.slice(i,Math.min(i+size,b.size)).arrayBuffer());"
+            + "let bin='';for(let j=0;j<a.length;j++)bin+=String.fromCharCode(a[j]);"
+            + "if(!window.ASTRAZSkyVideo.appendChunk(btoa(bin)))throw new Error('native_chunk_failed_'+i);}"
+            + "if(!window.ASTRAZSkyVideo.finishVideo())throw new Error('native_finish_failed');"
+            + "window.__astraZSkyCaptureDone.add(u);window.__astraZSkyCaptureBusy.delete(u);console.info('ASTRA_ZSKY_VIDEO_SAVED',b.size);"
+            + "}catch(e){window.__astraZSkyCaptureBusy.delete(u);try{window.ASTRAZSkyVideo.failVideo(String(e));}catch(x){}console.error('ASTRA_ZSKY_VIDEO_CAPTURE:'+e);}}"
+            + "function watch(v){if(!v||videos.has(v))return;videos.add(v);"
+            + "['loadedmetadata','loadeddata','durationchange','canplay','playing','progress','loadstart'].forEach(e=>v.addEventListener(e,()=>capture(v),{passive:true}));capture(v);}"
+            + "function scan(root){if(!root)return;try{root.querySelectorAll('video').forEach(watch);"
+            + "if(!roots.has(root)){roots.add(root);new MutationObserver(()=>window.__astraZSkyVideoScan()).observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});}"
+            + "root.querySelectorAll('*').forEach(n=>{if(n.shadowRoot)scan(n.shadowRoot);});"
+            + "root.querySelectorAll('iframe').forEach(f=>{try{if(f.contentDocument)scan(f.contentDocument);}catch(e){}});"
+            + "}catch(e){console.warn('ASTRA_ZSKY_SCAN:'+e);}}"
+            + "window.__astraZSkyVideoScan=function(){scan(document);};window.__astraZSkyVideoScan();"
+            + "setInterval(window.__astraZSkyVideoScan,2500);return 'zsky-blob-capture-installed';})()";
+        webView.evaluateJavascript(js, value -> Log.i("ASTRA-ZSKY-CAPTURE", "bridge setup=" + value));
     }
 
     private void inspectPage() {
