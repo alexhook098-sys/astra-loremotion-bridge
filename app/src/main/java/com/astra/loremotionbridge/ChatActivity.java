@@ -78,6 +78,8 @@ public class ChatActivity extends Activity {
                         addPerchanceImageMessage(Uri.parse(m.optString("uri", "")), false);
                     } else if ("flow_video".equals(m.optString("type"))) {
                         addVideoMessage(Uri.parse(m.optString("uri", "")), false);
+                    } else if ("motion_video".equals(m.optString("type"))) {
+                        addMotionVideoMessage(Uri.parse(m.optString("uri", "")), false);
                     } else {
                         addMessage(m.optString("text"), m.optBoolean("user"), false);
                     }
@@ -307,7 +309,7 @@ public class ChatActivity extends Activity {
         modelExecutor.execute(() -> {
             try {
                 Uri video = AstraMotionEngine.createVideo(this, uri);
-                runOnUiThread(() -> addVideoMessage(video));
+                runOnUiThread(() -> addMotionVideoMessage(video));
             } catch (Exception e) {
                 runOnUiThread(() -> addMessage("Не удалось создать видео: " +
                         (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()),
@@ -319,6 +321,46 @@ public class ChatActivity extends Activity {
     private void addVideoMessage(Uri video) {
         addVideoMessage(video, true);
     }
+
+    private void addMotionVideoMessage(Uri video) {
+        addMotionVideoMessage(video, true);
+    }
+
+    private void addMotionVideoMessage(Uri video, boolean save) {
+        if (video == null || video.toString().isEmpty() || messages == null) return;
+        String message = "✦ ASTRA ONE CLICK MOTION: видео создано · Movies/ASTRA/OneClickMotion\\nНажми здесь, чтобы открыть MP4.";
+        addMessage(message, false, false);
+        int last = messages.getChildCount() - 1;
+        if (last >= 0) {
+            View row = messages.getChildAt(last);
+            if (row instanceof ViewGroup && ((ViewGroup) row).getChildCount() > 0) {
+                View bubble = ((ViewGroup) row).getChildAt(0);
+                bubble.setOnClickListener(v -> {
+                    Intent open = new Intent(Intent.ACTION_VIEW);
+                    open.setDataAndType(video, "video/mp4");
+                    open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    try { startActivity(open); }
+                    catch (Exception e) {
+                        addMessage("Не найдено приложение для просмотра MP4.", false, true);
+                    }
+                });
+            }
+        }
+        if (save) {
+            try {
+                history.put(new JSONObject()
+                        .put("type", "motion_video")
+                        .put("text", message)
+                        .put("uri", video.toString())
+                        .put("user", false));
+                getSharedPreferences("astra_chat", MODE_PRIVATE).edit()
+                        .putString("messages", history.toString()).apply();
+            } catch (Exception e) {
+                android.util.Log.e("ASTRA-MOTION-CHAT", "Could not persist One Click Motion video", e);
+            }
+        }
+    }
+
 
     private void addVideoMessage(Uri video, boolean save) {
         if (video == null || video.toString().isEmpty() || messages == null) return;
