@@ -522,59 +522,43 @@ public final class FlowWebViewActivity extends Activity {
             } catch (Exception ignored) {}
         }
 
-        // Resolve the real media ID from Flow's authenticated project data and
-        // download its signed MP4 URL. The visible /asb/ preview URL is not the
-        // downloadable media file and cannot be fetched cross-origin by page JS.
+        // Accept only a signed MP4 URL resolved by Flow's own authenticated
+        // batchexecute RPCs in the page context. The /asb/ HTMLMediaElement URL
+        // is a preview rendition, never the source file.
         @JavascriptInterface
-        public boolean downloadLatestProjectVideo(String pageUrl) {
-            if (pageUrl == null || pageUrl.length() > 4096) {
-                publishFlowDownloadProgress("Ошибка: Flow не передал адрес проекта");
+        public boolean downloadResolvedVideo(String mediaId, String videoUrl, String title) {
+            if (mediaId == null || !mediaId.matches("(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+                    || videoUrl == null || videoUrl.length() > 8192) {
+                publishFlowDownloadProgress("Ошибка: Flow вернул некорректный ID или ссылку на видео");
                 return false;
             }
             try {
-                Uri page = Uri.parse(pageUrl);
-                String host = page.getHost();
-                if (!"flow.google.com".equalsIgnoreCase(host)
-                        && !"labs.google".equalsIgnoreCase(host)) {
-                    publishFlowDownloadProgress("Ошибка: неожиданный адрес Google Flow");
+                Uri parsed = Uri.parse(videoUrl);
+                if (!"https".equalsIgnoreCase(parsed.getScheme())
+                        || !"flow-content.google".equalsIgnoreCase(parsed.getHost())
+                        || parsed.getPath() == null || !parsed.getPath().startsWith("/video/")) {
+                    publishFlowDownloadProgress("Ошибка: Flow не выдал прямую ссылку на MP4");
                     return false;
                 }
-                Matcher matcher = Pattern.compile("/project/([0-9a-fA-F-]{36})").matcher(
-                        page.getPath() == null ? "" : page.getPath());
-                if (!matcher.find()) {
-                    publishFlowDownloadProgress("Ошибка: не найден ID проекта Flow в адресе страницы");
-                    return false;
-                }
-                final String projectId = matcher.group(1);
-                if (!projectDownloads.add(projectId)) return true;
-
-                publishFlowDownloadProgress("Ищу оригинальный MP4 в проекте Flow…");
-                flowDownloadExecutor.execute(() -> {
-                    try {
-                        Uri saved = FlowDownloadManager.downloadLatestProjectVideo(
-                                FlowWebViewActivity.this, projectId, pageUrl, flowUserAgent,
-                                FlowWebViewActivity.this::publishFlowDownloadProgress);
-                        ChatActivity.onFlowVideoReady(FlowWebViewActivity.this, saved);
-                        publishFlowDownloadProgress("Готово · видео сохранено в Movies/ASTRA/Flow и отправлено в чат");
-                    } catch (Exception e) {
-                        String reason = e.getMessage();
-                        if (reason == null || reason.trim().isEmpty()) reason = e.getClass().getSimpleName();
-                        Log.e("ASTRA-FLOW-DOWNLOAD", "Project media download failed", e);
-                        publishFlowDownloadProgress("Ошибка скачивания: " + reason);
-                    } finally {
-                        projectDownloads.remove(projectId);
-                    }
-                });
+                if (!directDownloads.add(mediaId)) return true;
+                publishFlowDownloadProgress("Прямая ссылка получена. Подключаюсь к видеохранилищу…");
+                flowDownloadExecutor.execute(() -> downloadSignedFlowVideo(videoUrl, mediaId, title));
                 return true;
             } catch (Exception e) {
-                Log.e("ASTRA-FLOW-DOWNLOAD", "Could not queue project media download", e);
-                publishFlowDownloadProgress("Ошибка запуска скачивания: " +
+                Log.e("ASTRA-FLOW-DOWNLOAD", "Could not queue resolved video", e);
+                publishFlowDownloadProgress("Ошибка запуска загрузки: " +
                         (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
                 return false;
             }
         }
 
-        // Downloads a signed MP4 URL exposed by Flow's active video element.
+        @JavascriptInterface
+        public void reportDownloadProgress(String message) {
+            if (message == null || message.length() > 240) return;
+            publishFlowDownloadProgress(message);
+        }
+
+        // Downloads a signed MP4 URL exposed by Flow's current batchexecute API.
         // The URL is short-lived; consume it immediately and never persist it in app state.
         @JavascriptInterface
         public boolean downloadVideo(String videoUrl) {
@@ -609,7 +593,7 @@ public final class FlowWebViewActivity extends Activity {
             });
         }
 
-        private void downloadSignedFlowVideo(String videoUrl) {
+        private void downloadSignedFlowVideo(String videoUrl, String mediaId, String title) {
             Uri target = null;
             boolean published = false;
             HttpURLConnection connection = null;
@@ -620,20 +604,31 @@ public final class FlowWebViewActivity extends Activity {
                 connection.setConnectTimeout(20000);
                 connection.setReadTimeout(30000);
                 connection.setInstanceFollowRedirects(true);
-                connection.setRequestProperty("Accept", "video/mp4,*/*");
+                connection.setRequestProperty("Accept", "video/mp4,video/*,application/octet-stream,*/*");
+                if (flowUserAgent != null && !flowUserAgent.isEmpty())
+                    connection.setRequestProperty("User-Agent", flowUserAgent);
+                connection.setRequestProperty("Referer", "https://flow.google.com/");
                 int code = connection.getResponseCode();
-                if (code != HttpURLConnection.HTTP_OK)
-                    throw new java.io.IOException("Flow CDN HTTP " + code);
+                if (code == 401 || code == 403)
+                    throw new java.io.IOException("CDN отклонил подписанную ссылку (HTTP " + code + "). Запроси новую ссылку и повтори");
+                if (code != HttpURLConnection.HTTP_OK && code != HttpURLConnection.HTTP_PARTIAL)
+                    throw new java.io.IOException("Видеохранилище Flow вернуло HTTP " + code);
                 String mime = connection.getContentType();
-                if (mime == null || !mime.toLowerCase(java.util.Locale.ROOT).startsWith("video/"))
-                    throw new java.io.IOException("Unexpected Flow content type: " + mime);
+                String normalizedMime = mime == null ? "" : mime.split(";")[0].trim().toLowerCase(java.util.Locale.ROOT);
+                if (!normalizedMime.startsWith("video/")
+                        && !"application/octet-stream".equals(normalizedMime)
+                        && !"binary/octet-stream".equals(normalizedMime))
+                    throw new java.io.IOException("Flow вернул не видео, а " + (mime == null ? "неизвестный тип" : mime));
                 long expected = connection.getContentLengthLong();
                 if (expected > FlowVideoCaptureBridge.MAX_VIDEO_BYTES)
                     throw new java.io.IOException("Flow video exceeds 250 MB");
 
                 ContentValues values = new ContentValues();
-                values.put(MediaStore.Video.Media.DISPLAY_NAME,
-                        "flow_" + System.currentTimeMillis() + ".mp4");
+                String safeTitle = title == null ? "" : title.trim().replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_");
+                if (safeTitle.length() > 64) safeTitle = safeTitle.substring(0, 64).trim();
+                if (safeTitle.isEmpty()) safeTitle = "flow_" + System.currentTimeMillis();
+                if (!safeTitle.toLowerCase(java.util.Locale.ROOT).endsWith(".mp4")) safeTitle += ".mp4";
+                values.put(MediaStore.Video.Media.DISPLAY_NAME, safeTitle);
                 values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
                 if (Build.VERSION.SDK_INT >= 29) {
                     values.put(MediaStore.Video.Media.RELATIVE_PATH,
@@ -645,21 +640,34 @@ public final class FlowWebViewActivity extends Activity {
                 if (target == null) throw new java.io.IOException("MediaStore insert failed");
 
                 long written = 0L;
+                long lastUpdate = 0L;
+                int lastPercent = -1;
                 try (InputStream input = connection.getInputStream();
                      OutputStream output = getContentResolver().openOutputStream(target, "w")) {
-                    if (output == null) throw new java.io.IOException("MediaStore output unavailable");
+                    if (output == null) throw new java.io.IOException("Android не открыл файл для записи");
                     byte[] buffer = new byte[64 * 1024];
                     int count;
                     while ((count = input.read(buffer)) != -1) {
                         written += count;
                         if (written > FlowVideoCaptureBridge.MAX_VIDEO_BYTES)
-                            throw new java.io.IOException("Flow video exceeds 250 MB");
+                            throw new java.io.IOException("Видео Flow превысило лимит 250 МБ");
                         output.write(buffer, 0, count);
+                        long now = android.os.SystemClock.elapsedRealtime();
+                        int percent = expected > 0L ? (int) Math.min(100L, (written * 100L) / expected) : -1;
+                        if (now - lastUpdate >= 450L || (percent >= 0 && percent != lastPercent)) {
+                            lastUpdate = now;
+                            lastPercent = percent;
+                            String amount = String.format(java.util.Locale.US, "%.1f МБ", written / (1024.0 * 1024.0));
+                            String total = expected > 0L ? String.format(java.util.Locale.US, " / %.1f МБ", expected / (1024.0 * 1024.0)) : "";
+                            publishFlowDownloadProgress("Скачиваю MP4: " + amount + total + (percent >= 0 ? " · " + percent + "%" : ""));
+                        }
                     }
                     output.flush();
                 }
-                if (written == 0L || (expected > 0L && written != expected))
-                    throw new java.io.IOException("Incomplete Flow video: " + written + "/" + expected);
+                if (written == 0L)
+                    throw new java.io.IOException("Flow вернул пустой файл");
+                if (expected > 0L && written != expected)
+                    throw new java.io.IOException("Загрузка оборвалась: получено " + written + " из " + expected + " байт");
 
                 if (Build.VERSION.SDK_INT >= 29) {
                     ContentValues ready = new ContentValues();
@@ -671,23 +679,20 @@ public final class FlowWebViewActivity extends Activity {
                 Log.i("ASTRA-FLOW-DOWNLOAD", "Direct MP4 saved: " + target + " bytes=" + written);
                 ChatActivity.onFlowVideoReady(FlowWebViewActivity.this, target);
                 reportVideoDownloadResult(videoUrl, true);
-                main.post(() -> {
-                    if (status != null) status.setText("ASTRA Flow: видео сохранено и передано в чат");
-                });
+                publishFlowDownloadProgress("Готово · MP4 сохранён в Movies/ASTRA/Flow и отправлен в чат");
             } catch (Exception e) {
                 reportVideoDownloadResult(videoUrl, false);
-                Log.e("ASTRA-FLOW-DOWNLOAD", "Direct Flow MP4 download failed", e);
-                main.post(() -> {
-                    if (status != null) status.setText("ASTRA Flow: ошибка загрузки · "
-                            + e.getClass().getSimpleName());
-                });
+                Log.e("ASTRA-FLOW-DOWNLOAD", "Direct Flow MP4 download failed media=" + mediaId, e);
+                String reason = e.getMessage();
+                if (reason == null || reason.trim().isEmpty()) reason = e.getClass().getSimpleName();
+                publishFlowDownloadProgress("Ошибка скачивания: " + reason);
             } finally {
                 if (!published && target != null) {
                     try { getContentResolver().delete(target, null, null); }
                     catch (Exception ignored) {}
                 }
                 if (connection != null) connection.disconnect();
-                directDownloads.remove(videoUrl);
+                directDownloads.remove(mediaId);
             }
         }
 
