@@ -62,34 +62,47 @@ public final class FlowWebViewActivity extends Activity {
     private int generationObserverPolls = 0;
     private int autoOpenAttempts = 0;
     private boolean autoOpenCompleted = false;
+    private boolean generationWasRunning = false;
+    private int baselineFlowTileCount = -1;
     private String flowUserAgent = "";
     private final Runnable generationObserver = new Runnable() {
         @Override public void run() {
             if (webView == null || isFinishing() || isDestroyed()
                     || generationStartedAt == 0L) return;
             String script = "(function(){try{const t=(document.body&&document.body.innerText)||'';"
-                + "const v=[...document.querySelectorAll('video')].filter(x=>x.getBoundingClientRect().width>0).length;"
-                + "const p=document.querySelector('[role=textbox][aria-label=\\\"Что вы хотите создать?\\\"]')||document.querySelector('.ProseMirror[contenteditable=true]');"
-                + "const q=p?(p.innerText||p.value||'').trim():'';"
+                + "const videos=[...document.querySelectorAll('video')].filter(x=>x.getBoundingClientRect().width>0).length;"
                 + "const busy=document.querySelectorAll('[aria-busy=true],[role=progressbar]').length;"
-                + "return JSON.stringify({tail:t.slice(-1400),videos:v,prompt:q,busy:busy});"
-                + "}catch(e){return JSON.stringify({error:String(e)});}})()";
+                + "const tiles=document.querySelectorAll('flow-grid-tile-container flow-video-tile').length;"
+                + "const baseline=Number.isFinite(window.__astraFlowBaselineTiles)?window.__astraFlowBaselineTiles:-1;"
+                + "return {tail:t.slice(-1400),videos:videos,busy:busy,tiles:tiles,baseline:baseline};"
+                + "}catch(e){return {error:String(e)};}})()";
             webView.evaluateJavascript(script, value -> {
                 generationObserverPolls++;
                 if (webView != null) webView.evaluateJavascript(videoCaptureScanScript(), null);
                 generationEvidence = value == null ? "" : value;
-                String v = generationEvidence.toLowerCase(java.util.Locale.ROOT);
-                if (v.contains("ошибка генерац") || v.contains("generation failed")
-                        || v.contains("не удалось создать")) {
-                    generationState = "failed";
-                } else if (v.contains("\\\"busy\\\":1")
-                        || v.contains("\\\"videos\\\":1")
-                        || v.contains("генерация") || v.contains("создание")
-                        || v.contains("processing") || v.contains("generating")) {
-                    generationState = "running";
-                } else if (!"failed".equals(generationState)
-                        && !"running".equals(generationState)) {
-                    generationState = "submitted_unconfirmed";
+                try {
+                    org.json.JSONObject evidence = new org.json.JSONObject(generationEvidence);
+                    String tail = evidence.optString("tail", "").toLowerCase(java.util.Locale.ROOT);
+                    int busy = evidence.optInt("busy", 0);
+                    int tiles = evidence.optInt("tiles", 0);
+                    if (baselineFlowTileCount < 0) baselineFlowTileCount = evidence.optInt("baseline", -1);
+                    if (tail.contains("ошибка генерац") || tail.contains("generation failed")
+                            || tail.contains("не удалось создать")) {
+                        generationState = "failed";
+                    } else if (busy > 0 || tail.contains("генерация") || tail.contains("создание")
+                            || tail.contains("processing") || tail.contains("generating")) {
+                        generationWasRunning = true;
+                        generationState = "running";
+                    } else if (generationWasRunning && baselineFlowTileCount >= 0
+                            && tiles > baselineFlowTileCount && !autoOpenCompleted) {
+                        generationState = "completed_waiting_for_card";
+                        Log.i("ASTRA-FLOW-OBSERVER", "New Flow result tile detected; opening from background observer");
+                        main.post(FlowWebViewActivity.this::tryAutoOpenLatestFlowVideo);
+                    } else if (!generationWasRunning) {
+                        generationState = "submitted_unconfirmed";
+                    }
+                } catch (Exception parseError) {
+                    Log.w("ASTRA-FLOW-OBSERVER", "Could not parse page evidence: " + generationEvidence, parseError);
                 }
                 Log.i("ASTRA-FLOW-OBSERVER", "poll=" + generationObserverPolls
                         + " state=" + generationState + " evidence=" + generationEvidence);
@@ -393,6 +406,8 @@ public final class FlowWebViewActivity extends Activity {
                 generationStartedAt = System.currentTimeMillis();
                 autoOpenAttempts = 0;
                 autoOpenCompleted = false;
+                generationWasRunning = false;
+                baselineFlowTileCount = -1;
                 generationState = "submitted_unconfirmed";
                 generationEvidence = "Generate button click dispatched; awaiting page evidence";
                 status.setText("ASTRA Flow: отправлено · проверяю выполнение");
@@ -419,6 +434,7 @@ public final class FlowWebViewActivity extends Activity {
                 + "const b=Array.from(document.querySelectorAll('button,[role=button]')).find(x=>x.getAttribute('aria-label')==='Начать генерацию');"
                 + "if(!b)return 'GENERATE_BUTTON_NOT_FOUND';"
                 + "if(b.disabled||b.getAttribute('aria-disabled')==='true')return 'GENERATE_BUTTON_DISABLED';"
+                + "window.__astraFlowBaselineTiles=document.querySelectorAll('flow-grid-tile-container flow-video-tile').length;"
                 + "b.click();return 'GENERATE_CLICKED';"
                 + "}catch(e){return 'ERROR:'+e.message;}})()";
         }
@@ -877,10 +893,7 @@ public final class FlowWebViewActivity extends Activity {
             webView.onResume();
             webView.resumeTimers();
             Log.i("ASTRA-FLOW", "WebView resumed");
-            if (generationStartedAt > 0L && !autoOpenCompleted) {
-                autoOpenAttempts = 0;
-                main.postDelayed(this::tryAutoOpenLatestFlowVideo, 1200L);
-            }
+
         }
     }
 
