@@ -434,7 +434,8 @@ public final class ZSkyWebViewActivity extends Activity {
     @Override protected void onDestroy() {
         lastLifecycleEvent = "destroyed";
         main.removeCallbacks(generationObserver);
-        if (videoCaptureBridge != null) videoCaptureBridge.abortVideo();\n        if (zskyWakeLock != null && zskyWakeLock.isHeld()) zskyWakeLock.release();
+        if (videoCaptureBridge != null) videoCaptureBridge.abortVideo();
+        if (zskyWakeLock != null && zskyWakeLock.isHeld()) zskyWakeLock.release();
         zskyWakeLock = null;
         if (instance == this) instance = null;
         if (webView != null) {
@@ -449,7 +450,7 @@ public final class ZSkyWebViewActivity extends Activity {
     private static String esc(String value) {
         if (value == null) return "";
         return value.replace("\\", "\\\\").replace("\"", "\\\"")
-                .replace("\n", "
-").replace("\r", "\\r");
+                .replace("\n", "\\n").replace("\r", "\\r");
+    }
     }
 }
