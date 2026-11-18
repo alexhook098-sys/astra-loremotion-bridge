@@ -86,9 +86,33 @@ public final class FlowWebViewActivity extends Activity {
                     int busy = evidence.optInt("busy", 0);
                     int tiles = evidence.optInt("tiles", 0);
                     if (baselineFlowTileCount < 0) baselineFlowTileCount = evidence.optInt("baseline", -1);
-                    if (tail.contains("ошибка генерац") || tail.contains("generation failed")
-                            || tail.contains("не удалось создать")) {
+                    // Flow can reject a request without using the generic "generation failed"
+                    // wording. Detect the actual Russian/English provider refusal shown in its
+                    // error tile before considering any newly visible media tile.
+                    boolean providerRejected =
+                            tail.contains("ошибка генерац")
+                            || tail.contains("generation failed")
+                            || tail.contains("не удалось создать")
+                            || tail.contains("не могу создать")
+                            || tail.contains("не могу сгенерировать")
+                            || tail.contains("не может создать")
+                            || tail.contains("сторонних поставщик")
+                            || tail.contains("интересов сторонних")
+                            || tail.contains("бонусы за эту генерацию")
+                            || tail.contains("couldn't generate")
+                            || tail.contains("can't generate")
+                            || tail.contains("unable to generate")
+                            || tail.contains("third-party content provider")
+                            || tail.contains("third party content provider")
+                            || tail.contains("change your prompt");
+                    if (providerRejected) {
                         generationState = "failed";
+                        String refusal = "Flow отклонил запрос · измени формулировку и повтори";
+                        status.setText("ASTRA Flow: " + refusal);
+                        Log.w("ASTRA-FLOW-OBSERVER", "Provider refusal detected; stopping generation observer");
+                        ChatActivity.onFlowDownloadProgress(FlowWebViewActivity.this, refusal);
+                        main.removeCallbacks(generationObserver);
+                        return;
                     } else if (busy == 0 && baselineFlowTileCount >= 0
                             && tiles > baselineFlowTileCount && !autoOpenCompleted) {
                         generationState = "completed_waiting_for_card";
