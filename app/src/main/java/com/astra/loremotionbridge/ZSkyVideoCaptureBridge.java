@@ -100,7 +100,7 @@ public final class ZSkyVideoCaptureBridge {
         cleanup(true);
     }
 
-    private void cleanup(boolean deleteTarget) {
+    public synchronized void abortVideo() { cleanup(true); }\n\n    private void cleanup(boolean deleteTarget) {
         try { if (output != null) output.close(); } catch (Exception ignored) {}
         output = null;
         if (deleteTarget && target != null) {
