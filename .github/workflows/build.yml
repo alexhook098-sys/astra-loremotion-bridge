@@ -13,6 +13,7 @@ on:
       - fix/flow-card-video-capture
       - diagnostic/flow-video-capture
       - feature/zsky-webview-integration
+      - feature/zsky-flow-background-parity
 
 jobs:
   build:
