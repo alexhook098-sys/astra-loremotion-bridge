@@ -9,6 +9,7 @@ on:
       - feature/perchance-background-agent
       - feature/google-flow-background-agent
       - fix/flow-video-capture-retry
+      - fix/flow-download-auth-response
 
 jobs:
   build:
