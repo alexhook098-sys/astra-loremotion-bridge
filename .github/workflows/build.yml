@@ -10,6 +10,7 @@ on:
       - feature/google-flow-background-agent
       - fix/flow-video-capture-retry
       - fix/flow-download-auth-response
+      - fix/flow-card-video-capture
 
 jobs:
   build:
