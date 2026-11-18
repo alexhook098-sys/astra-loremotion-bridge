@@ -83,9 +83,11 @@ public final class ZSkyVideoCaptureBridge {
                 if (activity.getContentResolver().update(target, ready, null, null) <= 0)
                     throw new java.io.IOException("MediaStore publish failed");
             }
-            Log.i(TAG, "video saved uri=" + target + " bytes=" + written);
+            android.net.Uri savedUri = target;
+            Log.i(TAG, "video saved uri=" + savedUri + " bytes=" + written);
             target = null;
             written = 0L;
+            ChatActivity.onZSkyVideoReady(activity.getApplicationContext(), savedUri);
             return true;
         } catch (Exception e) {
             Log.e(TAG, "finishVideo failed", e);
