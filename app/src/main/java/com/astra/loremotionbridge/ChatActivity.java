@@ -159,6 +159,16 @@ public class ChatActivity extends Activity {
         flowParams.bottomMargin = dp(8);
         root.addView(googleFlow, flowParams);
 
+        Button zsky = smallButton("✦  ZSKY AI · VIDEO & IMAGE STUDIO", LILAC);
+        zsky.setOnClickListener(v -> {
+            Intent zskyIntent = new Intent(this, ZSkyWebViewActivity.class);
+            zskyIntent.putExtra("url", ZSkyWebViewActivity.ZSKY_URL);
+            startActivity(zskyIntent);
+        });
+        LinearLayout.LayoutParams zskyParams = new LinearLayout.LayoutParams(-1, dp(43));
+        zskyParams.bottomMargin = dp(8);
+        root.addView(zsky, zskyParams);
+
         installButton = smallButton("＋  ПОДКЛЮЧИТЬ OPENROUTER · API KEY", CYAN);
         installButton.setOnClickListener(v -> showOpenRouterSetup());
         root.addView(installButton, new LinearLayout.LayoutParams(-1, dp(44)));
