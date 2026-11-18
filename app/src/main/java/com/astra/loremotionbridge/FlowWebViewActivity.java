@@ -24,6 +24,8 @@ import java.net.URL;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import android.webkit.DownloadListener;
@@ -41,6 +43,7 @@ public final class FlowWebViewActivity extends Activity {
     private WebView webView;
     private FlowVideoCaptureBridge videoCaptureBridge;
     private final Set<String> directDownloads = Collections.synchronizedSet(new HashSet<>());
+    private final Set<String> projectDownloads = Collections.synchronizedSet(new HashSet<>());
     private final ExecutorService flowDownloadExecutor = Executors.newSingleThreadExecutor();
     private PowerManager.WakeLock flowWakeLock;
     private TextView status;
@@ -464,6 +467,15 @@ public final class FlowWebViewActivity extends Activity {
             + "}catch(e){return 'ERROR:'+e.message;}})(" + quoted + ")";
     }
 
+    private void publishFlowDownloadProgress(String message) {
+        if (message == null || message.trim().isEmpty()) return;
+        Log.i("ASTRA-FLOW-DOWNLOAD", message);
+        main.post(() -> {
+            if (status != null) status.setText("ASTRA Flow: " + message);
+            ChatActivity.onFlowDownloadProgress(FlowWebViewActivity.this, message);
+        });
+    }
+
     // Called on Chromium's request thread. Do not block or alter the request;
     // hand only signed Flow MP4 URLs to the existing bounded downloader.
     private void captureNativeFlowVideoRequest(String requestUrl, String source) {
@@ -510,7 +522,59 @@ public final class FlowWebViewActivity extends Activity {
             } catch (Exception ignored) {}
         }
 
-        // Downloads the signed MP4 URL exposed by Flow's active video element.
+        // Resolve the real media ID from Flow's authenticated project data and
+        // download its signed MP4 URL. The visible /asb/ preview URL is not the
+        // downloadable media file and cannot be fetched cross-origin by page JS.
+        @JavascriptInterface
+        public boolean downloadLatestProjectVideo(String pageUrl) {
+            if (pageUrl == null || pageUrl.length() > 4096) {
+                publishFlowDownloadProgress("Ошибка: Flow не передал адрес проекта");
+                return false;
+            }
+            try {
+                Uri page = Uri.parse(pageUrl);
+                String host = page.getHost();
+                if (!"flow.google.com".equalsIgnoreCase(host)
+                        && !"labs.google".equalsIgnoreCase(host)) {
+                    publishFlowDownloadProgress("Ошибка: неожиданный адрес Google Flow");
+                    return false;
+                }
+                Matcher matcher = Pattern.compile("/project/([0-9a-fA-F-]{36})").matcher(
+                        page.getPath() == null ? "" : page.getPath());
+                if (!matcher.find()) {
+                    publishFlowDownloadProgress("Ошибка: не найден ID проекта Flow в адресе страницы");
+                    return false;
+                }
+                final String projectId = matcher.group(1);
+                if (!projectDownloads.add(projectId)) return true;
+
+                publishFlowDownloadProgress("Ищу оригинальный MP4 в проекте Flow…");
+                flowDownloadExecutor.execute(() -> {
+                    try {
+                        Uri saved = FlowDownloadManager.downloadLatestProjectVideo(
+                                FlowWebViewActivity.this, projectId, pageUrl, flowUserAgent,
+                                FlowWebViewActivity.this::publishFlowDownloadProgress);
+                        ChatActivity.onFlowVideoReady(FlowWebViewActivity.this, saved);
+                        publishFlowDownloadProgress("Готово · видео сохранено в Movies/ASTRA/Flow и отправлено в чат");
+                    } catch (Exception e) {
+                        String reason = e.getMessage();
+                        if (reason == null || reason.trim().isEmpty()) reason = e.getClass().getSimpleName();
+                        Log.e("ASTRA-FLOW-DOWNLOAD", "Project media download failed", e);
+                        publishFlowDownloadProgress("Ошибка скачивания: " + reason);
+                    } finally {
+                        projectDownloads.remove(projectId);
+                    }
+                });
+                return true;
+            } catch (Exception e) {
+                Log.e("ASTRA-FLOW-DOWNLOAD", "Could not queue project media download", e);
+                publishFlowDownloadProgress("Ошибка запуска скачивания: " +
+                        (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
+                return false;
+            }
+        }
+
+        // Downloads a signed MP4 URL exposed by Flow's active video element.
         // The URL is short-lived; consume it immediately and never persist it in app state.
         @JavascriptInterface
         public boolean downloadVideo(String videoUrl) {
@@ -759,8 +823,15 @@ public final class FlowWebViewActivity extends Activity {
             + "const observed=window.__astraFlowObservedRoots=window.__astraFlowObservedRoots||new WeakSet();"
             + "async function capture(v){let u='';try{u=v.currentSrc||v.src||'';if(!u){const s=v.querySelector('source[src]');u=s?s.src:'';}"
             + "if(!u||window.__astraFlowCaptureDone.has(u)||window.__astraFlowCaptureBusy.has(u))return;"
-            + "if(!u.startsWith('blob:')&&!u.startsWith('https://flow-content.google/video/')&&!u.startsWith('https://flow.google.com/asb/'))return;"
+            + "if(!u.startsWith('blob:')&&!u.startsWith('https://flow-content.google/video/')&&!u.startsWith('https://flow.google.com/asb/')&&!u.startsWith('https://labs.google/asb/'))return;"
             + "window.__astraFlowCaptureBusy.add(u);"
+            + "if(u.startsWith('https://flow.google.com/asb/')||u.startsWith('https://labs.google/asb/')){"
+            + "window.__astraFlowCaptureBusy.delete(u);"
+            + "const project=(location.pathname.match(/\\/project\\/([0-9a-f-]{36})/i)||[])[1]||location.href;"
+            + "if(window.__astraFlowDownloadProject!==project){window.__astraFlowDownloadProject=project;window.__astraFlowProjectDownloadRequested=false;}"
+            + "if(!window.__astraFlowProjectDownloadRequested){window.__astraFlowProjectDownloadRequested=true;"
+            + "if(!window.ASTRAFlowVideo.downloadLatestProjectVideo(location.href)){window.__astraFlowProjectDownloadRequested=false;console.warn('ASTRA_FLOW_PROJECT_DOWNLOAD_REJECTED');}}"
+            + "return;}"
             + "if(u.startsWith('https://flow-content.google/video/')){if(!window.ASTRAFlowVideo.downloadVideo(u)){window.__astraFlowCaptureBusy.delete(u);console.warn('ASTRA_FLOW_DOWNLOAD_QUEUE_REJECTED');}return;}"
             + "const r=await fetch(u,{credentials:'include'});if(!r.ok)throw new Error('media_http_'+r.status);"
             + "const b=await r.blob();if(!b.size)throw new Error('empty_media_blob');if(!/^video\\//i.test(b.type||'')&&!u.startsWith('blob:'))throw new Error('unexpected_media_type_'+(b.type||'unknown'));"
