@@ -204,13 +204,14 @@ public final class ZSkyWebViewActivity extends Activity {
                         + ".find(x=>(x.getAttribute('aria-label')||'').trim().toLowerCase()==='generate'"
                         + "||((x.innerText||x.textContent||'').trim().toLowerCase()==='generate'));"
                         + "if(!b||b.disabled||b.getAttribute('aria-disabled')==='true')return 'BUTTON_NOT_READY';"
-                        + "window.__astraZSkyBaselineVideos=document.querySelectorAll('video').length;"
-                        + "b.click();return 'GENERATE_CLICKED';})()";
+                        + "const n=document.querySelectorAll('video').length;"
+                        + "b.click();return 'GENERATE_CLICKED:'+n;})()";
                 webView.evaluateJavascript(click, clicked -> {
                     String clickResult = clicked == null ? "" : clicked;
                     Log.i("ASTRA-ZSKY-AUTO", "generate result=" + clickResult);
                     if (clickResult.contains("GENERATE_CLICKED")) {
-                        baselineVideoCount = -1;
+                        try { baselineVideoCount = Integer.parseInt(clickResult.replaceAll("[^0-9]", "")); }
+                        catch (Exception ignored) { baselineVideoCount = -1; }
                         generationStartedAt = System.currentTimeMillis();
                         generationState = "submitted_unconfirmed";
                         pendingPrompt = null;
