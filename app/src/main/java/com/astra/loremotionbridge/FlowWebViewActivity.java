@@ -12,6 +12,7 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebResourceRequest;
 import android.webkit.JavascriptInterface;
 import android.content.ContentValues;
 import android.provider.MediaStore;
@@ -260,6 +261,24 @@ public final class FlowWebViewActivity extends Activity {
             }
         });
         webView.setWebViewClient(new WebViewClient() {
+            // Native Chromium request observer. Keep the existing card-opening flow untouched.
+            // Only signed MP4 CDN requests are handed to the existing downloader.
+            @Override
+            public android.webkit.WebResourceResponse shouldInterceptRequest(
+                    WebView view, WebResourceRequest request) {
+                if (request != null && request.getUrl() != null) {
+                    captureNativeFlowVideoRequest(request.getUrl().toString(), "webresource");
+                }
+                return super.shouldInterceptRequest(view, request);
+            }
+
+            @Override
+            public android.webkit.WebResourceResponse shouldInterceptRequest(
+                    WebView view, String requestUrl) {
+                captureNativeFlowVideoRequest(requestUrl, "legacy-webresource");
+                return super.shouldInterceptRequest(view, requestUrl);
+            }
+
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
@@ -443,6 +462,24 @@ public final class FlowWebViewActivity extends Activity {
             + "e.dispatchEvent(new Event('change',{bubbles:true}));"
             + "return 'FIELD_SET';"
             + "}catch(e){return 'ERROR:'+e.message;}})(" + quoted + ")";
+    }
+
+    // Called on Chromium's request thread. Do not block or alter the request;
+    // hand only signed Flow MP4 URLs to the existing bounded downloader.
+    private void captureNativeFlowVideoRequest(String requestUrl, String source) {
+        if (requestUrl == null || requestUrl.length() > 8192) return;
+        try {
+            Uri parsed = Uri.parse(requestUrl);
+            if (!"https".equalsIgnoreCase(parsed.getScheme())
+                    || !"flow-content.google".equalsIgnoreCase(parsed.getHost())
+                    || parsed.getPath() == null
+                    || !parsed.getPath().startsWith("/video/")) return;
+            Log.i("ASTRA-FLOW-NATIVE-NET", "MP4 request observed source=" + source
+                    + " host=" + parsed.getHost() + " path=" + parsed.getPath());
+            videoCaptureBridge.downloadVideo(requestUrl);
+        } catch (Exception e) {
+            Log.w("ASTRA-FLOW-NATIVE-NET", "Could not process native request candidate", e);
+        }
     }
 
     // Captures Flow's page-owned blob: video and streams it to MediaStore in bounded chunks.
