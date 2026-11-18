@@ -786,7 +786,7 @@ public final class FlowWebViewActivity extends Activity {
             + "root.querySelectorAll('*').forEach(n=>{if(n.shadowRoot)scanRoot(n.shadowRoot);});"
             + "root.querySelectorAll('iframe').forEach(f=>{try{if(f.contentDocument)scanRoot(f.contentDocument);}catch(e){}});"
             + "}catch(e){console.warn('ASTRA_FLOW_SCAN_ROOT:'+e);}}"
-            + "window.__astraFlowVideoScan=function(){scanRoot(document);};"
+            + "window.__astraFlowVideoScan=function(){scanRoot(document);try{performance.getEntriesByType('resource').forEach(e=>{const u=e.name||'';if(u.startsWith('https://flow-content.google/video/'))window.ASTRAFlowVideo.reportNetworkCandidate(u,'performance-resource');});}catch(e){}};"
             + "window.__astraFlowVideoDownloadResult=function(u,ok){if(!u)return;if(window.__astraFlowCaptureBusy)window.__astraFlowCaptureBusy.delete(u);"
             + "if(ok)window.__astraFlowCaptureDone.add(u);else console.warn('ASTRA_FLOW_DIRECT_DOWNLOAD_FAILED; retrying');};"
             + "window.__astraFlowVideoScan();setInterval(window.__astraFlowVideoScan,2500);"
