@@ -29,7 +29,8 @@ public final class ZSkyWebViewActivity extends Activity {
     private TextView status;
     private final Handler main = new Handler(Looper.getMainLooper());
     private boolean backgroundRequested;
-    private boolean pageLoaded;
+    private volatile boolean pageLoaded;
+    private volatile String currentUrl = "";
     private String lastPageDiagnostic = "{}";
     private String lastLifecycleEvent = "created";
 
@@ -70,12 +71,14 @@ public final class ZSkyWebViewActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 pageLoaded = false;
+                currentUrl = url == null ? "" : url;
                 lastLifecycleEvent = "pageStarted";
                 status.setText("ASTRA ZSky: загружаю " + url);
             }
 
             @Override public void onPageFinished(WebView view, String url) {
                 pageLoaded = true;
+                currentUrl = url == null ? "" : url;
                 lastLifecycleEvent = "pageFinished";
                 status.setText("ASTRA ZSky: студия загружена");
                 main.postDelayed(ZSkyWebViewActivity.this::inspectPage, 900L);
@@ -136,8 +139,9 @@ public final class ZSkyWebViewActivity extends Activity {
                 callback));
     }
 
+    // Called by the local HTTP worker: read cached state only, never touch WebView here.
     public String statusJson() {
-        String url = webView == null ? "" : webView.getUrl();
+        String url = currentUrl;
         return "{\"ok\":true,\"ready\":" + pageLoaded
                 + ",\"state\":\"" + (pageLoaded ? "loaded" : "loading")
                 + "\",\"background\":" + backgroundRequested
