@@ -560,6 +560,15 @@ public class ChatActivity extends Activity {
     private void sendMessage() {
         String value = input.getText().toString().trim();
         if (value.isEmpty() || busy) return;
+        String zskyPrompt = extractZSkyPrompt(value);
+        if (zskyPrompt != null && !zskyPrompt.isEmpty()) {
+            addMessage(value, true, true);
+            input.setText("");
+            addMessage("✦ ASTRA · открываю ZSky, запускаю генерацию в фоне…", false, true);
+            ZSkyWebViewActivity.start(this, ZSkyWebViewActivity.ZSKY_URL, zskyPrompt, true);
+            modelStatus.setText("● ASTRA · ZSKY РАБОТАЕТ В ФОНЕ");
+            return;
+        }
         String flowPrompt = extractFlowPrompt(value);
         if (flowPrompt != null && !flowPrompt.isEmpty()) {
             addMessage(value, true, true);
@@ -608,6 +617,18 @@ public class ChatActivity extends Activity {
                 updateProviderStatus();
             });
         });
+    }
+
+    private String extractZSkyPrompt(String text) {
+        if (text == null) return null;
+        String value = text.trim();
+        // Explicit provider routing must run before the generic video/Flow parser.
+        Pattern p = Pattern.compile("(?iu)^\\s*(?:астра[,!]?\\s*)?(?:(?:сделай|создай|сгенерируй)\\s+(?:мне\\s+)?видео\\s+zsky|zsky\\s*:)\\s*[:—-]?\\s*(.*)$");
+        Matcher m = p.matcher(value);
+        if (m.matches()) return m.group(1).trim();
+        Pattern reverse = Pattern.compile("(?iu)^\\s*(?:астра[,!]?\\s*)?zsky\\s+(?:сделай|создай|сгенерируй)\\s+(?:мне\\s+)?видео\\s*[:—-]?\\s*(.*)$");
+        Matcher r = reverse.matcher(value);
+        return r.matches() ? r.group(1).trim() : null;
     }
 
     private String extractFlowPrompt(String text) {
