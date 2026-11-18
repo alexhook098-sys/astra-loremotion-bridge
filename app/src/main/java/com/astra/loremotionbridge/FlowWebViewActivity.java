@@ -473,6 +473,8 @@ public final class FlowWebViewActivity extends Activity {
         // The URL is short-lived; consume it immediately and never persist it in app state.
         @JavascriptInterface
         public boolean downloadVideo(String videoUrl) {
+            Log.i("ASTRA-FLOW-DIAG", "BRIDGE downloadVideo called urlPresent=" + (videoUrl != null)
+                    + " urlLength=" + (videoUrl == null ? 0 : videoUrl.length()));
             if (videoUrl == null || videoUrl.length() > 8192) return false;
             final Uri parsed;
             try {
@@ -487,7 +489,11 @@ public final class FlowWebViewActivity extends Activity {
             } catch (Exception e) {
                 return false;
             }
-            if (!directDownloads.add(videoUrl)) return true;
+            if (!directDownloads.add(videoUrl)) {
+                Log.i("ASTRA-FLOW-DIAG", "BRIDGE duplicate URL already queued");
+                return true;
+            }
+            Log.i("ASTRA-FLOW-DIAG", "BRIDGE accepted direct Flow download");
             flowDownloadExecutor.execute(() -> downloadSignedFlowVideo(videoUrl));
             return true;
         }
@@ -573,6 +579,7 @@ public final class FlowWebViewActivity extends Activity {
                 }
                 published = true;
                 Log.i("ASTRA-FLOW-DOWNLOAD", "Direct MP4 saved: " + target + " bytes=" + written);
+                Log.i("ASTRA-FLOW-DIAG", "PIPELINE saved_to_mediastore bytes=" + written + "; calling ChatActivity.onFlowVideoReady");
                 ChatActivity.onFlowVideoReady(FlowWebViewActivity.this, target);
                 reportVideoDownloadResult(videoUrl, true);
                 main.post(() -> {
@@ -581,6 +588,7 @@ public final class FlowWebViewActivity extends Activity {
             } catch (Exception e) {
                 reportVideoDownloadResult(videoUrl, false);
                 Log.e("ASTRA-FLOW-DOWNLOAD", "Direct Flow MP4 download failed", e);
+                Log.e("ASTRA-FLOW-DIAG", "PIPELINE direct_download_failed", e);
                 main.post(() -> {
                     if (status != null) status.setText("ASTRA Flow: ошибка загрузки · "
                             + e.getClass().getSimpleName());
@@ -726,10 +734,12 @@ public final class FlowWebViewActivity extends Activity {
             + "window.__astraFlowCaptureBusy=window.__astraFlowCaptureBusy||new Set();"
             + "const observed=window.__astraFlowObservedRoots=window.__astraFlowObservedRoots||new WeakSet();"
             + "async function capture(v){let u='';try{u=v.currentSrc||v.src||'';if(!u){const s=v.querySelector('source[src]');u=s?s.src:'';}"
-            + "if(!u||window.__astraFlowCaptureDone.has(u)||window.__astraFlowCaptureBusy.has(u))return;"
-            + "if(!u.startsWith('blob:')&&!u.startsWith('https://flow-content.google/video/'))return;"
+            + "if(!u){if(!v.__astraFlowDiagNoSource){v.__astraFlowDiagNoSource=true;console.info('ASTRA_FLOW_DIAG_VIDEO_NO_SOURCE',JSON.stringify({readyState:v.readyState,networkState:v.networkState,duration:v.duration}));}return;}"
+            + "if(!u.startsWith('blob:')&&!u.startsWith('https://flow-content.google/video/')){if(!v.__astraFlowDiagOtherSource){v.__astraFlowDiagOtherSource=true;console.info('ASTRA_FLOW_DIAG_VIDEO_OTHER_SOURCE',u.slice(0,180));}return;}"
+            + "if(!v.__astraFlowDiagFound){v.__astraFlowDiagFound=true;console.info('ASTRA_FLOW_DIAG_VIDEO_FOUND',JSON.stringify({scheme:u.startsWith('blob:')?'blob':'flow-cdn',readyState:v.readyState,networkState:v.networkState,duration:v.duration,videoWidth:v.videoWidth,videoHeight:v.videoHeight}));}"
+            + "if(window.__astraFlowCaptureDone.has(u)||window.__astraFlowCaptureBusy.has(u))return;"
             + "window.__astraFlowCaptureBusy.add(u);"
-            + "if(u.startsWith('https://flow-content.google/video/')){if(!window.ASTRAFlowVideo.downloadVideo(u)){window.__astraFlowCaptureBusy.delete(u);console.warn('ASTRA_FLOW_DOWNLOAD_QUEUE_REJECTED');}return;}"
+            + "if(u.startsWith('https://flow-content.google/video/')){console.info('ASTRA_FLOW_DIAG_DIRECT_DOWNLOAD_START');if(!window.ASTRAFlowVideo.downloadVideo(u)){window.__astraFlowCaptureBusy.delete(u);console.warn('ASTRA_FLOW_DOWNLOAD_QUEUE_REJECTED');}else console.info('ASTRA_FLOW_DIAG_DIRECT_DOWNLOAD_QUEUED');return;}"
             + "const r=await fetch(u);if(!r.ok)throw new Error('blob_http_'+r.status);"
             + "const b=await r.blob();if(!b.size)throw new Error('empty_blob');"
             + "if(!window.ASTRAFlowVideo.beginVideo(b.type||'video/mp4','flow_'+Date.now()+'.mp4'))throw new Error('native_begin_failed');"
@@ -744,7 +754,7 @@ public final class FlowWebViewActivity extends Activity {
             + "function watchVideo(v){if(!v)return;if(!observedVideos.has(v)){observedVideos.add(v);"
             + "['loadedmetadata','loadeddata','durationchange','canplay','playing','progress','loadstart','emptied'].forEach(e=>v.addEventListener(e,()=>{window.__astraFlowVideoScan&&window.__astraFlowVideoScan();capture(v);},{passive:true}));}"
             + "capture(v);}"
-            + "function scanRoot(root){if(!root)return;try{root.querySelectorAll('video').forEach(v=>watchVideo(v));"
+            + "function scanRoot(root){if(!root)return;try{const found=root.querySelectorAll('video');if(found.length&&!root.__astraFlowDiagCounted){root.__astraFlowDiagCounted=true;console.info('ASTRA_FLOW_DIAG_VIDEO_ELEMENTS',found.length,'root',root===document?'document':'shadow-or-frame');}found.forEach(v=>watchVideo(v));"
             + "if(!observed.has(root)){observed.add(root);new MutationObserver(()=>window.__astraFlowVideoScan()).observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});}"
             + "root.querySelectorAll('*').forEach(n=>{if(n.shadowRoot)scanRoot(n.shadowRoot);});"
             + "root.querySelectorAll('iframe').forEach(f=>{try{if(f.contentDocument)scanRoot(f.contentDocument);}catch(e){}});"
