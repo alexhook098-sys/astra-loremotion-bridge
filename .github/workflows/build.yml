@@ -11,6 +11,7 @@ on:
       - fix/flow-video-capture-retry
       - fix/flow-download-auth-response
       - fix/flow-card-video-capture
+      - diagnostic/flow-video-capture
 
 jobs:
   build:
