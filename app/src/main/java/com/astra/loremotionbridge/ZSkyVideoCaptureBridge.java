@@ -22,6 +22,37 @@ public final class ZSkyVideoCaptureBridge {
     public ZSkyVideoCaptureBridge(Activity activity) { this.activity = activity; }
 
     @JavascriptInterface
+    public boolean downloadRemoteVideo(String url, String userAgent, String referer) {
+        try {
+            if (url == null || !(url.startsWith("https://") || url.startsWith("http://")))
+                return false;
+            android.app.DownloadManager manager =
+                    (android.app.DownloadManager) activity.getSystemService(Activity.DOWNLOAD_SERVICE);
+            if (manager == null) return false;
+            String name = "zsky_" + System.currentTimeMillis() + ".mp4";
+            android.app.DownloadManager.Request request =
+                    new android.app.DownloadManager.Request(android.net.Uri.parse(url));
+            request.setTitle("ASTRA ZSky video");
+            request.setDescription("Downloading generated video");
+            request.setMimeType("video/mp4");
+            request.setNotificationVisibility(
+                    android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            request.setDestinationInExternalPublicDir(
+                    Environment.DIRECTORY_MOVIES, "ASTRA/ZSky/" + name);
+            if (userAgent != null && !userAgent.isEmpty())
+                request.addRequestHeader("User-Agent", userAgent);
+            if (referer != null && (referer.startsWith("https://") || referer.startsWith("http://")))
+                request.addRequestHeader("Referer", referer);
+            long id = manager.enqueue(request);
+            Log.i(TAG, "remote HTTPS video queued id=" + id);
+            return id > 0;
+        } catch (Exception e) {
+            Log.e(TAG, "downloadRemoteVideo failed", e);
+            return false;
+        }
+    }
+
+    @JavascriptInterface
     public synchronized boolean beginVideo(String mime, String fileName) {
         try {
             if (output != null) return false;
