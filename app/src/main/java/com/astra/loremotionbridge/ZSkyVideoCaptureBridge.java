@@ -24,8 +24,12 @@ public final class ZSkyVideoCaptureBridge {
     @JavascriptInterface
     public boolean downloadRemoteVideo(String url, String userAgent, String referer) {
         try {
-            if (url == null || !(url.startsWith("https://") || url.startsWith("http://")))
-                return false;
+            if (url == null || !url.startsWith("https://")) return false;
+            if (!(activity instanceof ZSkyWebViewActivity)) return false;
+            // Use the Activity's single completion-aware pipeline. The former direct enqueue
+            // had no receiver and therefore never delivered the downloaded file into ASTRA chat.
+            return ((ZSkyWebViewActivity) activity).queueFinalZSkyDownload(url, userAgent, referer);
+            /* Legacy direct enqueue retained only as a comment for historical reference.
             android.app.DownloadManager manager =
                     (android.app.DownloadManager) activity.getSystemService(Activity.DOWNLOAD_SERVICE);
             if (manager == null) return false;
@@ -46,6 +50,7 @@ public final class ZSkyVideoCaptureBridge {
             long id = manager.enqueue(request);
             Log.i(TAG, "remote HTTPS video queued id=" + id);
             return id > 0;
+            */
         } catch (Exception e) {
             Log.e(TAG, "downloadRemoteVideo failed", e);
             return false;
