@@ -36,8 +36,8 @@ public final class ZSkyWebViewActivity extends Activity {
 
     private WebView webView;
     private WebView zskyPopup;
-    private long zskyDownloadId = -1L;
-    private String activeZSkyDownloadUrl;
+    private volatile long zskyDownloadId = -1L;
+    private volatile String activeZSkyDownloadUrl;
     private final java.util.Set<String> queuedFinalVideoUrls = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
     private BroadcastReceiver zskyDownloadReceiver;
     private ZSkyVideoCaptureBridge videoCaptureBridge;
@@ -53,7 +53,7 @@ public final class ZSkyWebViewActivity extends Activity {
     private boolean promptInjected;
     private int automationAttempts;
     private int observerPolls;
-    private long generationStartedAt;
+    private volatile long generationStartedAt;
     private int baselineVideoCount = -1;
     private String generationState = "idle";
     private String generationEvidence = "";
@@ -112,6 +112,12 @@ public final class ZSkyWebViewActivity extends Activity {
         }
     };
     private void downloadFinalZSkyMp4(String url, String source) {
+        String ua = webView == null ? "" : webView.getSettings().getUserAgentString();
+        String page = webView == null ? null : webView.getUrl();
+        downloadFinalZSkyMp4(url, source, ua, page);
+    }
+
+    private void downloadFinalZSkyMp4(String url, String source, String userAgent, String referer) {
         // Final CDN URLs may be signed and extensionless; the page bridge calls this only for a detected result.
         if (url == null || !url.startsWith("https://") || generationStartedAt <= 0L) return;
         if (zskyDownloadId != -1L || !queuedFinalVideoUrls.add(url)) return;
@@ -127,9 +133,8 @@ public final class ZSkyWebViewActivity extends Activity {
                     "ASTRA/ZSky/zsky_" + System.currentTimeMillis() + ".mp4");
             String cookie = CookieManager.getInstance().getCookie(url);
             if (cookie != null && !cookie.isEmpty()) req.addRequestHeader("Cookie", cookie);
-            req.addRequestHeader("User-Agent", webView.getSettings().getUserAgentString());
-            String referer = webView.getUrl();
-            if (referer != null) req.addRequestHeader("Referer", referer);
+            if (userAgent != null && !userAgent.isEmpty()) req.addRequestHeader("User-Agent", userAgent);
+            if (referer != null && referer.startsWith("https://")) req.addRequestHeader("Referer", referer);
             zskyDownloadId = dm.enqueue(req);
             activeZSkyDownloadUrl = url;
             Log.i("ASTRA-ZSKY-DOWNLOAD", "FINAL video queued id=" + zskyDownloadId + " source=" + source
@@ -170,6 +175,7 @@ public final class ZSkyWebViewActivity extends Activity {
                 else registerReceiver(zskyDownloadReceiver, f);
             }
         } catch (Exception e) {
+            if (url != null) queuedFinalVideoUrls.remove(url);
             Log.e("ASTRA-ZSKY-DOWNLOAD", "final MP4 download failed", e);
         }
     }
@@ -179,7 +185,7 @@ public final class ZSkyWebViewActivity extends Activity {
         if (generationStartedAt <= 0L || url == null || !url.startsWith("https://")) return false;
         if (zskyDownloadId != -1L) return activeZSkyDownloadUrl != null && activeZSkyDownloadUrl.equals(url);
         if (webView == null || isFinishing() || isDestroyed()) return false;
-        downloadFinalZSkyMp4(url, "final-video-element");
+        downloadFinalZSkyMp4(url, "final-video-element", userAgent, referer);
         return zskyDownloadId != -1L;
     }
 
