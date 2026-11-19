@@ -105,49 +105,14 @@ public final class ZSkyWebViewActivity extends Activity {
         }
     };
     private void downloadFinalZSkyMp4(String url, String source) {
-        if (url == null || !url.matches("(?i)^https://.*\\.mp4([?#].*)?$")) return;
-        if (zskyDownloadId != -1L) return;
-        try {
-            DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
-            if (dm == null) throw new IllegalStateException("DownloadManager unavailable");
-            DownloadManager.Request req = new DownloadManager.Request(Uri.parse(url));
-            req.setTitle("ASTRA · ZSky video");
-            req.setDescription("Сохранение готового видео ZSky");
-            req.setMimeType("video/mp4");
-            req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-            req.setDestinationInExternalPublicDir(Environment.DIRECTORY_MOVIES,
-                    "ASTRA/ZSky/zsky_" + System.currentTimeMillis() + ".mp4");
-            String cookie = CookieManager.getInstance().getCookie(url);
-            if (cookie != null && !cookie.isEmpty()) req.addRequestHeader("Cookie", cookie);
-            req.addRequestHeader("User-Agent", webView.getSettings().getUserAgentString());
-            String referer = webView.getUrl();
-            if (referer != null) req.addRequestHeader("Referer", referer);
-            zskyDownloadId = dm.enqueue(req);
-            Log.i("ASTRA-ZSKY-DOWNLOAD", "FINAL mp4 queued id=" + zskyDownloadId + " source=" + source);
-            status.setText("ASTRA ZSky: скачиваю финальное видео…");
-            if (zskyDownloadReceiver == null) {
-                zskyDownloadReceiver = new BroadcastReceiver() {
-                    @Override public void onReceive(Context c, Intent i) {
-                        if (i.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L) != zskyDownloadId) return;
-                        Uri saved = dm.getUriForDownloadedFile(zskyDownloadId);
-                        if (saved != null) {
-                            ChatActivity.onZSkyVideoReady(getApplicationContext(), saved);
-                            status.setText("ASTRA ZSky: готовое видео сохранено");
-                            Log.i("ASTRA-ZSKY-DOWNLOAD", "FINAL mp4 saved=" + saved);
-                        } else {
-                            status.setText("ASTRA ZSky: ошибка загрузки финального видео");
-                            Log.e("ASTRA-ZSKY-DOWNLOAD", "FINAL mp4 download failed");
-                        }
-                        zskyDownloadId = -1L;
-                    }
-                };
-                IntentFilter f = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
-                if (Build.VERSION.SDK_INT >= 33) registerReceiver(zskyDownloadReceiver, f, Context.RECEIVER_NOT_EXPORTED);
-                else registerReceiver(zskyDownloadReceiver, f);
-            }
-        } catch (Exception e) {
-            Log.e("ASTRA-ZSKY-DOWNLOAD", "final MP4 download failed", e);
-        }
+        if (videoCaptureBridge == null || webView == null) return;
+        boolean queued = videoCaptureBridge.downloadRemoteVideo(
+                url, webView.getSettings().getUserAgentString(), webView.getUrl());
+        Log.i("ASTRA-ZSKY-DOWNLOAD",
+                "FINAL MP4 routed to silent native stream queued=" + queued + " source=" + source);
+        if (status != null) status.setText(queued
+                ? "ASTRA ZSky: сохраняю готовое видео в фоне…"
+                : "ASTRA ZSky: не удалось начать сохранение видео");
     }
 
     public static ZSkyWebViewActivity getInstance() { return instance; }
@@ -229,6 +194,14 @@ public final class ZSkyWebViewActivity extends Activity {
                 resultMsg.sendToTarget();
                 return true;
             }
+        });
+        // Restore the 371 native download callback, routed through the same
+        // authenticated, notification-free MediaStore stream as video capture.
+        webView.setDownloadListener((downloadUrl, userAgent, contentDisposition, mimeType, contentLength) -> {
+            boolean queued = videoCaptureBridge != null
+                    && videoCaptureBridge.downloadRemoteVideo(downloadUrl, userAgent, webView.getUrl());
+            Log.i("ASTRA-ZSKY-DOWNLOAD", "WebView download callback queued=" + queued
+                    + " mime=" + mimeType + " bytes=" + contentLength);
         });
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
