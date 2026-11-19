@@ -298,6 +298,7 @@ public final class ZSkyWebViewActivity extends Activity {
             pendingPrompt = prompt.trim();
             promptInjected = false;
             automationAttempts = 0;
+            generationStartedAt = 0L;
             generationState = "queued";
             if (pageLoaded) main.postDelayed(this::runPendingPrompt, 400L);
         }
