@@ -121,7 +121,7 @@ public final class ZSkyWebViewActivity extends Activity {
             webView.evaluateJavascript(js, value -> {
                 try {
                     String payload = value == null ? "" : value;
-                    if (payload.startsWith("\\\"")) {
+                    if (payload.startsWith("\"")) {
                         Object decoded = new org.json.JSONTokener(payload).nextValue();
                         if (decoded instanceof String) payload = (String) decoded;
                     }
