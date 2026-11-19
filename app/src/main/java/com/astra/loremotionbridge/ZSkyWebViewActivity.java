@@ -45,6 +45,29 @@ public final class ZSkyWebViewActivity extends Activity {
     private int baselineVideoCount = -1;
     private String generationState = "idle";
     private String generationEvidence = "";
+    private int diagPollCount;
+    private long lastDiagAt;
+
+    // Native polling survives Activity backgrounding; the page heartbeat tells us
+    // whether Chromium is still executing timers while the task is hidden.
+    private final Runnable diagPoll = new Runnable() {
+        @Override public void run() {
+            if (webView == null || isFinishing() || isDestroyed()) return;
+            webView.evaluateJavascript(
+                    "(function(){const h=window.__astraZSkyDiag||{};return JSON.stringify({"
+                    + "visibility:document.visibilityState,hidden:document.hidden,"
+                    + "ready:document.readyState,tick:h.tick||0,heartbeatAt:h.at||0,"
+                    + "url:location.href});})()",
+                    value -> {
+                        diagPollCount++;
+                        lastDiagAt = android.os.SystemClock.elapsedRealtime();
+                        Log.i("ASTRA-ZSKY-DIAG", "background poll=" + diagPollCount
+                                + " lifecycle=" + lastLifecycleEvent + " page=" + value);
+                        if (webView != null && !isFinishing() && !isDestroyed())
+                            main.postDelayed(this, 5000L);
+                    });
+        }
+    };
 
     private final Runnable generationObserver = new Runnable() {
         @Override public void run() {
@@ -135,8 +158,20 @@ public final class ZSkyWebViewActivity extends Activity {
                 main.postDelayed(ZSkyWebViewActivity.this::inspectPage, 900L);
                 main.postDelayed(ZSkyWebViewActivity.this::installVideoCapture, 1400L);
                 if (pendingPrompt != null) main.postDelayed(ZSkyWebViewActivity.this::runPendingPrompt, 1200L);
-                // Keep the studio active until prompt submission is confirmed.
-
+                view.evaluateJavascript(
+                        "(function(){if(window.__astraZSkyDiag)clearInterval(window.__astraZSkyDiag.timer);"
+                        + "const h=window.__astraZSkyDiag={tick:0,at:Date.now(),timer:null};"
+                        + "h.timer=setInterval(function(){h.tick++;h.at=Date.now();},2000);"
+                        + "return 'heartbeat-installed';})()",
+                        value -> Log.i("ASTRA-ZSKY-DIAG", "heartbeat setup=" + value));
+                main.removeCallbacks(diagPoll);
+                main.postDelayed(diagPoll, 2000L);
+                if (backgroundRequested) main.postDelayed(() -> {
+                    if (!isFinishing() && !isDestroyed()) {
+                        moveTaskToBack(true);
+                        Log.i("ASTRA-ZSKY", "Background mode: moved task to back after page load");
+                    }
+                }, 250L);
                 Log.i("ASTRA-ZSKY", "Page finished: " + url);
             }
         });
@@ -406,11 +441,19 @@ public final class ZSkyWebViewActivity extends Activity {
 
     @Override protected void onPause() {
         lastLifecycleEvent = "onPause";
+        Log.i("ASTRA-ZSKY", "Lifecycle onPause: url="
+                + (webView != null ? webView.getUrl() : "null")
+                + ", generationState=" + generationState);
+        // Deliberately do not call WebView.onPause() or pauseTimers():
+        // the hidden page must continue its generation workflow like Flow.
         super.onPause();
     }
 
     @Override protected void onStop() {
         lastLifecycleEvent = "onStop";
+        Log.i("ASTRA-ZSKY", "Lifecycle onStop: url="
+                + (webView != null ? webView.getUrl() : "null")
+                + ", generationState=" + generationState);
         super.onStop();
     }
 
@@ -426,6 +469,7 @@ public final class ZSkyWebViewActivity extends Activity {
     @Override protected void onDestroy() {
         lastLifecycleEvent = "destroyed";
         main.removeCallbacks(generationObserver);
+        main.removeCallbacks(diagPoll);
         if (videoCaptureBridge != null) videoCaptureBridge.abortVideo();
         if (zskyWakeLock != null && zskyWakeLock.isHeld()) zskyWakeLock.release();
         zskyWakeLock = null;
