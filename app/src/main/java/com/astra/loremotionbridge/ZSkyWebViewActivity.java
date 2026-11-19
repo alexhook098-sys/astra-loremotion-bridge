@@ -104,7 +104,7 @@ public final class ZSkyWebViewActivity extends Activity {
             });
         }
     };
-    private void downloadFinalZSkyMp4(String url, String source) {
+    private void downloadFinalZSkyMp4(String url, String source, String popupReferer) {
         if (url == null || !url.matches("(?i)^https://.*\\.mp4([?#].*)?$")) return;
         if (zskyDownloadId != -1L) return;
         try {
@@ -120,8 +120,10 @@ public final class ZSkyWebViewActivity extends Activity {
             String cookie = CookieManager.getInstance().getCookie(url);
             if (cookie != null && !cookie.isEmpty()) req.addRequestHeader("Cookie", cookie);
             req.addRequestHeader("User-Agent", webView.getSettings().getUserAgentString());
-            String referer = webView.getUrl();
-            if (referer != null) req.addRequestHeader("Referer", referer);
+            String referer = popupReferer;
+            if (referer == null || referer.isEmpty()) referer = webView != null ? webView.getUrl() : null;
+            if (referer != null && (referer.startsWith("https://") || referer.startsWith("http://")))
+                req.addRequestHeader("Referer", referer);
             zskyDownloadId = dm.enqueue(req);
             Log.i("ASTRA-ZSKY-DOWNLOAD", "FINAL mp4 queued id=" + zskyDownloadId + " source=" + source);
             status.setText("ASTRA ZSky: скачиваю финальное видео…");
@@ -151,10 +153,10 @@ public final class ZSkyWebViewActivity extends Activity {
     }
 
     @JavascriptInterface
-    public void downloadFinalVideo(String url) {
+    public void downloadFinalVideo(String url, String referer) {
         // Javascript interfaces run on a Chromium background thread; marshal all
         // DownloadManager, WebView, and UI work onto the Activity thread.
-        runOnUiThread(() -> downloadFinalZSkyMp4(url, "popup-video-element"));
+        runOnUiThread(() -> downloadFinalZSkyMp4(url, "popup-video-element", referer));
     }
 
     public static ZSkyWebViewActivity getInstance() { return instance; }
@@ -213,6 +215,7 @@ public final class ZSkyWebViewActivity extends Activity {
                     try { zskyPopup.destroy(); } catch (Exception ignored) {}
                 }
                 zskyPopup = new WebView(ZSkyWebViewActivity.this);
+                cookies.setAcceptThirdPartyCookies(zskyPopup, true);
                 WebSettings ps = zskyPopup.getSettings();
                 ps.setJavaScriptEnabled(true);
                 ps.setDomStorageEnabled(true);
@@ -229,7 +232,7 @@ public final class ZSkyWebViewActivity extends Activity {
                         if (url.matches("(?i)^https://.*\\.mp4([?#].*)?$")) {
                             Log.i("ASTRA-ZSKY-POPUP", "FINAL_MP4_TARGET=" + url);
                             webView.evaluateJavascript("window.__astraZSkyFinalResult=true", null);
-                            downloadFinalZSkyMp4(url, "target-blank-navigation");
+                            downloadFinalZSkyMp4(url, "target-blank-navigation", v.getUrl());
                             return true;
                         }
                         return false;
@@ -242,7 +245,7 @@ public final class ZSkyWebViewActivity extends Activity {
                 });
                 zskyPopup.setDownloadListener((url, ua, disposition, mime, length) -> {
                     Log.i("ASTRA-ZSKY-POPUP", "download url=" + url + " mime=" + mime);
-                    downloadFinalZSkyMp4(url, "popup-download-listener");
+                    downloadFinalZSkyMp4(url, "popup-download-listener", zskyPopup != null ? zskyPopup.getUrl() : null);
                 });
                 WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
                 transport.setWebView(zskyPopup);
@@ -391,7 +394,7 @@ public final class ZSkyWebViewActivity extends Activity {
             + "async function capture(v){if(!window.__astraZSkyFinalResult)return;let u='';try{u=v.currentSrc||v.src||'';if(!u){const q=v.querySelector('source[src]');u=q?q.src:'';}"
             + "if(!u)return;"
             + "if(window.__astraZSkyCaptureDone.has(u)||window.__astraZSkyCaptureBusy.has(u))return;"
-            + "if(u.startsWith('https://')){window.__astraZSkyCaptureBusy.add(u);window.ASTRAZSkyHost.downloadFinalVideo(u);"
+            + "if(u.startsWith('https://')){window.__astraZSkyCaptureBusy.add(u);window.ASTRAZSkyHost.downloadFinalVideo(u,location.href);"
             + "console.info('ASTRA_ZSKY_FINAL_URL_SENT_TO_NATIVE');"
             + "window.__astraZSkyCaptureBusy.delete(u);return;}"
             + "if(!u.startsWith('blob:'))return;"
