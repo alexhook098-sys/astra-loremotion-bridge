@@ -104,8 +104,13 @@ public final class ZSkyWebViewActivity extends Activity {
             });
         }
     };
-    private void downloadFinalZSkyMp4(String url, String source) {
-        if (url == null || !url.matches("(?i)^https://.*\\.mp4([?#].*)?$")) return;
+    private void downloadFinalZSkyMp4(String url, String source) { downloadFinalZSkyMp4(url, source, "video/mp4"); }
+
+    private void downloadFinalZSkyMp4(String url, String source, String mimeType) {
+        if (url == null || !url.startsWith("https://")) return;
+        String lowerUrl = url.toLowerCase(java.util.Locale.ROOT);
+        String lowerMime = mimeType == null ? "" : mimeType.toLowerCase(java.util.Locale.ROOT);
+        if (!(lowerUrl.contains(".mp4") || lowerUrl.contains("video") || lowerMime.startsWith("video/"))) return;
         if (zskyDownloadId != -1L) return;
         try {
             DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
@@ -113,7 +118,7 @@ public final class ZSkyWebViewActivity extends Activity {
             DownloadManager.Request req = new DownloadManager.Request(Uri.parse(url));
             req.setTitle("ASTRA · ZSky video");
             req.setDescription("Сохранение готового видео ZSky");
-            req.setMimeType("video/mp4");
+            req.setMimeType(mimeType != null && mimeType.startsWith("video/") ? mimeType : "video/mp4");
             req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
             req.setDestinationInExternalPublicDir(Environment.DIRECTORY_MOVIES,
                     "ASTRA/ZSky/zsky_" + System.currentTimeMillis() + ".mp4");
@@ -222,13 +227,19 @@ public final class ZSkyWebViewActivity extends Activity {
                         return false;
                     }
                 });
-                zskyPopup.setDownloadListener((url, ua, disposition, mime, length) ->
-                        Log.i("ASTRA-ZSKY-POPUP", "download url=" + url + " mime=" + mime));
+                zskyPopup.setDownloadListener((url, ua, disposition, mime, length) -> {
+                    Log.i("ASTRA-ZSKY-POPUP", "FINAL download callback url=" + url + " mime=" + mime);
+                    downloadFinalZSkyMp4(url, "popup-download-listener", mime);
+                });
                 WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
                 transport.setWebView(zskyPopup);
                 resultMsg.sendToTarget();
                 return true;
             }
+        });
+        webView.setDownloadListener((url, ua, disposition, mime, length) -> {
+            Log.i("ASTRA-ZSKY-DOWNLOAD", "FINAL main download callback url=" + url + " mime=" + mime);
+            downloadFinalZSkyMp4(url, "main-download-listener", mime);
         });
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
