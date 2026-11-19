@@ -74,7 +74,20 @@ public final class ZSkyWebViewActivity extends Activity {
     private final Runnable generationObserver = new Runnable() {
         @Override public void run() {
             if (webView == null || generationStartedAt == 0L || isFinishing() || isDestroyed()) return;
-            String js = "(function(){const t=(document.body&&document.body.innerText)||'';return JSON.stringify({tail:t.slice(-1400),videos:document.querySelectorAll('video').length,busy:document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,visibility:document.visibilityState});})()";
+            String js = "(function(){"
+                    + "const t=(document.body&&document.body.innerText)||'';"
+                    + "const final=/rendered on the free lane/i.test(t)&&/\\bdownload\\b/i.test(t);"
+                    + "let clicked=false;"
+                    + "if(final&&!window.__astraZSkyNativeDownloadClicked){"
+                    + "const b=[...document.querySelectorAll('button,[role=button],a')].find(x=>{"
+                    + "const q=((x.innerText||x.textContent||'')+' '+(x.getAttribute('aria-label')||'')).replace(/\\s+/g,' ').trim().toLowerCase();"
+                    + "return q==='download'&&!x.disabled&&x.getAttribute('aria-disabled')!=='true';});"
+                    + "if(b){window.__astraZSkyNativeDownloadClicked=true;window.__astraZSkyNativeDownloadSince=performance.now();b.click();clicked=true;}}"
+                    + "const since=window.__astraZSkyNativeDownloadSince||Infinity;"
+                    + "const urls=final?performance.getEntriesByType('resource').filter(x=>x.startTime>=since).map(x=>x.name).filter(x=>/^https:\\/\\//i.test(x)&&/\\.mp4(?:$|[?#])/i.test(x)):[];"
+                    + "return JSON.stringify({tail:t.slice(-1400),videos:document.querySelectorAll('video').length,"
+                    + "busy:document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,"
+                    + "visibility:document.visibilityState,final:final,clicked:clicked,urls:urls});})()";
             webView.evaluateJavascript(js, value -> {
                 observerPolls++;
                 if (webView != null) webView.evaluateJavascript(videoCaptureScanScript(), null);
@@ -88,11 +101,21 @@ public final class ZSkyWebViewActivity extends Activity {
                     org.json.JSONObject e = new org.json.JSONObject(payload);
                     String tail = e.optString("tail", "").toLowerCase(java.util.Locale.ROOT);
                     if (tail.contains("generation failed") || tail.contains("ошибка генерации")) generationState = "failed";
+                    else if (e.optBoolean("final", false)) generationState = "final_stage";
                     else if (e.optInt("busy", 0) > 0) generationState = "running";
                     else if (baselineVideoCount >= 0 && e.optInt("videos", 0) > baselineVideoCount) generationState = "completed_unconfirmed";
+                    org.json.JSONArray urls = e.optJSONArray("urls");
+                    if (urls != null) {
+                        for (int i = 0; i < urls.length(); i++) {
+                            String mediaUrl = urls.optString(i, "");
+                            if (!mediaUrl.isEmpty()) downloadFinalZSkyMp4(mediaUrl, "native-final-stage-observer");
+                        }
+                    }
+                    if (e.optBoolean("clicked", false))
+                        Log.i("ASTRA-ZSKY-DOWNLOAD", "Native observer clicked final Download button");
                 } catch (Exception ex) { Log.w("ASTRA-ZSKY-OBSERVER", "Evidence parse failed", ex); }
                 Log.i("ASTRA-ZSKY-OBSERVER", "poll=" + observerPolls + " state=" + generationState + " evidence=" + generationEvidence);
-                if (webView != null && !isFinishing() && !isDestroyed()) main.postDelayed(this, 5000L);
+                if (webView != null && !isFinishing() && !isDestroyed()) main.postDelayed(this, 2500L);
             });
         }
     };
