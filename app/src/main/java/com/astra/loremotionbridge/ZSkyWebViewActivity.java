@@ -37,6 +37,8 @@ public final class ZSkyWebViewActivity extends Activity {
     private WebView webView;
     private WebView zskyPopup;
     private long zskyDownloadId = -1L;
+    private String activeZSkyDownloadUrl;
+    private final java.util.Set<String> queuedFinalVideoUrls = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
     private BroadcastReceiver zskyDownloadReceiver;
     private ZSkyVideoCaptureBridge videoCaptureBridge;
     private TextView status;
@@ -97,7 +99,12 @@ public final class ZSkyWebViewActivity extends Activity {
                     String tail = e.optString("tail", "").toLowerCase(java.util.Locale.ROOT);
                     if (tail.contains("generation failed") || tail.contains("ошибка генерации")) generationState = "failed";
                     else if (e.optInt("busy", 0) > 0) generationState = "running";
-                    else if (baselineVideoCount >= 0 && e.optInt("videos", 0) > baselineVideoCount) generationState = "completed_unconfirmed";
+                    else if (baselineVideoCount >= 0 && e.optInt("videos", 0) > baselineVideoCount) {
+                        generationState = "completed_unconfirmed";
+                        if (webView != null) webView.evaluateJavascript(
+                                "(function(){window.__astraZSkyFinalResult=true;window.__astraZSkyVideoScan&&window.__astraZSkyVideoScan();return 'final-result-unlocked';})()",
+                                v -> Log.i("ASTRA-ZSKY-DOWNLOAD", "final result unlock=" + v));
+                    }
                 } catch (Exception ex) { Log.w("ASTRA-ZSKY-OBSERVER", "Evidence parse failed", ex); }
                 Log.i("ASTRA-ZSKY-OBSERVER", "poll=" + observerPolls + " state=" + generationState + " evidence=" + generationEvidence);
                 if (webView != null && !isFinishing() && !isDestroyed()) main.postDelayed(this, 5000L);
@@ -105,8 +112,9 @@ public final class ZSkyWebViewActivity extends Activity {
         }
     };
     private void downloadFinalZSkyMp4(String url, String source) {
-        if (url == null || !url.matches("(?i)^https://.*\\.mp4([?#].*)?$")) return;
-        if (zskyDownloadId != -1L) return;
+        // Final CDN URLs may be signed and extensionless; the page bridge calls this only for a detected result.
+        if (url == null || !url.startsWith("https://") || generationStartedAt <= 0L) return;
+        if (zskyDownloadId != -1L || !queuedFinalVideoUrls.add(url)) return;
         try {
             DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
             if (dm == null) throw new IllegalStateException("DownloadManager unavailable");
@@ -123,21 +131,37 @@ public final class ZSkyWebViewActivity extends Activity {
             String referer = webView.getUrl();
             if (referer != null) req.addRequestHeader("Referer", referer);
             zskyDownloadId = dm.enqueue(req);
-            Log.i("ASTRA-ZSKY-DOWNLOAD", "FINAL mp4 queued id=" + zskyDownloadId + " source=" + source);
-            status.setText("ASTRA ZSky: скачиваю финальное видео…");
+            activeZSkyDownloadUrl = url;
+            Log.i("ASTRA-ZSKY-DOWNLOAD", "FINAL video queued id=" + zskyDownloadId + " source=" + source
+                    + " host=" + Uri.parse(url).getHost() + " path=" + Uri.parse(url).getPath());
+            runOnUiThread(() -> { if (status != null) status.setText("ASTRA ZSky: скачиваю финальное видео…"); });
             if (zskyDownloadReceiver == null) {
                 zskyDownloadReceiver = new BroadcastReceiver() {
                     @Override public void onReceive(Context c, Intent i) {
                         if (i.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L) != zskyDownloadId) return;
                         Uri saved = dm.getUriForDownloadedFile(zskyDownloadId);
-                        if (saved != null) {
+                        android.database.Cursor c = null;
+                        long bytes = 0L;
+                        int downloadStatus = -1;
+                        try {
+                            c = dm.query(new DownloadManager.Query().setFilterById(zskyDownloadId));
+                            if (c != null && c.moveToFirst()) {
+                                int si = c.getColumnIndex(DownloadManager.COLUMN_STATUS);
+                                int bi = c.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR);
+                                if (si >= 0) downloadStatus = c.getInt(si);
+                                if (bi >= 0) bytes = c.getLong(bi);
+                            }
+                        } catch (Exception ignored) { } finally { if (c != null) c.close(); }
+                        if (saved != null && downloadStatus == DownloadManager.STATUS_SUCCESSFUL && bytes > 0L) {
                             ChatActivity.onZSkyVideoReady(getApplicationContext(), saved);
                             status.setText("ASTRA ZSky: готовое видео сохранено");
-                            Log.i("ASTRA-ZSKY-DOWNLOAD", "FINAL mp4 saved=" + saved);
+                            Log.i("ASTRA-ZSKY-DOWNLOAD", "FINAL video saved bytes=" + bytes);
                         } else {
                             status.setText("ASTRA ZSky: ошибка загрузки финального видео");
-                            Log.e("ASTRA-ZSKY-DOWNLOAD", "FINAL mp4 download failed");
+                            Log.e("ASTRA-ZSKY-DOWNLOAD", "FINAL video download failed status=" + downloadStatus + " bytes=" + bytes);
+                            if (activeZSkyDownloadUrl != null) queuedFinalVideoUrls.remove(activeZSkyDownloadUrl);
                         }
+                        activeZSkyDownloadUrl = null;
                         zskyDownloadId = -1L;
                     }
                 };
@@ -148,6 +172,15 @@ public final class ZSkyWebViewActivity extends Activity {
         } catch (Exception e) {
             Log.e("ASTRA-ZSKY-DOWNLOAD", "final MP4 download failed", e);
         }
+    }
+
+    /** Called by the JS bridge only after the current generation's final result is identified. */
+    public boolean queueFinalZSkyDownload(String url, String userAgent, String referer) {
+        if (generationStartedAt <= 0L || url == null || !url.startsWith("https://")) return false;
+        if (zskyDownloadId != -1L) return activeZSkyDownloadUrl != null && activeZSkyDownloadUrl.equals(url);
+        if (webView == null || isFinishing() || isDestroyed()) return false;
+        downloadFinalZSkyMp4(url, "final-video-element");
+        return zskyDownloadId != -1L;
     }
 
     public static ZSkyWebViewActivity getInstance() { return instance; }
@@ -299,6 +332,9 @@ public final class ZSkyWebViewActivity extends Activity {
             promptInjected = false;
             automationAttempts = 0;
             generationStartedAt = 0L;
+            queuedFinalVideoUrls.clear();
+            activeZSkyDownloadUrl = null;
+            if (webView != null) webView.evaluateJavascript("window.__astraZSkyFinalResult=false", null);
             generationState = "queued";
             if (pageLoaded) main.postDelayed(this::runPendingPrompt, 400L);
         }
@@ -356,6 +392,9 @@ public final class ZSkyWebViewActivity extends Activity {
                         try { baselineVideoCount = Integer.parseInt(clickResult.replaceAll("[^0-9]", "")); }
                         catch (Exception ignored) { baselineVideoCount = -1; }
                         generationStartedAt = System.currentTimeMillis();
+                        queuedFinalVideoUrls.clear();
+                        activeZSkyDownloadUrl = null;
+                        webView.evaluateJavascript("window.__astraZSkyFinalResult=false", null);
                         generationState = "submitted_unconfirmed";
                         pendingPrompt = null;
                         main.removeCallbacks(generationObserver);
@@ -428,7 +467,7 @@ public final class ZSkyWebViewActivity extends Activity {
             + "}catch(e){window.__astraZSkyCaptureBusy.delete(u);try{window.ASTRAZSkyVideo.failVideo(String(e));}catch(x){}console.error('ASTRA_ZSKY_VIDEO_CAPTURE:'+e);}}"
             + "function watch(v){if(!v||videos.has(v))return;videos.add(v);"
             + "['loadedmetadata','loadeddata','durationchange','canplay','playing','progress','loadstart'].forEach(e=>v.addEventListener(e,()=>capture(v),{passive:true}));capture(v);}"
-            + "function scan(root){if(!root)return;try{root.querySelectorAll('video').forEach(watch);"
+            + "function scan(root){if(!root)return;try{root.querySelectorAll('video').forEach(v=>{watch(v);if(window.__astraZSkyFinalResult)capture(v);});"
             + "if(!roots.has(root)){roots.add(root);new MutationObserver(()=>window.__astraZSkyVideoScan()).observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});}"
             + "root.querySelectorAll('*').forEach(n=>{if(n.shadowRoot)scan(n.shadowRoot);});"
             + "root.querySelectorAll('iframe').forEach(f=>{try{if(f.contentDocument)scan(f.contentDocument);}catch(e){}});"
