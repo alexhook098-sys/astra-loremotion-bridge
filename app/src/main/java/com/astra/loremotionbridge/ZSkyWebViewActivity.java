@@ -240,8 +240,10 @@ public final class ZSkyWebViewActivity extends Activity {
                         main.postDelayed(() -> installVideoCapture(v), 500L);
                     }
                 });
-                zskyPopup.setDownloadListener((url, ua, disposition, mime, length) ->
-                        Log.i("ASTRA-ZSKY-POPUP", "download url=" + url + " mime=" + mime));
+                zskyPopup.setDownloadListener((url, ua, disposition, mime, length) -> {
+                    Log.i("ASTRA-ZSKY-POPUP", "download url=" + url + " mime=" + mime);
+                    downloadFinalZSkyMp4(url, "popup-download-listener");
+                });
                 WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
                 transport.setWebView(zskyPopup);
                 resultMsg.sendToTarget();
