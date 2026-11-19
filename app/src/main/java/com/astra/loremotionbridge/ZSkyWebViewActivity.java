@@ -150,6 +150,13 @@ public final class ZSkyWebViewActivity extends Activity {
         }
     }
 
+    /** Route JS bridge downloads through the Activity-owned completion receiver so
+     * the completed MediaStore URI is also delivered to ASTRA Chat. */
+    public boolean requestFinalZSkyDownload(String url, String source) {
+        downloadFinalZSkyMp4(url, source);
+        return zskyDownloadId != -1L;
+    }
+
     public static ZSkyWebViewActivity getInstance() { return instance; }
 
     @Override protected void onCreate(Bundle state) {
