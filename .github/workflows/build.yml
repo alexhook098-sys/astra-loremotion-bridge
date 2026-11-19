@@ -11,6 +11,7 @@ on:
       - fix/flow-video-capture-retry
       - fix/flow-download-auth-response
       - fix/zsky-372-restore-https-download
+      - fix/zsky-372-clean-generation-371-native-download
       - feature/zsky-chat-background-from-362
 
 jobs:
