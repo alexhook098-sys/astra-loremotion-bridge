@@ -179,8 +179,12 @@ public final class ZSkyWebViewActivity extends Activity {
                         return false;
                     }
                 });
-                zskyPopup.setDownloadListener((url, ua, disposition, mime, length) ->
-                        Log.i("ASTRA-ZSKY-POPUP", "download url=" + url + " mime=" + mime));
+                zskyPopup.setDownloadListener((url, ua, disposition, mime, length) -> {
+                    boolean queued = videoCaptureBridge != null
+                            && videoCaptureBridge.downloadRemoteVideo(url, ua, webView.getUrl());
+                    Log.i("ASTRA-ZSKY-POPUP", "native download queued=" + queued
+                            + " mime=" + mime + " bytes=" + length);
+                });
                 WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
                 transport.setWebView(zskyPopup);
                 resultMsg.sendToTarget();
