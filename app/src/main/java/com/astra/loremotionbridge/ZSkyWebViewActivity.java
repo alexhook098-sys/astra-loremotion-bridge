@@ -16,6 +16,8 @@ import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebViewTransport;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -28,6 +30,7 @@ public final class ZSkyWebViewActivity extends Activity {
     private static volatile ZSkyWebViewActivity instance;
 
     private WebView webView;
+    private WebView zskyPopup;
     private ZSkyVideoCaptureBridge videoCaptureBridge;
     private TextView status;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -133,7 +136,7 @@ public final class ZSkyWebViewActivity extends Activity {
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
         settings.setJavaScriptCanOpenWindowsAutomatically(true);
-        settings.setSupportMultipleWindows(false);
+        settings.setSupportMultipleWindows(true);
         settings.setLoadsImagesAutomatically(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
@@ -141,7 +144,38 @@ public final class ZSkyWebViewActivity extends Activity {
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
         cookies.setAcceptThirdPartyCookies(webView, true);
-        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override public boolean onCreateWindow(WebView view, boolean dialog,
+                    boolean userGesture, android.os.Message resultMsg) {
+                // ZSky's final MP4 may be opened with target=_blank. Do not discard that window.
+                if (zskyPopup != null) {
+                    try { zskyPopup.destroy(); } catch (Exception ignored) {}
+                }
+                zskyPopup = new WebView(ZSkyWebViewActivity.this);
+                WebSettings ps = zskyPopup.getSettings();
+                ps.setJavaScriptEnabled(true);
+                ps.setDomStorageEnabled(true);
+                ps.setUserAgentString(webView.getSettings().getUserAgentString());
+                zskyPopup.setWebViewClient(new WebViewClient() {
+                    @Override public void onPageStarted(WebView v, String url, android.graphics.Bitmap icon) {
+                        Log.i("ASTRA-ZSKY-POPUP", "new-window destination=" + url);
+                        if (url != null && url.matches("(?i)^https://.*\\.mp4([?#].*)?$")) {
+                            Log.i("ASTRA-ZSKY-POPUP", "FINAL_MP4_TARGET=" + url);
+                            webView.evaluateJavascript("window.__astraZSkyFinalResult=true", null);
+                            v.setDownloadListener((u, ua, cd, mime, len) -> {
+                                Log.i("ASTRA-ZSKY-POPUP", "final MP4 download requested=" + u);
+                            });
+                        }
+                    }
+                });
+                zskyPopup.setDownloadListener((url, ua, disposition, mime, length) ->
+                        Log.i("ASTRA-ZSKY-POPUP", "download url=" + url + " mime=" + mime));
+                WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
+                transport.setWebView(zskyPopup);
+                resultMsg.sendToTarget();
+                return true;
+            }
+        });
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 pageLoaded = false;
