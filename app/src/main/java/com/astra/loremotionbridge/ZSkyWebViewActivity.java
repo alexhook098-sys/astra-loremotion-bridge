@@ -84,7 +84,7 @@ public final class ZSkyWebViewActivity extends Activity {
     private final Runnable generationObserver = new Runnable() {
         @Override public void run() {
             if (webView == null || generationStartedAt == 0L || isFinishing() || isDestroyed()) return;
-            String js = "(function(){const t=(document.body&&document.body.innerText)||'';const vs=Array.from(document.querySelectorAll('video'));const ready=vs.some(v=>v.readyState>=2&&Number.isFinite(v.duration)&&v.duration>0&&(v.currentSrc||v.src));return JSON.stringify({tail:t.slice(-1400),videos:vs.length,videoReady:ready,busy:document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,visibility:document.visibilityState});})()";
+            String js = "(function(){const t=(document.body&&document.body.innerText)||'';const vs=Array.from(document.querySelectorAll('video'));const ready=vs.some(v=>v.readyState>=2&&Number.isFinite(v.duration)&&v.duration>0&&(v.currentSrc||v.src));const sig=vs.map(v=>v.currentSrc||v.src||'').join('|');const changed=window.__astraZSkyBaselineVideoSources!==undefined&&sig!==window.__astraZSkyBaselineVideoSources;return JSON.stringify({tail:t.slice(-1400),videos:vs.length,videoReady:ready,videoChanged:changed,busy:document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,visibility:document.visibilityState});})()";
             webView.evaluateJavascript(js, value -> {
                 observerPolls++;
                 if (webView != null) webView.evaluateJavascript(videoCaptureScanScript(), null);
@@ -99,7 +99,7 @@ public final class ZSkyWebViewActivity extends Activity {
                     String tail = e.optString("tail", "").toLowerCase(java.util.Locale.ROOT);
                     if (tail.contains("generation failed") || tail.contains("ошибка генерации")) generationState = "failed";
                     else if (e.optInt("busy", 0) > 0) generationState = "running";
-                    else if (baselineVideoCount >= 0 && e.optInt("videos", 0) > baselineVideoCount && e.optBoolean("videoReady", false)) {
+                    else if (baselineVideoCount >= 0 && (e.optInt("videos", 0) > baselineVideoCount || e.optBoolean("videoChanged", false)) && e.optBoolean("videoReady", false)) {
                         generationState = "completed_unconfirmed";
                         if (webView != null) webView.evaluateJavascript(
                                 "(function(){window.__astraZSkyFinalResult=true;window.__astraZSkyVideoScan&&window.__astraZSkyVideoScan();return 'final-result-unlocked';})()",
@@ -140,18 +140,18 @@ public final class ZSkyWebViewActivity extends Activity {
                     @Override public void onReceive(Context c, Intent i) {
                         if (i.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L) != zskyDownloadId) return;
                         Uri saved = dm.getUriForDownloadedFile(zskyDownloadId);
-                        android.database.Cursor c = null;
+                        android.database.Cursor cursor = null;
                         long bytes = 0L;
                         int downloadStatus = -1;
                         try {
-                            c = dm.query(new DownloadManager.Query().setFilterById(zskyDownloadId));
-                            if (c != null && c.moveToFirst()) {
-                                int si = c.getColumnIndex(DownloadManager.COLUMN_STATUS);
-                                int bi = c.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR);
-                                if (si >= 0) downloadStatus = c.getInt(si);
-                                if (bi >= 0) bytes = c.getLong(bi);
+                            cursor = dm.query(new DownloadManager.Query().setFilterById(zskyDownloadId));
+                            if (cursor != null && cursor.moveToFirst()) {
+                                int si = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS);
+                                int bi = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR);
+                                if (si >= 0) downloadStatus = cursor.getInt(si);
+                                if (bi >= 0) bytes = cursor.getLong(bi);
                             }
-                        } catch (Exception ignored) { } finally { if (c != null) c.close(); }
+                        } catch (Exception ignored) { } finally { if (cursor != null) cursor.close(); }
                         if (saved != null && downloadStatus == DownloadManager.STATUS_SUCCESSFUL && bytes > 0L) {
                             ChatActivity.onZSkyVideoReady(getApplicationContext(), saved);
                             status.setText("ASTRA ZSky: готовое видео сохранено");
@@ -383,7 +383,7 @@ public final class ZSkyWebViewActivity extends Activity {
                         + ".find(x=>(x.getAttribute('aria-label')||'').trim().toLowerCase()==='generate'"
                         + "||((x.innerText||x.textContent||'').trim().toLowerCase()==='generate'));"
                         + "if(!b||b.disabled||b.getAttribute('aria-disabled')==='true')return 'BUTTON_NOT_READY';"
-                        + "const n=document.querySelectorAll('video').length;"
+                        + "const vs=Array.from(document.querySelectorAll('video'));const n=vs.length;window.__astraZSkyBaselineVideoSources=vs.map(v=>v.currentSrc||v.src||'').join('|');"
                         + "b.click();return 'GENERATE_CLICKED:'+n;})()";
                 webView.evaluateJavascript(click, clicked -> {
                     String clickResult = clicked == null ? "" : clicked;
