@@ -110,7 +110,7 @@ public final class ZSkyWebViewActivity extends Activity {
                                         v -> Log.i("ASTRA-ZSKY-DOWNLOAD", "final-screen capture=" + v));
                             } else {
                                 webView.evaluateJavascript(
-                                        "(function(){window.__astraZSkyFinalResult=true;window.__astraZSkyVideoScan&&window.__astraZSkyVideoScan();return 'final-screen-no-direct-url';})()",
+                                        "(function(){window.__astraZSkyFinalResult=true;window.__astraZSkyVideoScan&&window.__astraZSkyVideoScan();const b=Array.from(document.querySelectorAll('button,[role=button]')).find(x=>/download/i.test((x.innerText||x.textContent||'')+' '+(x.getAttribute('aria-label')||'')));if(b&&!window.__astraZSkyAutoDownloadClicked){window.__astraZSkyAutoDownloadClicked=true;b.click();return 'final-screen-download-button-clicked';}return 'final-screen-no-download-control';})()",
                                         v -> Log.i("ASTRA-ZSKY-DOWNLOAD", "final-screen scan=" + v));
                             }
                         }
@@ -283,6 +283,11 @@ public final class ZSkyWebViewActivity extends Activity {
         webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
             if (generationStartedAt <= 0L || url == null) return;
             logZSkyNativeCandidate(url, "download-listener", mimeType, contentLength);
+            if ("final_result_screen".equals(generationState)
+                    && (mimeType == null || mimeType.toLowerCase(java.util.Locale.ROOT).contains("video")
+                        || (contentDisposition != null && contentDisposition.toLowerCase(java.util.Locale.ROOT).contains("attachment")))) {
+                downloadFinalZSkyMp4(url, "final-screen-download-button", userAgent, webView.getUrl());
+            }
         });
         webView.setWebViewClient(new WebViewClient() {
             @Override public android.webkit.WebResourceResponse shouldInterceptRequest(
