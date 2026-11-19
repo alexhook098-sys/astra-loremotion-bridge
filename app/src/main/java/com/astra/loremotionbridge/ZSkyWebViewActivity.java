@@ -366,7 +366,7 @@ public final class ZSkyWebViewActivity extends Activity {
             + "window.__astraZSkyCaptureDone=window.__astraZSkyCaptureDone||new Set();"
             + "window.__astraZSkyCaptureBusy=window.__astraZSkyCaptureBusy||new Set();"
             + "const roots=new WeakSet(),videos=new WeakSet();"
-            + "async function capture(v){let u='';try{u=v.currentSrc||v.src||'';if(!u){const q=v.querySelector('source[src]');u=q?q.src:'';}"
+            + "async function capture(v){if(!window.__astraZSkyFinalResult)return;let u='';try{u=v.currentSrc||v.src||'';if(!u){const q=v.querySelector('source[src]');u=q?q.src:'';}"
             + "if(!u||!u.startsWith('blob:'))return;"
             + "if(window.__astraZSkyCaptureDone.has(u)||window.__astraZSkyCaptureBusy.has(u))return;"
             + "window.__astraZSkyCaptureBusy.add(u);const r=await fetch(u);if(!r.ok)throw new Error('blob_http_'+r.status);"
