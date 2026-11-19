@@ -84,7 +84,7 @@ public final class ZSkyWebViewActivity extends Activity {
     private final Runnable generationObserver = new Runnable() {
         @Override public void run() {
             if (webView == null || generationStartedAt == 0L || isFinishing() || isDestroyed()) return;
-            String js = "(function(){const t=(document.body&&document.body.innerText)||'';const vs=Array.from(document.querySelectorAll('video'));const ready=vs.some(v=>v.readyState>=2&&Number.isFinite(v.duration)&&v.duration>0&&(v.currentSrc||v.src));const sig=vs.map(v=>v.currentSrc||v.src||'').join('|');const changed=window.__astraZSkyBaselineVideoSources!==undefined&&sig!==window.__astraZSkyBaselineVideoSources;return JSON.stringify({tail:t.slice(-1400),videos:vs.length,videoReady:ready,videoChanged:changed,busy:document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,visibility:document.visibilityState});})()";
+            String js = "(function(){const t=(document.body&&document.body.innerText)||'';const low=t.toLowerCase();const finalScreen=low.includes('rendered on the free lane')||low.includes('rendered on the paid lane')||low.includes('rendered on the free plan')||low.includes('rendered on the pro lane');const vs=Array.from(document.querySelectorAll('video'));const ready=vs.some(v=>v.readyState>=2&&Number.isFinite(v.duration)&&v.duration>0&&(v.currentSrc||v.src));const sig=vs.map(v=>v.currentSrc||v.src||'').join('|');const changed=window.__astraZSkyBaselineVideoSources!==undefined&&sig!==window.__astraZSkyBaselineVideoSources;const links=Array.from(document.querySelectorAll('a[href]'));const dl=links.find(a=>/download/i.test((a.innerText||a.textContent||'')+' '+(a.getAttribute('aria-label')||'')+' '+(a.getAttribute('download')||'')));const btns=Array.from(document.querySelectorAll('button,[role=button]'));const db=btns.find(a=>/download/i.test((a.innerText||a.textContent||'')+' '+(a.getAttribute('aria-label')||'')));const href=dl?(dl.href||dl.getAttribute('href')||''):'';const video=vs.map(v=>v.currentSrc||v.src||'').find(Boolean)||'';return JSON.stringify({tail:t.slice(-1400),finalScreen,downloadUrl:href,videoUrl:video,downloadButton:!!db,videos:vs.length,videoReady:ready,videoChanged:changed,busy:document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,visibility:document.visibilityState});})()";
             webView.evaluateJavascript(js, value -> {
                 observerPolls++;
                 if (webView != null) webView.evaluateJavascript(videoCaptureScanScript(), null);
@@ -98,13 +98,24 @@ public final class ZSkyWebViewActivity extends Activity {
                     org.json.JSONObject e = new org.json.JSONObject(payload);
                     String tail = e.optString("tail", "").toLowerCase(java.util.Locale.ROOT);
                     if (tail.contains("generation failed") || tail.contains("ошибка генерации")) generationState = "failed";
-                    else if (e.optInt("busy", 0) > 0) generationState = "running";
-                    else if (baselineVideoCount >= 0 && (e.optInt("videos", 0) > baselineVideoCount || e.optBoolean("videoChanged", false)) && e.optBoolean("videoReady", false)) {
-                        generationState = "completed_unconfirmed";
-                        if (webView != null) webView.evaluateJavascript(
-                                "(function(){window.__astraZSkyFinalResult=true;window.__astraZSkyVideoScan&&window.__astraZSkyVideoScan();return 'final-result-unlocked';})()",
-                                v -> Log.i("ASTRA-ZSKY-DOWNLOAD", "final result unlock=" + v));
-                    }
+                    else if (e.optBoolean("finalScreen", false)) {
+                        generationState = "final_result_screen";
+                        if (webView != null) {
+                            String candidate = e.optString("downloadUrl", "");
+                            if (candidate.isEmpty()) candidate = e.optString("videoUrl", "");
+                            if (!candidate.isEmpty()) {
+                                final String finalUrl = candidate;
+                                webView.evaluateJavascript(
+                                        "(function(u){window.__astraZSkyFinalResult=true;return window.ASTRAZSkyVideo&&window.ASTRAZSkyVideo.downloadRemoteVideo(u,navigator.userAgent,location.href)?'FINAL_DOWNLOAD_QUEUED':'FINAL_DOWNLOAD_REJECTED';})(" + org.json.JSONObject.quote(finalUrl) + ")",
+                                        v -> Log.i("ASTRA-ZSKY-DOWNLOAD", "final-screen capture=" + v));
+                            } else {
+                                webView.evaluateJavascript(
+                                        "(function(){window.__astraZSkyFinalResult=true;window.__astraZSkyVideoScan&&window.__astraZSkyVideoScan();return 'final-screen-no-direct-url';})()",
+                                        v -> Log.i("ASTRA-ZSKY-DOWNLOAD", "final-screen scan=" + v));
+                            }
+                        }
+                    } else if (e.optInt("busy", 0) > 0) generationState = "running";
+                    else if (generationState.equals("final_result_screen")) generationState = "final_result_screen";
                 } catch (Exception ex) { Log.w("ASTRA-ZSKY-OBSERVER", "Evidence parse failed", ex); }
                 Log.i("ASTRA-ZSKY-OBSERVER", "poll=" + observerPolls + " state=" + generationState + " evidence=" + generationEvidence);
                 if (webView != null && !isFinishing() && !isDestroyed()) main.postDelayed(this, 5000L);
