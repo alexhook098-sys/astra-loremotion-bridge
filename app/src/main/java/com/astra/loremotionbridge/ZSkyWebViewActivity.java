@@ -245,7 +245,17 @@ public final class ZSkyWebViewActivity extends Activity {
                 status.setText("ASTRA ZSky: студия загружена");
                 main.postDelayed(ZSkyWebViewActivity.this::inspectPage, 900L);
                 main.postDelayed(ZSkyWebViewActivity.this::installVideoCapture, 1400L);
-                if (pendingPrompt != null) main.postDelayed(ZSkyWebViewActivity.this::runPendingPrompt, 1200L);
+                // Let the studio hydrate and install its capture bridge, then hide it
+                // BEFORE entering the prompt or pressing Generate. The generation flow
+                // itself remains unchanged from the known-good 372 baseline.
+                if (backgroundRequested) main.postDelayed(() -> {
+                    if (!isFinishing() && !isDestroyed()) {
+                        moveTaskToBack(true);
+                        Log.i("ASTRA-ZSKY", "Background mode: hidden after studio hydration, before prompt");
+                    }
+                }, 1800L);
+                if (pendingPrompt != null) main.postDelayed(ZSkyWebViewActivity.this::runPendingPrompt,
+                        backgroundRequested ? 2300L : 1200L);
                 view.evaluateJavascript(
                         "(function(){if(window.__astraZSkyDiag)clearInterval(window.__astraZSkyDiag.timer);"
                         + "const h=window.__astraZSkyDiag={tick:0,at:Date.now(),timer:null};"
@@ -279,7 +289,12 @@ public final class ZSkyWebViewActivity extends Activity {
             promptInjected = false;
             automationAttempts = 0;
             generationState = "queued";
-            if (pageLoaded) main.postDelayed(this::runPendingPrompt, 400L);
+            if (pageLoaded) {
+                if (backgroundRequested) main.postDelayed(() -> {
+                    if (!isFinishing() && !isDestroyed()) moveTaskToBack(true);
+                }, 100L);
+                main.postDelayed(this::runPendingPrompt, backgroundRequested ? 450L : 400L);
+            }
         }
         String url = intent.getStringExtra("url");
         if (url != null && !url.trim().isEmpty() && webView != null
