@@ -84,7 +84,7 @@ public final class ZSkyWebViewActivity extends Activity {
     private final Runnable generationObserver = new Runnable() {
         @Override public void run() {
             if (webView == null || generationStartedAt == 0L || isFinishing() || isDestroyed()) return;
-            String js = "(function(){const t=(document.body&&document.body.innerText)||'';return JSON.stringify({tail:t.slice(-1400),videos:document.querySelectorAll('video').length,busy:document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,visibility:document.visibilityState});})()";
+            String js = "(function(){const t=(document.body&&document.body.innerText)||'';const vs=Array.from(document.querySelectorAll('video'));const ready=vs.some(v=>v.readyState>=2&&Number.isFinite(v.duration)&&v.duration>0&&(v.currentSrc||v.src));return JSON.stringify({tail:t.slice(-1400),videos:vs.length,videoReady:ready,busy:document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,visibility:document.visibilityState});})()";
             webView.evaluateJavascript(js, value -> {
                 observerPolls++;
                 if (webView != null) webView.evaluateJavascript(videoCaptureScanScript(), null);
@@ -99,7 +99,7 @@ public final class ZSkyWebViewActivity extends Activity {
                     String tail = e.optString("tail", "").toLowerCase(java.util.Locale.ROOT);
                     if (tail.contains("generation failed") || tail.contains("ошибка генерации")) generationState = "failed";
                     else if (e.optInt("busy", 0) > 0) generationState = "running";
-                    else if (baselineVideoCount >= 0 && e.optInt("videos", 0) > baselineVideoCount) {
+                    else if (baselineVideoCount >= 0 && e.optInt("videos", 0) > baselineVideoCount && e.optBoolean("videoReady", false)) {
                         generationState = "completed_unconfirmed";
                         if (webView != null) webView.evaluateJavascript(
                                 "(function(){window.__astraZSkyFinalResult=true;window.__astraZSkyVideoScan&&window.__astraZSkyVideoScan();return 'final-result-unlocked';})()",
