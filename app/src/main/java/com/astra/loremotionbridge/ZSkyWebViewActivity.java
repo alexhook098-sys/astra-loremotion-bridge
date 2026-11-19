@@ -1,15 +1,9 @@
 package com.astra.loremotionbridge;
 
 import android.app.Activity;
-import android.app.DownloadManager;
-import android.content.BroadcastReceiver;
-import android.content.IntentFilter;
-import android.net.Uri;
-import android.os.Environment;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
@@ -36,8 +30,6 @@ public final class ZSkyWebViewActivity extends Activity {
 
     private WebView webView;
     private WebView zskyPopup;
-    private long zskyDownloadId = -1L;
-    private BroadcastReceiver zskyDownloadReceiver;
     private ZSkyVideoCaptureBridge videoCaptureBridge;
     private TextView status;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -532,7 +524,6 @@ public final class ZSkyWebViewActivity extends Activity {
         main.removeCallbacks(generationObserver);
         main.removeCallbacks(diagPoll);
         if (videoCaptureBridge != null) videoCaptureBridge.abortVideo();
-        if (zskyDownloadReceiver != null) { try { unregisterReceiver(zskyDownloadReceiver); } catch (Exception ignored) {} zskyDownloadReceiver = null; }
         if (zskyWakeLock != null && zskyWakeLock.isHeld()) zskyWakeLock.release();
         zskyWakeLock = null;
         if (instance == this) instance = null;
