@@ -16,6 +16,7 @@ import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.DownloadListener;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -142,6 +143,13 @@ public final class ZSkyWebViewActivity extends Activity {
         cookies.setAcceptCookie(true);
         cookies.setAcceptThirdPartyCookies(webView, true);
         webView.setWebChromeClient(new WebChromeClient());
+        // Handle native WebView download callbacks the same way the system browser does.
+        webView.setDownloadListener((downloadUrl, userAgent, contentDisposition, mimeType, contentLength) -> {
+            if (videoCaptureBridge != null && downloadUrl != null && downloadUrl.startsWith("https://")) {
+                boolean queued = videoCaptureBridge.downloadRemoteVideo(downloadUrl, userAgent, webView.getUrl());
+                Log.i("ASTRA-ZSKY-DOWNLOAD", "DownloadListener queued=" + queued + " mime=" + mimeType + " bytes=" + contentLength);
+            }
+        });
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 pageLoaded = false;
@@ -283,7 +291,7 @@ public final class ZSkyWebViewActivity extends Activity {
             + "window.__astraZSkyCaptureBusy=window.__astraZSkyCaptureBusy||new Set();"
             + "const roots=new WeakSet(),videos=new WeakSet();"
             + "async function capture(v){let u='';try{u=v.currentSrc||v.src||'';if(!u){const q=v.querySelector('source[src]');u=q?q.src:'';}"
-            + "if(!u||!u.startsWith('blob:'))return;"
+            + "if(!u)return;if(u.startsWith('https://')){if(window.__astraZSkyCaptureDone.has(u)||window.__astraZSkyCaptureBusy.has(u))return;window.__astraZSkyCaptureBusy.add(u);const ok=window.ASTRAZSkyVideo.downloadRemoteVideo(u,navigator.userAgent,location.href);if(ok){window.__astraZSkyCaptureDone.add(u);window.__astraZSkyCaptureBusy.delete(u);console.info('ASTRA_ZSKY_HTTPS_VIDEO_QUEUED');}else{window.__astraZSkyCaptureBusy.delete(u);}return;}if(!u.startsWith('blob:'))return;"
             + "if(window.__astraZSkyCaptureDone.has(u)||window.__astraZSkyCaptureBusy.has(u))return;"
             + "window.__astraZSkyCaptureBusy.add(u);const r=await fetch(u);if(!r.ok)throw new Error('blob_http_'+r.status);"
             + "const b=await r.blob();if(!b.size)throw new Error('empty_blob');"
