@@ -104,6 +104,48 @@ public final class ZSkyWebViewActivity extends Activity {
             });
         }
     };
+    // Independent final-result watcher. It does not participate in prompt submission
+    // or generation-state transitions; it only arms the existing 372 downloader.
+    private final Runnable finalResultDownloadObserver = new Runnable() {
+        @Override public void run() {
+            if (webView == null || generationStartedAt == 0L || isFinishing() || isDestroyed()) return;
+            String js = "(function(){const t=((document.body&&document.body.innerText)||'').toLowerCase();"
+                    + "const finalScreen=t.includes('rendered on the free lane')"
+                    + "||(t.includes('video editor')&&t.includes('re-animate')&&t.includes('download'));"
+                    + "if(!finalScreen)return JSON.stringify({final:false});"
+                    + "window.__astraZSkyFinalResult=true;"
+                    + "const urls=[...document.querySelectorAll('video,video source,a[href]')]"
+                    + ".map(e=>e.currentSrc||e.src||e.href||'').filter(Boolean);"
+                    + "window.__astraZSkyVideoScan&&window.__astraZSkyVideoScan();"
+                    + "return JSON.stringify({final:true,urls:urls});})()";
+            webView.evaluateJavascript(js, value -> {
+                try {
+                    String payload = value == null ? "" : value;
+                    if (payload.startsWith("\\\"")) {
+                        Object decoded = new org.json.JSONTokener(payload).nextValue();
+                        if (decoded instanceof String) payload = (String) decoded;
+                    }
+                    org.json.JSONObject result = new org.json.JSONObject(payload);
+                    if (result.optBoolean("final", false)) {
+                        org.json.JSONArray urls = result.optJSONArray("urls");
+                        if (urls != null) for (int i = 0; i < urls.length(); i++) {
+                            String url = urls.optString(i, "");
+                            if (url.matches("(?i)^https://.*\\.mp4([?#].*)?$")) {
+                                downloadFinalZSkyMp4(url, "final-screen-observer");
+                                break;
+                            }
+                        }
+                        Log.i("ASTRA-ZSKY-DOWNLOAD", "final screen detected; existing capture scan armed");
+                    }
+                } catch (Exception e) {
+                    Log.w("ASTRA-ZSKY-DOWNLOAD", "final screen observer parse failed", e);
+                }
+                if (webView != null && !isFinishing() && !isDestroyed())
+                    main.postDelayed(finalResultDownloadObserver, 3000L);
+            });
+        }
+    };
+
     private void downloadFinalZSkyMp4(String url, String source) {
         if (url == null || !url.matches("(?i)^https://.*\\.mp4([?#].*)?$")) return;
         if (zskyDownloadId != -1L) return;
@@ -338,7 +380,10 @@ public final class ZSkyWebViewActivity extends Activity {
                         generationState = "submitted_unconfirmed";
                         pendingPrompt = null;
                         main.removeCallbacks(generationObserver);
+        main.removeCallbacks(finalResultDownloadObserver);
                         main.postDelayed(generationObserver, 1500L);
+                        main.removeCallbacks(finalResultDownloadObserver);
+                        main.postDelayed(finalResultDownloadObserver, 3000L);
                         if (backgroundRequested) main.postDelayed(() -> {
                             if (!isFinishing() && !isDestroyed()) moveTaskToBack(true);
                         }, 250L);
