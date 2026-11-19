@@ -166,12 +166,8 @@ public final class ZSkyWebViewActivity extends Activity {
                         value -> Log.i("ASTRA-ZSKY-DIAG", "heartbeat setup=" + value));
                 main.removeCallbacks(diagPoll);
                 main.postDelayed(diagPoll, 2000L);
-                if (backgroundRequested) main.postDelayed(() -> {
-                    if (!isFinishing() && !isDestroyed()) {
-                        moveTaskToBack(true);
-                        Log.i("ASTRA-ZSKY", "Background mode: moved task to back after page load");
-                    }
-                }, 250L);
+                // Do not hide the page here: SPA hydration and prompt submission
+                // happen after onPageFinished. Minimize only after Generate is confirmed.
                 Log.i("ASTRA-ZSKY", "Page finished: " + url);
             }
         });
