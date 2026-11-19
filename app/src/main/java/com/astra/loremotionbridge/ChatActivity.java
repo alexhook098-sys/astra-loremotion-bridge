@@ -166,6 +166,15 @@ public class ChatActivity extends Activity {
         flowParams.bottomMargin = dp(8);
         root.addView(googleFlow, flowParams);
 
+        Button zskyStudio = smallButton("✦  ZSKY STUDIO · ВОЙТИ В АККАУНТ", LILAC);
+        zskyStudio.setOnClickListener(v -> {
+            // Open the authenticated studio for manual sign-in; never submit a prompt here.
+            ZSkyWebViewActivity.start(this, ZSkyWebViewActivity.ZSKY_URL, false);
+        });
+        LinearLayout.LayoutParams zskyParams = new LinearLayout.LayoutParams(-1, dp(43));
+        zskyParams.bottomMargin = dp(8);
+        root.addView(zskyStudio, zskyParams);
+
         installButton = smallButton("＋  ПОДКЛЮЧИТЬ OPENROUTER · API KEY", CYAN);
         installButton.setOnClickListener(v -> showOpenRouterSetup());
         root.addView(installButton, new LinearLayout.LayoutParams(-1, dp(44)));
