@@ -150,6 +150,13 @@ public final class ZSkyWebViewActivity extends Activity {
         }
     }
 
+    @JavascriptInterface
+    public void downloadFinalVideo(String url) {
+        // Javascript interfaces run on a Chromium background thread; marshal all
+        // DownloadManager, WebView, and UI work onto the Activity thread.
+        runOnUiThread(() -> downloadFinalZSkyMp4(url, "popup-video-element"));
+    }
+
     public static ZSkyWebViewActivity getInstance() { return instance; }
 
     @Override protected void onCreate(Bundle state) {
@@ -176,6 +183,7 @@ public final class ZSkyWebViewActivity extends Activity {
         webView = new WebView(this);
         videoCaptureBridge = new ZSkyVideoCaptureBridge(this);
         webView.addJavascriptInterface(videoCaptureBridge, "ASTRAZSkyVideo");
+        webView.addJavascriptInterface(this, "ASTRAZSkyHost");
         root.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1f));
         setContentView(root);
 
@@ -209,6 +217,11 @@ public final class ZSkyWebViewActivity extends Activity {
                 ps.setJavaScriptEnabled(true);
                 ps.setDomStorageEnabled(true);
                 ps.setUserAgentString(webView.getSettings().getUserAgentString());
+                ps.setJavaScriptCanOpenWindowsAutomatically(true);
+                ps.setSupportMultipleWindows(true);
+                ps.setMediaPlaybackRequiresUserGesture(false);
+                zskyPopup.addJavascriptInterface(videoCaptureBridge, "ASTRAZSkyVideo");
+                zskyPopup.addJavascriptInterface(ZSkyWebViewActivity.this, "ASTRAZSkyHost");
                 zskyPopup.setWebViewClient(new WebViewClient() {
                     @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest request) {
                         String url = request == null || request.getUrl() == null ? "" : request.getUrl().toString();
@@ -220,6 +233,11 @@ public final class ZSkyWebViewActivity extends Activity {
                             return true;
                         }
                         return false;
+                    }
+                    @Override public void onPageFinished(WebView v, String url) {
+                        Log.i("ASTRA-ZSKY-POPUP", "final page loaded=" + url);
+                        v.evaluateJavascript("window.__astraZSkyFinalResult=true", null);
+                        main.postDelayed(() -> installVideoCapture(v), 500L);
                     }
                 });
                 zskyPopup.setDownloadListener((url, ua, disposition, mime, length) ->
@@ -358,8 +376,10 @@ public final class ZSkyWebViewActivity extends Activity {
     }
 
     // Flow-style page-owned Blob capture, streamed in bounded chunks to native MediaStore.
-    private void installVideoCapture() {
-        if (webView == null || isFinishing() || isDestroyed()) return;
+    private void installVideoCapture() { installVideoCapture(webView); }
+
+    private void installVideoCapture(WebView target) {
+        if (target == null || isFinishing() || isDestroyed()) return;
         String js = "(function(){"
             + "if(window.__astraZSkyCaptureInstalled){window.__astraZSkyVideoScan&&window.__astraZSkyVideoScan();return 'already-installed-rescanned';}"
             + "window.__astraZSkyCaptureInstalled=true;"
@@ -369,8 +389,8 @@ public final class ZSkyWebViewActivity extends Activity {
             + "async function capture(v){if(!window.__astraZSkyFinalResult)return;let u='';try{u=v.currentSrc||v.src||'';if(!u){const q=v.querySelector('source[src]');u=q?q.src:'';}"
             + "if(!u)return;"
             + "if(window.__astraZSkyCaptureDone.has(u)||window.__astraZSkyCaptureBusy.has(u))return;"
-            + "if(u.startsWith('https://')){window.__astraZSkyCaptureBusy.add(u);const ok=window.ASTRAZSkyVideo.downloadRemoteVideo(u,navigator.userAgent,location.href);"
-            + "if(ok){window.__astraZSkyCaptureDone.add(u);console.info('ASTRA_ZSKY_HTTPS_VIDEO_QUEUED');}else{console.warn('ASTRA_ZSKY_HTTPS_DOWNLOAD_REJECTED');}"
+            + "if(u.startsWith('https://')){window.__astraZSkyCaptureBusy.add(u);window.ASTRAZSkyHost.downloadFinalVideo(u);"
+            + "console.info('ASTRA_ZSKY_FINAL_URL_SENT_TO_NATIVE');"
             + "window.__astraZSkyCaptureBusy.delete(u);return;}"
             + "if(!u.startsWith('blob:'))return;"
             + "window.__astraZSkyCaptureBusy.add(u);const r=await fetch(u);if(!r.ok)throw new Error('blob_http_'+r.status);"
@@ -391,7 +411,8 @@ public final class ZSkyWebViewActivity extends Activity {
             + "}catch(e){console.warn('ASTRA_ZSKY_SCAN:'+e);}}"
             + "window.__astraZSkyVideoScan=function(){scan(document);};window.__astraZSkyVideoScan();"
             + "setInterval(window.__astraZSkyVideoScan,2500);return 'zsky-blob-capture-installed';})()";
-        webView.evaluateJavascript(js, value -> Log.i("ASTRA-ZSKY-CAPTURE", "bridge setup=" + value));
+        target.evaluateJavascript(js, value -> Log.i("ASTRA-ZSKY-CAPTURE", "bridge setup target="
+                + (target == webView ? "main" : "popup") + " result=" + value));
     }
 
     private void inspectPage() {
@@ -563,6 +584,12 @@ public final class ZSkyWebViewActivity extends Activity {
         if (zskyWakeLock != null && zskyWakeLock.isHeld()) zskyWakeLock.release();
         zskyWakeLock = null;
         if (instance == this) instance = null;
+        if (zskyPopup != null) {
+            zskyPopup.stopLoading();
+            zskyPopup.setWebViewClient(null);
+            zskyPopup.destroy();
+            zskyPopup = null;
+        }
         if (webView != null) {
             webView.stopLoading();
             webView.setWebViewClient(null);
