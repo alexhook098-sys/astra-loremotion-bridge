@@ -1,15 +1,9 @@
 package com.astra.loremotionbridge;
 
 import android.app.Activity;
-import android.app.DownloadManager;
-import android.content.BroadcastReceiver;
-import android.content.IntentFilter;
-import android.net.Uri;
-import android.os.Environment;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
@@ -36,9 +30,9 @@ public final class ZSkyWebViewActivity extends Activity {
 
     private WebView webView;
     private WebView zskyPopup;
-    private long zskyDownloadId = -1L;
-    private BroadcastReceiver zskyDownloadReceiver;
     private ZSkyVideoCaptureBridge videoCaptureBridge;
+    private boolean finalDownloadTriggered;
+    private boolean finalDownloadInProgress;
     private TextView status;
     private final Handler main = new Handler(Looper.getMainLooper());
     private boolean backgroundRequested;
@@ -82,7 +76,7 @@ public final class ZSkyWebViewActivity extends Activity {
     private final Runnable generationObserver = new Runnable() {
         @Override public void run() {
             if (webView == null || generationStartedAt == 0L || isFinishing() || isDestroyed()) return;
-            String js = "(function(){const t=(document.body&&document.body.innerText)||'';return JSON.stringify({tail:t.slice(-1400),videos:document.querySelectorAll('video').length,busy:document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,visibility:document.visibilityState});})()";
+            String js = "(function(){const t=(document.body&&document.body.innerText)||'';return JSON.stringify({tail:t.slice(-1400),videos:document.querySelectorAll('video').length,busy:document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,visibility:document.visibilityState,finalReady:t.toLowerCase().includes('rendered on the free lane')});})()";
             webView.evaluateJavascript(js, value -> {
                 observerPolls++;
                 if (webView != null) webView.evaluateJavascript(videoCaptureScanScript(), null);
@@ -96,7 +90,10 @@ public final class ZSkyWebViewActivity extends Activity {
                     org.json.JSONObject e = new org.json.JSONObject(payload);
                     String tail = e.optString("tail", "").toLowerCase(java.util.Locale.ROOT);
                     if (tail.contains("generation failed") || tail.contains("ошибка генерации")) generationState = "failed";
-                    else if (e.optInt("busy", 0) > 0) generationState = "running";
+                    else if (e.optBoolean("finalReady", false)) {
+                        generationState = "completed";
+                        clickFinalDownloadOnce();
+                    } else if (e.optInt("busy", 0) > 0) generationState = "running";
                     else if (baselineVideoCount >= 0 && e.optInt("videos", 0) > baselineVideoCount) generationState = "completed_unconfirmed";
                 } catch (Exception ex) { Log.w("ASTRA-ZSKY-OBSERVER", "Evidence parse failed", ex); }
                 Log.i("ASTRA-ZSKY-OBSERVER", "poll=" + observerPolls + " state=" + generationState + " evidence=" + generationEvidence);
@@ -104,50 +101,39 @@ public final class ZSkyWebViewActivity extends Activity {
             });
         }
     };
-    private void downloadFinalZSkyMp4(String url, String source) {
-        if (url == null || !url.matches("(?i)^https://.*\\.mp4([?#].*)?$")) return;
-        if (zskyDownloadId != -1L) return;
-        try {
-            DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
-            if (dm == null) throw new IllegalStateException("DownloadManager unavailable");
-            DownloadManager.Request req = new DownloadManager.Request(Uri.parse(url));
-            req.setTitle("ASTRA · ZSky video");
-            req.setDescription("Сохранение готового видео ZSky");
-            req.setMimeType("video/mp4");
-            req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-            req.setDestinationInExternalPublicDir(Environment.DIRECTORY_MOVIES,
-                    "ASTRA/ZSky/zsky_" + System.currentTimeMillis() + ".mp4");
-            String cookie = CookieManager.getInstance().getCookie(url);
-            if (cookie != null && !cookie.isEmpty()) req.addRequestHeader("Cookie", cookie);
-            req.addRequestHeader("User-Agent", webView.getSettings().getUserAgentString());
-            String referer = webView.getUrl();
-            if (referer != null) req.addRequestHeader("Referer", referer);
-            zskyDownloadId = dm.enqueue(req);
-            Log.i("ASTRA-ZSKY-DOWNLOAD", "FINAL mp4 queued id=" + zskyDownloadId + " source=" + source);
-            status.setText("ASTRA ZSky: скачиваю финальное видео…");
-            if (zskyDownloadReceiver == null) {
-                zskyDownloadReceiver = new BroadcastReceiver() {
-                    @Override public void onReceive(Context c, Intent i) {
-                        if (i.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L) != zskyDownloadId) return;
-                        Uri saved = dm.getUriForDownloadedFile(zskyDownloadId);
-                        if (saved != null) {
-                            ChatActivity.onZSkyVideoReady(getApplicationContext(), saved);
-                            status.setText("ASTRA ZSky: готовое видео сохранено");
-                            Log.i("ASTRA-ZSKY-DOWNLOAD", "FINAL mp4 saved=" + saved);
-                        } else {
-                            status.setText("ASTRA ZSky: ошибка загрузки финального видео");
-                            Log.e("ASTRA-ZSKY-DOWNLOAD", "FINAL mp4 download failed");
-                        }
-                        zskyDownloadId = -1L;
-                    }
-                };
-                IntentFilter f = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
-                if (Build.VERSION.SDK_INT >= 33) registerReceiver(zskyDownloadReceiver, f, Context.RECEIVER_NOT_EXPORTED);
-                else registerReceiver(zskyDownloadReceiver, f);
+    private void clickFinalDownloadOnce() {
+        if (webView == null || finalDownloadTriggered || finalDownloadInProgress
+                || isFinishing() || isDestroyed()) return;
+        finalDownloadInProgress = true;
+        String js = "(function(){"
+                + "const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);"
+                + "return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden';};"
+                + "const b=[...document.querySelectorAll('button,a,[role=button]')].find(e=>{"
+                + "const t=((e.innerText||e.textContent||'')+' '+(e.getAttribute('aria-label')||''))"
+                + ".replace(/\\s+/g,' ').trim().toLowerCase();"
+                + "return t==='download'&&!e.disabled&&e.getAttribute('aria-disabled')!=='true'&&visible(e);});"
+                + "if(!b)return 'DOWNLOAD_BUTTON_NOT_FOUND';b.click();return 'DOWNLOAD_CLICKED';})()";
+        webView.evaluateJavascript(js, value -> {
+            finalDownloadInProgress = false;
+            if (value != null && value.contains("DOWNLOAD_CLICKED")) {
+                finalDownloadTriggered = true;
+                Log.i("ASTRA-ZSKY-DOWNLOAD", "Final Download button clicked by native observer");
+            } else {
+                Log.i("ASTRA-ZSKY-DOWNLOAD", "Final Download not ready: " + value);
             }
-        } catch (Exception e) {
-            Log.e("ASTRA-ZSKY-DOWNLOAD", "final MP4 download failed", e);
-        }
+        });
+    }
+
+    private void downloadFinalZSkyMp4(String url, String source) {
+        if (videoCaptureBridge == null || url == null) return;
+        boolean queued = videoCaptureBridge.downloadRemoteVideo(
+                url, webView != null ? webView.getSettings().getUserAgentString() : "",
+                webView != null ? webView.getUrl() : ZSKY_URL);
+        Log.i("ASTRA-ZSKY-DOWNLOAD",
+                "Final MP4 queued on silent native stream=" + queued + " source=" + source);
+        if (status != null) status.setText(queued
+                ? "ASTRA ZSky: сохраняю готовое видео в фоне…"
+                : "ASTRA ZSky: не удалось начать сохранение видео");
     }
 
     public static ZSkyWebViewActivity getInstance() { return instance; }
@@ -222,13 +208,23 @@ public final class ZSkyWebViewActivity extends Activity {
                         return false;
                     }
                 });
-                zskyPopup.setDownloadListener((url, ua, disposition, mime, length) ->
-                        Log.i("ASTRA-ZSKY-POPUP", "download url=" + url + " mime=" + mime));
+                zskyPopup.setDownloadListener((url, ua, disposition, mime, length) -> {
+                    boolean queued = videoCaptureBridge != null
+                            && videoCaptureBridge.downloadRemoteVideo(url, ua, webView.getUrl());
+                    Log.i("ASTRA-ZSKY-POPUP", "silent download queued=" + queued
+                            + " mime=" + mime + " bytes=" + length);
+                });
                 WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
                 transport.setWebView(zskyPopup);
                 resultMsg.sendToTarget();
                 return true;
             }
+        });
+        webView.setDownloadListener((downloadUrl, userAgent, contentDisposition, mimeType, contentLength) -> {
+            boolean queued = videoCaptureBridge != null
+                    && videoCaptureBridge.downloadRemoteVideo(downloadUrl, userAgent, webView.getUrl());
+            Log.i("ASTRA-ZSKY-DOWNLOAD", "main WebView silent download queued=" + queued
+                    + " mime=" + mimeType + " bytes=" + contentLength);
         });
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
@@ -275,6 +271,8 @@ public final class ZSkyWebViewActivity extends Activity {
         backgroundRequested = intent.getBooleanExtra("background", backgroundRequested);
         String prompt = intent.getStringExtra("prompt");
         if (prompt != null && !prompt.trim().isEmpty()) {
+            finalDownloadTriggered = false;
+            finalDownloadInProgress = false;
             pendingPrompt = prompt.trim();
             promptInjected = false;
             automationAttempts = 0;
@@ -335,6 +333,8 @@ public final class ZSkyWebViewActivity extends Activity {
                         try { baselineVideoCount = Integer.parseInt(clickResult.replaceAll("[^0-9]", "")); }
                         catch (Exception ignored) { baselineVideoCount = -1; }
                         generationStartedAt = System.currentTimeMillis();
+                        finalDownloadTriggered = false;
+                        finalDownloadInProgress = false;
                         generationState = "submitted_unconfirmed";
                         pendingPrompt = null;
                         main.removeCallbacks(generationObserver);
@@ -559,7 +559,6 @@ public final class ZSkyWebViewActivity extends Activity {
         main.removeCallbacks(generationObserver);
         main.removeCallbacks(diagPoll);
         if (videoCaptureBridge != null) videoCaptureBridge.abortVideo();
-        if (zskyDownloadReceiver != null) { try { unregisterReceiver(zskyDownloadReceiver); } catch (Exception ignored) {} zskyDownloadReceiver = null; }
         if (zskyWakeLock != null && zskyWakeLock.isHeld()) zskyWakeLock.release();
         zskyWakeLock = null;
         if (instance == this) instance = null;
