@@ -153,9 +153,13 @@ public final class ZSkyVideoCaptureBridge {
         } catch (Exception e) {
             Log.e(TAG, "HTTPS video download failed", e);
         } finally {
-            if (!published && saved != null) {
-                try { activity.getContentResolver().delete(saved, null, null); }
-                catch (Exception ignored) {}
+            if (!published) {
+                if (saved != null) {
+                    try { activity.getContentResolver().delete(saved, null, null); }
+                    catch (Exception ignored) {}
+                }
+                // Permit a later retry when the server returned an expired URL or
+                // a transient network error before a MediaStore row was created.
                 remoteDownloads.remove(videoUrl);
             }
             if (connection != null) connection.disconnect();
