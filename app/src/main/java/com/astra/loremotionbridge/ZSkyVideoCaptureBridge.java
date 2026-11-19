@@ -26,28 +26,13 @@ public final class ZSkyVideoCaptureBridge {
         try {
             if (url == null || !(url.startsWith("https://") || url.startsWith("http://")))
                 return false;
-            android.app.DownloadManager manager =
-                    (android.app.DownloadManager) activity.getSystemService(Activity.DOWNLOAD_SERVICE);
-            if (manager == null) return false;
-            String name = "zsky_" + System.currentTimeMillis() + ".mp4";
-            android.app.DownloadManager.Request request =
-                    new android.app.DownloadManager.Request(android.net.Uri.parse(url));
-            request.setTitle("ASTRA ZSky video");
-            request.setDescription("Downloading generated video");
-            request.setMimeType("video/mp4");
-            request.setNotificationVisibility(
-                    android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-            request.setDestinationInExternalPublicDir(
-                    Environment.DIRECTORY_MOVIES, "ASTRA/ZSky/" + name);
-            if (userAgent != null && !userAgent.isEmpty())
-                request.addRequestHeader("User-Agent", userAgent);
-            if (referer != null && (referer.startsWith("https://") || referer.startsWith("http://")))
-                request.addRequestHeader("Referer", referer);
-            long id = manager.enqueue(request);
-            Log.i(TAG, "remote HTTPS video queued id=" + id);
-            return id > 0;
+            if (!(activity instanceof ZSkyWebViewActivity)) return false;
+            boolean queued = ((ZSkyWebViewActivity) activity)
+                    .requestFinalZSkyDownload(url, "javascript-bridge");
+            Log.i(TAG, "delegated remote video to Activity completion pipeline queued=" + queued);
+            return queued;
         } catch (Exception e) {
-            Log.e(TAG, "downloadRemoteVideo failed", e);
+            Log.e(TAG, "downloadRemoteVideo delegation failed", e);
             return false;
         }
     }
