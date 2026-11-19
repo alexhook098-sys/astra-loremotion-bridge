@@ -230,7 +230,27 @@ public final class ZSkyWebViewActivity extends Activity {
                 return true;
             }
         });
+        webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
+            if (generationStartedAt <= 0L || url == null) return;
+            logZSkyNativeCandidate(url, "download-listener", mimeType, contentLength);
+        });
         webView.setWebViewClient(new WebViewClient() {
+            @Override public android.webkit.WebResourceResponse shouldInterceptRequest(
+                    WebView view, WebResourceRequest request) {
+                if (request != null && request.getUrl() != null && generationStartedAt > 0L) {
+                    logZSkyNativeCandidate(request.getUrl().toString(),
+                            "webresource:" + request.getMethod(), null, -1L);
+                }
+                return super.shouldInterceptRequest(view, request);
+            }
+
+            @Override public android.webkit.WebResourceResponse shouldInterceptRequest(
+                    WebView view, String requestUrl) {
+                if (generationStartedAt > 0L)
+                    logZSkyNativeCandidate(requestUrl, "legacy-webresource", null, -1L);
+                return super.shouldInterceptRequest(view, requestUrl);
+            }
+
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 pageLoaded = false;
                 currentUrl = url == null ? "" : url;
@@ -352,6 +372,29 @@ public final class ZSkyWebViewActivity extends Activity {
         });
     }
 
+
+    // Diagnostic-only native network observer. It never downloads or changes a request.
+    // Log host/path only: signed query parameters and cookies must never enter Logcat.
+    private void logZSkyNativeCandidate(String rawUrl, String source, String mime, long length) {
+        if (rawUrl == null || rawUrl.length() > 8192) return;
+        try {
+            Uri u = Uri.parse(rawUrl);
+            String scheme = u.getScheme() == null ? "" : u.getScheme().toLowerCase(java.util.Locale.ROOT);
+            if (!"https".equals(scheme)) return;
+            String host = u.getHost() == null ? "" : u.getHost().toLowerCase(java.util.Locale.ROOT);
+            String path = u.getPath() == null ? "/" : u.getPath();
+            String lower = path.toLowerCase(java.util.Locale.ROOT);
+            if (!(lower.contains("video") || lower.contains("mp4") || lower.contains("media")
+                    || lower.contains("download") || lower.contains("generation")
+                    || lower.endsWith(".m3u8") || lower.endsWith(".webm"))) return;
+            String safeMime = mime == null ? "unknown" : mime.replaceAll("[^A-Za-z0-9_./+-]", "_");
+            Log.i("ASTRA-ZSKY-NATIVE-NET", "candidate source=" + source
+                    + " host=" + host + " path=" + path
+                    + " mime=" + safeMime + " length=" + length);
+        } catch (Exception e) {
+            Log.w("ASTRA-ZSKY-NATIVE-NET", "candidate parse failed: " + e.getClass().getSimpleName());
+        }
+    }
 
     private String videoCaptureScanScript() {
         return "(function(){try{window.__astraZSkyVideoScan&&window.__astraZSkyVideoScan();return 'scan';}catch(e){return String(e);}})()";
