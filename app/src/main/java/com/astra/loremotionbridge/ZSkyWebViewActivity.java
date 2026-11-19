@@ -333,8 +333,6 @@ public final class ZSkyWebViewActivity extends Activity {
                         try { baselineVideoCount = Integer.parseInt(clickResult.replaceAll("[^0-9]", "")); }
                         catch (Exception ignored) { baselineVideoCount = -1; }
                         generationStartedAt = System.currentTimeMillis();
-                        finalDownloadTriggered = false;
-                        finalDownloadInProgress = false;
                         generationState = "submitted_unconfirmed";
                         pendingPrompt = null;
                         main.removeCallbacks(generationObserver);
