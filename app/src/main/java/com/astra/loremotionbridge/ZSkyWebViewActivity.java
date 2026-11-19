@@ -1,6 +1,11 @@
 package com.astra.loremotionbridge;
 
 import android.app.Activity;
+import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
+import android.net.Uri;
+import android.os.Environment;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
@@ -31,6 +36,8 @@ public final class ZSkyWebViewActivity extends Activity {
 
     private WebView webView;
     private WebView zskyPopup;
+    private long zskyDownloadId = -1L;
+    private BroadcastReceiver zskyDownloadReceiver;
     private ZSkyVideoCaptureBridge videoCaptureBridge;
     private TextView status;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -97,6 +104,52 @@ public final class ZSkyWebViewActivity extends Activity {
             });
         }
     };
+    private void downloadFinalZSkyMp4(String url, String source) {
+        if (url == null || !url.matches("(?i)^https://.*\\.mp4([?#].*)?$")) return;
+        if (zskyDownloadId != -1L) return;
+        try {
+            DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            if (dm == null) throw new IllegalStateException("DownloadManager unavailable");
+            DownloadManager.Request req = new DownloadManager.Request(Uri.parse(url));
+            req.setTitle("ASTRA · ZSky video");
+            req.setDescription("Сохранение готового видео ZSky");
+            req.setMimeType("video/mp4");
+            req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            req.setDestinationInExternalPublicDir(Environment.DIRECTORY_MOVIES,
+                    "ASTRA/ZSky/zsky_" + System.currentTimeMillis() + ".mp4");
+            String cookie = CookieManager.getInstance().getCookie(url);
+            if (cookie != null && !cookie.isEmpty()) req.addRequestHeader("Cookie", cookie);
+            req.addRequestHeader("User-Agent", webView.getSettings().getUserAgentString());
+            String referer = webView.getUrl();
+            if (referer != null) req.addRequestHeader("Referer", referer);
+            zskyDownloadId = dm.enqueue(req);
+            Log.i("ASTRA-ZSKY-DOWNLOAD", "FINAL mp4 queued id=" + zskyDownloadId + " source=" + source);
+            status.setText("ASTRA ZSky: скачиваю финальное видео…");
+            if (zskyDownloadReceiver == null) {
+                zskyDownloadReceiver = new BroadcastReceiver() {
+                    @Override public void onReceive(Context c, Intent i) {
+                        if (i.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L) != zskyDownloadId) return;
+                        Uri saved = dm.getUriForDownloadedFile(zskyDownloadId);
+                        if (saved != null) {
+                            ChatActivity.onZSkyVideoReady(getApplicationContext(), saved);
+                            status.setText("ASTRA ZSky: готовое видео сохранено");
+                            Log.i("ASTRA-ZSKY-DOWNLOAD", "FINAL mp4 saved=" + saved);
+                        } else {
+                            status.setText("ASTRA ZSky: ошибка загрузки финального видео");
+                            Log.e("ASTRA-ZSKY-DOWNLOAD", "FINAL mp4 download failed");
+                        }
+                        zskyDownloadId = -1L;
+                    }
+                };
+                IntentFilter f = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
+                if (Build.VERSION.SDK_INT >= 33) registerReceiver(zskyDownloadReceiver, f, Context.RECEIVER_NOT_EXPORTED);
+                else registerReceiver(zskyDownloadReceiver, f);
+            }
+        } catch (Exception e) {
+            Log.e("ASTRA-ZSKY-DOWNLOAD", "final MP4 download failed", e);
+        }
+    }
+
     public static ZSkyWebViewActivity getInstance() { return instance; }
 
     @Override protected void onCreate(Bundle state) {
@@ -157,15 +210,16 @@ public final class ZSkyWebViewActivity extends Activity {
                 ps.setDomStorageEnabled(true);
                 ps.setUserAgentString(webView.getSettings().getUserAgentString());
                 zskyPopup.setWebViewClient(new WebViewClient() {
-                    @Override public void onPageStarted(WebView v, String url, android.graphics.Bitmap icon) {
-                        Log.i("ASTRA-ZSKY-POPUP", "new-window destination=" + url);
-                        if (url != null && url.matches("(?i)^https://.*\\.mp4([?#].*)?$")) {
+                    @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest request) {
+                        String url = request == null || request.getUrl() == null ? "" : request.getUrl().toString();
+                        Log.i("ASTRA-ZSKY-POPUP", "new-window navigation=" + url);
+                        if (url.matches("(?i)^https://.*\\.mp4([?#].*)?$")) {
                             Log.i("ASTRA-ZSKY-POPUP", "FINAL_MP4_TARGET=" + url);
                             webView.evaluateJavascript("window.__astraZSkyFinalResult=true", null);
-                            v.setDownloadListener((u, ua, cd, mime, len) -> {
-                                Log.i("ASTRA-ZSKY-POPUP", "final MP4 download requested=" + u);
-                            });
+                            downloadFinalZSkyMp4(url, "target-blank-navigation");
+                            return true;
                         }
+                        return false;
                     }
                 });
                 zskyPopup.setDownloadListener((url, ua, disposition, mime, length) ->
@@ -501,6 +555,7 @@ public final class ZSkyWebViewActivity extends Activity {
         main.removeCallbacks(generationObserver);
         main.removeCallbacks(diagPoll);
         if (videoCaptureBridge != null) videoCaptureBridge.abortVideo();
+        if (zskyDownloadReceiver != null) { try { unregisterReceiver(zskyDownloadReceiver); } catch (Exception ignored) {} zskyDownloadReceiver = null; }
         if (zskyWakeLock != null && zskyWakeLock.isHeld()) zskyWakeLock.release();
         zskyWakeLock = null;
         if (instance == this) instance = null;
