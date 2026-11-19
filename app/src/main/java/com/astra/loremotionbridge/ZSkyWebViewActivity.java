@@ -84,7 +84,7 @@ public final class ZSkyWebViewActivity extends Activity {
     private final Runnable generationObserver = new Runnable() {
         @Override public void run() {
             if (webView == null || generationStartedAt == 0L || isFinishing() || isDestroyed()) return;
-            String js = "(function(){const t=(document.body&&document.body.innerText)||'';const low=t.toLowerCase();const finalScreen=low.includes('rendered on the free lane')||low.includes('rendered on the paid lane')||low.includes('rendered on the free plan')||low.includes('rendered on the pro lane');const vs=Array.from(document.querySelectorAll('video'));const ready=vs.some(v=>v.readyState>=2&&Number.isFinite(v.duration)&&v.duration>0&&(v.currentSrc||v.src));const sig=vs.map(v=>v.currentSrc||v.src||'').join('|');const changed=window.__astraZSkyBaselineVideoSources!==undefined&&sig!==window.__astraZSkyBaselineVideoSources;const links=Array.from(document.querySelectorAll('a[href]'));const dl=links.find(a=>/download/i.test((a.innerText||a.textContent||'')+' '+(a.getAttribute('aria-label')||'')+' '+(a.getAttribute('download')||'')));const btns=Array.from(document.querySelectorAll('button,[role=button]'));const db=btns.find(a=>/download/i.test((a.innerText||a.textContent||'')+' '+(a.getAttribute('aria-label')||'')));const href=dl?(dl.href||dl.getAttribute('href')||''):'';const video=vs.map(v=>v.currentSrc||v.src||'').find(Boolean)||'';return JSON.stringify({tail:t.slice(-1400),finalScreen,downloadUrl:href,videoUrl:video,downloadButton:!!db,videos:vs.length,videoReady:ready,videoChanged:changed,busy:document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,visibility:document.visibilityState});})()";
+            String js = "(function(){const t=(document.body&&document.body.innerText)||'';const low=t.toLowerCase();const finalScreen=low.includes('rendered on the free lane')||low.includes('rendered on the paid lane')||low.includes('rendered on the free plan')||low.includes('rendered on the pro lane');const vs=Array.from(document.querySelectorAll('video'));const ready=vs.some(v=>v.readyState>=2&&Number.isFinite(v.duration)&&v.duration>0&&(v.currentSrc||v.src));const sig=vs.map(v=>v.currentSrc||v.src||'').join('|');const changed=window.__astraZSkyBaselineVideoSources!==undefined&&sig!==window.__astraZSkyBaselineVideoSources;const links=Array.from(document.querySelectorAll('a[href]'));const dl=links.find(a=>/download/i.test((a.innerText||a.textContent||'')+' '+(a.getAttribute('aria-label')||'')+' '+(a.getAttribute('download')||'')));const btns=Array.from(document.querySelectorAll('button,[role=button]'));const db=btns.find(a=>/download/i.test((a.innerText||a.textContent||'')+' '+(a.getAttribute('aria-label')||'')));const href=dl?(dl.href||dl.getAttribute('href')||''):'';const video=vs.map(v=>v.currentSrc||v.src||'').find(Boolean)||'';const resources=performance.getEntriesByType('resource').map(x=>x.name).filter(u=>{try{const p=new URL(u).pathname.toLowerCase();return /^https?:$/.test(new URL(u).protocol)&&(/\\.mp4$|\\.webm$|\\.m3u8$|video|media|download|rendered/i.test(p));}catch(e){return false;}}).slice(-12);return JSON.stringify({tail:t.slice(-1400),finalScreen,downloadUrl:href,videoUrl:video,resourceUrls:resources,downloadButton:!!db,videos:vs.length,videoReady:ready,videoChanged:changed,busy:document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,visibility:document.visibilityState});})()";
             webView.evaluateJavascript(js, value -> {
                 observerPolls++;
                 if (webView != null) webView.evaluateJavascript(videoCaptureScanScript(), null);
@@ -101,8 +101,17 @@ public final class ZSkyWebViewActivity extends Activity {
                     else if (e.optBoolean("finalScreen", false)) {
                         generationState = "final_result_screen";
                         if (webView != null) {
-                            String candidate = e.optString("downloadUrl", "");
-                            if (candidate.isEmpty()) candidate = e.optString("videoUrl", "");
+                            String candidate = e.optString("videoUrl", "");
+                            if (candidate.isEmpty()) candidate = e.optString("downloadUrl", "");
+                            if (candidate.isEmpty()) {
+                                org.json.JSONArray resources = e.optJSONArray("resourceUrls");
+                                if (resources != null) {
+                                    for (int ri = resources.length() - 1; ri >= 0; ri--) {
+                                        String resource = resources.optString(ri, "");
+                                        if (resource.startsWith("https://")) { candidate = resource; break; }
+                                    }
+                                }
+                            }
                             if (!candidate.isEmpty()) {
                                 final String finalUrl = candidate;
                                 webView.evaluateJavascript(
@@ -110,7 +119,7 @@ public final class ZSkyWebViewActivity extends Activity {
                                         v -> Log.i("ASTRA-ZSKY-DOWNLOAD", "final-screen capture=" + v));
                             } else {
                                 webView.evaluateJavascript(
-                                        "(function(){window.__astraZSkyFinalResult=true;window.__astraZSkyVideoScan&&window.__astraZSkyVideoScan();const b=Array.from(document.querySelectorAll('button,[role=button]')).find(x=>/download/i.test((x.innerText||x.textContent||'')+' '+(x.getAttribute('aria-label')||'')));if(b&&!window.__astraZSkyAutoDownloadClicked){window.__astraZSkyAutoDownloadClicked=true;b.click();return 'final-screen-download-button-clicked';}return 'final-screen-no-download-control';})()",
+                                        "(function(){window.__astraZSkyFinalResult=true;window.__astraZSkyVideoScan&&window.__astraZSkyVideoScan();return 'final-screen-no-direct-url-waiting-for-media-resource';})()",
                                         v -> Log.i("ASTRA-ZSKY-DOWNLOAD", "final-screen scan=" + v));
                             }
                         }
