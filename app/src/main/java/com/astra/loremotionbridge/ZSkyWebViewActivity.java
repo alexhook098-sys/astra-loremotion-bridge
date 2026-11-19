@@ -222,13 +222,19 @@ public final class ZSkyWebViewActivity extends Activity {
                         return false;
                     }
                 });
-                zskyPopup.setDownloadListener((url, ua, disposition, mime, length) ->
-                        Log.i("ASTRA-ZSKY-POPUP", "download url=" + url + " mime=" + mime));
+                zskyPopup.setDownloadListener((url, ua, disposition, mime, length) -> {
+                    Log.i("ASTRA-ZSKY-POPUP", "final candidate download url=" + url + " mime=" + mime);
+                    downloadFinalZSkyMp4(url, "popup-download-listener");
+                });
                 WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
                 transport.setWebView(zskyPopup);
                 resultMsg.sendToTarget();
                 return true;
             }
+        });
+        webView.setDownloadListener((url, ua, disposition, mime, length) -> {
+            Log.i("ASTRA-ZSKY-DOWNLOAD", "final candidate main download url=" + url + " mime=" + mime);
+            downloadFinalZSkyMp4(url, "main-download-listener");
         });
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
