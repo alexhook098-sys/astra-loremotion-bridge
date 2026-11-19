@@ -11,6 +11,7 @@ on:
       - fix/flow-video-capture-retry
       - fix/flow-download-auth-response
       - feature/zsky-chat-background-from-362
+      - fix/zsky-374-preserve-c-and-final-only-download
 
 jobs:
   build:
