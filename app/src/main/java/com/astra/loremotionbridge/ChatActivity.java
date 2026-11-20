@@ -404,7 +404,10 @@ public class ChatActivity extends Activity {
             prefs.edit().putString("zsky_pending_videos", pending.toString()).apply();
         } catch (Exception ignored) {}
         ChatActivity activity = activeInstance;
-        if (activity != null && activity.chatResumed) activity.runOnUiThread(activity::consumePendingZSkyVideos);
+        // The chat remains alive beneath the translucent ZSky render host.
+        // Deliver immediately even while its Activity is paused by that overlay.
+        if (activity != null && !activity.isFinishing())
+            activity.runOnUiThread(activity::consumePendingZSkyVideos);
     }
 
     private void consumePendingZSkyVideos() {
