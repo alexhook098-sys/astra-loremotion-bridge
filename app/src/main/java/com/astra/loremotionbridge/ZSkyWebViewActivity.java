@@ -365,6 +365,7 @@ public final class ZSkyWebViewActivity extends Activity {
             promptInjected = false;
             automationAttempts = 0;
             generationState = "queued";
+            ZSkyTaskState.update(this, "queued", "Новое задание принято ASTRA");
             if (pageLoaded) main.postDelayed(this::runPendingPrompt, 400L);
         }
         String url = intent.getStringExtra("url");
