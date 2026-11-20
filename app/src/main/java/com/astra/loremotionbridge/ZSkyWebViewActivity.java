@@ -44,6 +44,7 @@ public final class ZSkyWebViewActivity extends Activity {
     private int automationAttempts;
     private int observerPolls;
     private long generationStartedAt;
+    private String timerStage = "";
     private int baselineVideoCount = -1;
     private String generationState = "idle";
     private String generationEvidence = "";
@@ -100,9 +101,9 @@ public final class ZSkyWebViewActivity extends Activity {
                     }
                     org.json.JSONObject e = new org.json.JSONObject(payload);
                     String tail = e.optString("tail", "").toLowerCase(java.util.Locale.ROOT);
-                    if (tail.contains("generation failed") || tail.contains("ошибка генерации")) generationState = "failed";
-                    else if (e.optBoolean("final", false)) generationState = "final_stage";
-                    else if (e.optInt("busy", 0) > 0) generationState = "running";
+                    if (tail.contains("generation failed") || tail.contains("ошибка генерации")) { generationState = "failed"; updateTaskTimerStage("Ошибка генерации · задача не передана"); }
+                    else if (e.optBoolean("final", false)) { generationState = "final_stage"; updateTaskTimerStage("Видео готово · сохраняю"); }
+                    else if (e.optInt("busy", 0) > 0) { generationState = "running"; updateTaskTimerStage("Идёт рендеринг"); }
                     else if (baselineVideoCount >= 0 && e.optInt("videos", 0) > baselineVideoCount) generationState = "completed_unconfirmed";
                     org.json.JSONArray urls = e.optJSONArray("urls");
                     if (urls != null) {
@@ -125,9 +126,17 @@ public final class ZSkyWebViewActivity extends Activity {
                 url, webView.getSettings().getUserAgentString(), webView.getUrl());
         Log.i("ASTRA-ZSKY-DOWNLOAD",
                 "FINAL MP4 routed to silent native stream queued=" + queued + " source=" + source);
+        if (queued) updateTaskTimerStage("Видео сохраняется в фоне");
+        else updateTaskTimerStage("Не удалось начать сохранение");
         if (status != null) status.setText(queued
                 ? "ASTRA ZSky: сохраняю готовое видео в фоне…"
                 : "ASTRA ZSky: не удалось начать сохранение видео");
+    }
+
+    private void updateTaskTimerStage(String value) {
+        if (value == null || value.equals(timerStage)) return;
+        timerStage = value;
+        ZSkyTaskTimerService.update(getApplicationContext(), value);
     }
 
     public static ZSkyWebViewActivity getInstance() { return instance; }
@@ -343,6 +352,7 @@ public final class ZSkyWebViewActivity extends Activity {
                         catch (Exception ignored) { baselineVideoCount = -1; }
                         generationStartedAt = System.currentTimeMillis();
                         generationState = "submitted_unconfirmed";
+                        updateTaskTimerStage("Генерация запущена");
                         pendingPrompt = null;
                         main.removeCallbacks(generationObserver);
                         main.postDelayed(generationObserver, 1500L);
@@ -487,6 +497,7 @@ public final class ZSkyWebViewActivity extends Activity {
             Intent intent = new Intent(context, ZSkyWebViewActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP
                     | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            ZSkyTaskTimerService.start(context.getApplicationContext());
             intent.putExtra("url", url == null || url.isEmpty() ? ZSKY_URL : url);
             intent.putExtra("background", background);
             if (prompt != null && !prompt.trim().isEmpty()) intent.putExtra("prompt", prompt.trim());
