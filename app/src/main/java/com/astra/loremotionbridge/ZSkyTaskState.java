@@ -26,5 +26,8 @@ public final class ZSkyTaskState {
         if ("completed".equals(state) || "failed".equals(state)
                 || "automation_timeout".equals(state)) edit.putLong("zsky_task_finished", now);
         edit.apply();
+        // Mirror every durable task transition into Android's persistent notification.
+        try { AstraZSkyForegroundService.update(context, state, detail); }
+        catch (Exception ignored) { android.util.Log.w("ASTRA-ZSKY-SERVICE", "Notification update unavailable", ignored); }
     }
 }
