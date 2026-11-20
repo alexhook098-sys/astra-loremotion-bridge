@@ -18,6 +18,8 @@ import android.widget.ImageView;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.OpenableColumns;
 import android.view.Gravity;
 import android.view.View;
@@ -54,6 +56,14 @@ public class ChatActivity extends Activity {
     private EditText input;
     private TextView modelStatus;
     private TextView flowDownloadStatus;
+    private TextView zskyTaskStatus;
+    private final Handler zskyStatusHandler = new Handler(Looper.getMainLooper());
+    private final Runnable zskyStatusRefresh = new Runnable() {
+        @Override public void run() {
+            renderZSkyTaskStatus();
+            if (!isFinishing() && !isDestroyed()) zskyStatusHandler.postDelayed(this, 1200L);
+        }
+    };
     private Button installButton;
     private JSONArray history;
     private volatile boolean busy = false;
@@ -71,6 +81,9 @@ public class ChatActivity extends Activity {
         buildScreen();
         renderFlowDownloadProgress(getSharedPreferences("astra_chat", MODE_PRIVATE)
                 .getString("flow_download_status", ""));
+        renderZSkyTaskStatus();
+        zskyStatusHandler.removeCallbacks(zskyStatusRefresh);
+        zskyStatusHandler.post(zskyStatusRefresh);
         if (history.length() == 0) {
             addMessage("Привет. Я ASTRA. Подключи OpenRouter один раз — скачивать модель на телефон не нужно. ✦", false, true);
         } else {
@@ -210,6 +223,10 @@ public class ChatActivity extends Activity {
         flowDownloadStatus.setPadding(dp(2), dp(7), dp(2), dp(4));
         flowDownloadStatus.setVisibility(View.GONE);
         chatPanel.addView(flowDownloadStatus, new LinearLayout.LayoutParams(-1, -2));
+        zskyTaskStatus = label("", 11, Color.rgb(174, 224, 255), false);
+        zskyTaskStatus.setPadding(dp(2), dp(6), dp(2), dp(6));
+        zskyTaskStatus.setVisibility(View.GONE);
+        chatPanel.addView(zskyTaskStatus, new LinearLayout.LayoutParams(-1, -2));
         messageScroll = new ScrollView(this);
         messages = new LinearLayout(this);
         messages.setOrientation(LinearLayout.VERTICAL);
@@ -377,6 +394,7 @@ public class ChatActivity extends Activity {
 
     public static void onZSkyVideoReady(Context context, Uri video) {
         if (context == null || video == null) return;
+        ZSkyTaskState.update(context, "completed", "Видео сохранено · Movies/ASTRA/ZSky");
         android.content.SharedPreferences prefs = context.getSharedPreferences("astra_chat", MODE_PRIVATE);
         JSONArray pending;
         try { pending = new JSONArray(prefs.getString("zsky_pending_videos", "[]")); }
@@ -475,6 +493,33 @@ public class ChatActivity extends Activity {
         }
         flowDownloadStatus.setText("⬇  FLOW · " + message);
         flowDownloadStatus.setVisibility(View.VISIBLE);
+    }
+
+    private void renderZSkyTaskStatus() {
+        if (zskyTaskStatus == null) return;
+        android.content.SharedPreferences prefs = getSharedPreferences("astra_chat", MODE_PRIVATE);
+        String state = prefs.getString("zsky_task_state", "");
+        String detail = prefs.getString("zsky_task_detail", "");
+        if (state.isEmpty() || "idle".equals(state)) {
+            zskyTaskStatus.setVisibility(View.GONE);
+            return;
+        }
+        long started = prefs.getLong("zsky_task_started", 0L);
+        long elapsed = started > 0L ? Math.max(0L, (System.currentTimeMillis() - started) / 1000L) : 0L;
+        String time = String.format(java.util.Locale.ROOT, "%02d:%02d", elapsed / 60L, elapsed % 60L);
+        String label;
+        if ("loading".equals(state) || "queued".equals(state)) label = "ПОДКЛЮЧЕНИЕ";
+        else if ("prompt_entered".equals(state)) label = "ПОДГОТОВКА";
+        else if ("rendering".equals(state) || "submitted_unconfirmed".equals(state)) label = "РЕНДЕРИНГ";
+        else if ("result_ready".equals(state)) label = "РЕЗУЛЬТАТ ГОТОВ";
+        else if ("downloading".equals(state)) label = "СКАЧИВАНИЕ";
+        else if ("completed".equals(state)) label = "ГОТОВО";
+        else if ("failed".equals(state) || "automation_timeout".equals(state)) label = "ТРЕБУЕТ ВНИМАНИЯ";
+        else label = state.toUpperCase(java.util.Locale.ROOT);
+        zskyTaskStatus.setText("✦  ZSKY · " + label + "  ·  " + time + "\n" + detail);
+        zskyTaskStatus.setTextColor("failed".equals(state) || "automation_timeout".equals(state)
+                ? Color.rgb(255, 150, 150) : Color.rgb(174, 224, 255));
+        zskyTaskStatus.setVisibility(View.VISIBLE);
     }
 
     // Persist Flow video delivery while the chat screen is in the background.
@@ -828,6 +873,7 @@ public class ChatActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        zskyStatusHandler.removeCallbacks(zskyStatusRefresh);
         if (activeInstance == this) activeInstance = null;
         // Keep the native model alive for the process; do not unload on screen close.
         super.onDestroy();
