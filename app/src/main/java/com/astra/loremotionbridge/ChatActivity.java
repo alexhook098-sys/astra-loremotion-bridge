@@ -179,6 +179,13 @@ public class ChatActivity extends Activity {
         flowParams.bottomMargin = dp(8);
         root.addView(googleFlow, flowParams);
 
+
+        Button taskCenter = smallButton("✦  ЦЕНТР ЗАДАЧ · ГЕНЕРАЦИИ", CYAN);
+        taskCenter.setOnClickListener(v -> startActivity(new Intent(this, TaskCenterActivity.class)));
+        LinearLayout.LayoutParams taskCenterParams = new LinearLayout.LayoutParams(-1, dp(43));
+        taskCenterParams.bottomMargin = dp(8);
+        root.addView(taskCenter, taskCenterParams);
+
         Button zskyStudio = smallButton("✦  ZSKY STUDIO · ВОЙТИ В АККАУНТ", LILAC);
         zskyStudio.setOnClickListener(v -> {
             // Open the authenticated studio for manual sign-in; never submit a prompt here.

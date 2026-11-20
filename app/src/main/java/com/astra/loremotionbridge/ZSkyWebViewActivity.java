@@ -113,32 +113,20 @@ public final class ZSkyWebViewActivity extends Activity {
         }
     };
     /**
-     * Keep the actual WebView window visible to Chromium while the user works in
-     * ASTRA underneath it. A fake document.visibilityState cannot prevent renderer
-     * scheduling throttles; this keeps the WebView attached to a real visible,
-     * translucent Android window instead of moving its task to the background.
+     * ZSky runs in its own Android task. Once Generate is confirmed, send only
+     * the studio task to the back so ChatActivity becomes interactive again.
+     * WebView timers are intentionally left running in onPause().
      */
     private void enterBackgroundRenderMode() {
         if (!backgroundRequested || webView == null || isFinishing() || isDestroyed()) return;
         runOnUiThread(() -> {
             if (webView == null || isFinishing() || isDestroyed()) return;
-            getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                    | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
-            getWindow().getDecorView().setBackgroundColor(Color.TRANSPARENT);
-            if (rootLayout != null) rootLayout.setBackgroundColor(Color.TRANSPARENT);
-            if (status != null) status.setAlpha(0f);
-            // Keep the WebView attached, VISIBLE and composited in the foreground
-            // at near-zero opacity. The transparent, non-touchable window lets the
-            // ASTRA chat below remain visible and receive input.
             webView.setVisibility(View.VISIBLE);
-            webView.setAlpha(0.01f);
             webView.onResume();
             webView.resumeTimers();
-            lastLifecycleEvent = "background-render-surface";
-            Log.i("ASTRA-ZSKY-BG", "Transparent foreground render surface enabled; "
-                    + "WebView remains attached and visible to Chromium");
+            lastLifecycleEvent = "studio-task-backgrounded";
+            Log.i("ASTRA-ZSKY-BG", "Generate confirmed; moving isolated ZSky task behind ASTRA");
+            moveTaskToBack(true);
         });
     }
 
@@ -533,11 +521,26 @@ public final class ZSkyWebViewActivity extends Activity {
     }
 
     public void minimizeStudio() {
-        if (generationStartedAt > 0L) {
-            enterBackgroundRenderMode();
-        } else {
-            runOnUiThread(() -> moveTaskToBack(true));
-        }
+        runOnUiThread(() -> {
+            if (webView != null) {
+                webView.onResume();
+                webView.resumeTimers();
+            }
+            lastLifecycleEvent = "studio-task-backgrounded-manual";
+            moveTaskToBack(true);
+        });
+    }
+
+    /** Close the isolated ZSky task only after the native downloader has published a valid file. */
+    public static void closeAfterSuccessfulSave() {
+        ZSkyWebViewActivity a = instance;
+        if (a == null) return;
+        a.main.postDelayed(() -> {
+            if (instance == a && !a.isFinishing() && !a.isDestroyed()) {
+                Log.i("ASTRA-ZSKY", "Verified download complete; closing ZSky worker");
+                a.finish();
+            }
+        }, 2200L);
     }
 
     public void closeStudio() {

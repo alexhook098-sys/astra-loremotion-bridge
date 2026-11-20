@@ -151,6 +151,7 @@ public final class ZSkyVideoCaptureBridge {
             Log.i(TAG, "HTTPS MP4 saved uri=" + saved + " bytes=" + total
                     + " expected=" + expected);
             ChatActivity.onZSkyVideoReady(activity.getApplicationContext(), saved);
+            ZSkyWebViewActivity.closeAfterSuccessfulSave();
         } catch (Exception e) {
             Log.e(TAG, "HTTPS video download failed", e);
             ZSkyTaskState.update(activity, "failed", "Ошибка скачивания: " + e.getClass().getSimpleName());
@@ -248,6 +249,7 @@ public final class ZSkyVideoCaptureBridge {
             target = null;
             written = 0L;
             ChatActivity.onZSkyVideoReady(activity.getApplicationContext(), savedUri);
+            ZSkyWebViewActivity.closeAfterSuccessfulSave();
             return true;
         } catch (Exception e) {
             Log.e(TAG, "finishVideo failed", e);
