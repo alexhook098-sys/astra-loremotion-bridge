@@ -354,6 +354,40 @@ public final class ZSkyWebViewActivity extends Activity {
         // A reused studio task also moves back before navigation/hydration.
     }
 
+    /**
+     * Diagnostic wrapper for stage-2 automation. It reports a missing WebView
+     * callback without changing the automation decision or retry behavior.
+     */
+    private void evaluateAutomation(String stage, String script,
+            android.webkit.ValueCallback<String> callback) {
+        final long started = android.os.SystemClock.elapsedRealtime();
+        final boolean[] received = {false};
+        final Runnable timeout = () -> {
+            if (!received[0]) {
+                Log.e("ASTRA-ZSKY-AUTO", "CALLBACK_TIMEOUT stage=" + stage
+                        + " attempt=" + automationAttempts
+                        + " lifecycle=" + lastLifecycleEvent
+                        + " url=" + currentUrl);
+            }
+        };
+        main.postDelayed(timeout, 10000L);
+        if (webView == null || isFinishing() || isDestroyed()) {
+            received[0] = true;
+            main.removeCallbacks(timeout);
+            if (callback != null) callback.onReceiveValue(null);
+            return;
+        }
+        webView.evaluateJavascript(script, value -> {
+            received[0] = true;
+            main.removeCallbacks(timeout);
+            Log.i("ASTRA-ZSKY-AUTO", "CALLBACK_RECEIVED stage=" + stage
+                    + " elapsed="
+                    + (android.os.SystemClock.elapsedRealtime() - started)
+                    + "ms result=" + value);
+            if (callback != null) callback.onReceiveValue(value);
+        });
+    }
+
     private void runPendingPrompt() {
         if (webView == null || pendingPrompt == null || !pageLoaded || isFinishing() || isDestroyed()) return;
         if (++automationAttempts > 45) {
@@ -381,7 +415,7 @@ public final class ZSkyWebViewActivity extends Activity {
                     + "||((x.innerText||x.textContent||'').trim().toLowerCase()==='generate'));"
                     + "return (!b?'BUTTON_NOT_FOUND':(b.disabled||b.getAttribute('aria-disabled')==='true'?'BUTTON_DISABLED':'BUTTON_READY'));})()";
         }
-        webView.evaluateJavascript(script, value -> {
+        evaluateAutomation("prompt-field-or-generate-button", script, value -> {
             String result = value == null ? "" : value;
             Log.i("ASTRA-ZSKY-AUTO", "attempt=" + automationAttempts + " result=" + result);
             if (result.contains("PROMPT_SET")) {
@@ -396,7 +430,7 @@ public final class ZSkyWebViewActivity extends Activity {
                         + "if(!b||b.disabled||b.getAttribute('aria-disabled')==='true')return 'BUTTON_NOT_READY';"
                         + "const n=document.querySelectorAll('video').length;"
                         + "b.click();return 'GENERATE_CLICKED:'+n;})()";
-                webView.evaluateJavascript(click, clicked -> {
+                evaluateAutomation("generate-click", click, clicked -> {
                     String clickResult = clicked == null ? "" : clicked;
                     Log.i("ASTRA-ZSKY-AUTO", "generate result=" + clickResult);
                     if (clickResult.contains("GENERATE_CLICKED")) {
