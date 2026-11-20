@@ -96,9 +96,11 @@ public final class ZSkyWebViewActivity extends Activity {
                             && tail.contains("download");
                     if (finalResultReady) {
                         generationState = "completed_waiting_for_download";
+                        ZSkyTaskState.update(ZSkyWebViewActivity.this, "result_ready", "Видео готово · запускаю скачивание");
                         main.post(ZSkyWebViewActivity.this::attemptNativeFinalDownload);
                     } else if (tail.contains("generation failed") || tail.contains("ошибка генерации")) {
                         generationState = "failed";
+                        ZSkyTaskState.update(ZSkyWebViewActivity.this, "failed", "ZSky сообщил об ошибке генерации");
                     } else if (e.optInt("busy", 0) > 0) {
                         generationState = "running";
                     } else if (baselineVideoCount >= 0 && e.optInt("videos", 0) > baselineVideoCount) {
@@ -213,6 +215,8 @@ public final class ZSkyWebViewActivity extends Activity {
                 url, webView.getSettings().getUserAgentString(), webView.getUrl());
         Log.i("ASTRA-ZSKY-DOWNLOAD",
                 "FINAL MP4 routed to silent native stream queued=" + queued + " source=" + source);
+        ZSkyTaskState.update(this, queued ? "downloading" : "failed",
+                queued ? "Скачиваю готовое видео" : "Не удалось начать скачивание");
         if (status != null) status.setText(queued
                 ? "ASTRA ZSky: сохраняю готовое видео в фоне…"
                 : "ASTRA ZSky: не удалось начать сохранение видео");
@@ -223,6 +227,7 @@ public final class ZSkyWebViewActivity extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         instance = this;
+        ZSkyTaskState.update(this, "loading", "Подключаюсь к ZSky");
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
         if (pm != null) {
             zskyWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ASTRA:ZSkyGeneration");
@@ -373,6 +378,7 @@ public final class ZSkyWebViewActivity extends Activity {
         if (webView == null || pendingPrompt == null || !pageLoaded || isFinishing() || isDestroyed()) return;
         if (++automationAttempts > 45) {
             generationState = "automation_timeout";
+            ZSkyTaskState.update(this, "failed", "Не удалось автоматически отправить задание");
             pendingPrompt = null;
             Log.w("ASTRA-ZSKY-AUTO", "Automation timed out");
             return;
@@ -401,6 +407,7 @@ public final class ZSkyWebViewActivity extends Activity {
             if (result.contains("PROMPT_SET")) {
                 promptInjected = true;
                 generationState = "prompt_entered";
+                ZSkyTaskState.update(ZSkyWebViewActivity.this, "prompt_entered", "Промпт принят · подготавливаю генерацию");
                 main.postDelayed(this::runPendingPrompt, 700L);
             } else if (result.contains("BUTTON_READY")) {
                 String click = "(function(){const b=Array.from(document.querySelectorAll('button,[role=button]'))"
@@ -417,6 +424,7 @@ public final class ZSkyWebViewActivity extends Activity {
                         catch (Exception ignored) { baselineVideoCount = -1; }
                         generationStartedAt = System.currentTimeMillis();
                         generationState = "submitted_unconfirmed";
+                        ZSkyTaskState.update(ZSkyWebViewActivity.this, "rendering", "Задание отправлено · ожидаю результат от ZSky");
                         pendingPrompt = null;
                         main.removeCallbacks(generationObserver);
                         main.postDelayed(generationObserver, 1500L);
@@ -469,13 +477,13 @@ public final class ZSkyWebViewActivity extends Activity {
             + "}catch(e){window.__astraZSkyCaptureBusy.delete(u);try{window.ASTRAZSkyVideo.failVideo(String(e));}catch(x){}console.error('ASTRA_ZSKY_VIDEO_CAPTURE:'+e);}}"
             + "function watch(v){if(!v||videos.has(v))return;videos.add(v);"
             + "['loadedmetadata','loadeddata','durationchange','canplay','playing','progress','loadstart'].forEach(e=>v.addEventListener(e,()=>capture(v),{passive:true}));capture(v);}"
-            + "function scan(root){if(!root)return;try{root.querySelectorAll('video').forEach(v=>{watch(v);if(finalResultVisible())capture(v);});"
-            + "if(!roots.has(root)){roots.add(root);new MutationObserver(()=>window.__astraZSkyVideoScan()).observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});}"
-            + "root.querySelectorAll('*').forEach(n=>{if(n.shadowRoot)scan(n.shadowRoot);});"
-            + "root.querySelectorAll('iframe').forEach(f=>{try{if(f.contentDocument)scan(f.contentDocument);}catch(e){}});"
+            + "function scan(root){if(!root)return;try{if(root.nodeType===1&&root.tagName==='VIDEO'){watch(root);if(finalResultVisible())capture(root);}"
+            + "if(root.querySelectorAll)root.querySelectorAll('video').forEach(v=>{watch(v);if(finalResultVisible())capture(v);});"
+            + "if(!roots.has(root)){roots.add(root);new MutationObserver(ms=>{for(const m of ms){if(m.type==='attributes'&&m.target.tagName==='VIDEO')watch(m.target);"
+            + "for(const n of m.addedNodes||[])if(n.nodeType===1)scan(n);}}).observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});}"
             + "}catch(e){console.warn('ASTRA_ZSKY_SCAN:'+e);}}"
             + "window.__astraZSkyVideoScan=function(){scan(document);};window.__astraZSkyVideoScan();"
-            + "setInterval(window.__astraZSkyVideoScan,2500);return 'zsky-blob-capture-installed';})()";
+            + "return 'zsky-blob-capture-installed';})()";
         webView.evaluateJavascript(js, value -> Log.i("ASTRA-ZSKY-CAPTURE", "bridge setup=" + value));
     }
 
