@@ -260,14 +260,12 @@ public final class ZSkyWebViewActivity extends Activity {
         // Send only the ZSky task to the back immediately; ChatActivity remains visible.
         // Page loading, prompt injection and generation automation continue on this retained WebView.
         if (backgroundRequested) {
-            main.postDelayed(() -> {
-                if (!isFinishing() && !isDestroyed()) {
-                    lastLifecycleEvent = "backgrounded_immediately";
-                    boolean moved = moveTaskToBack(true);
-                    Log.i("ASTRA-ZSKY", "Immediate background after launch moved=" + moved
-                            + " url=" + currentUrl + " pageLoaded=" + pageLoaded);
-                }
-            }, 120L);
+            // Minimize the dedicated ZSky task immediately after navigation is
+            // requested, before page hydration, prompt injection or Generate.
+            lastLifecycleEvent = "backgrounded_immediately";
+            boolean moved = moveTaskToBack(true);
+            Log.i("ASTRA-ZSKY", "Immediate background after loadUrl moved=" + moved
+                    + " url=" + currentUrl + " pageLoaded=" + pageLoaded);
         }
 
     }
@@ -288,7 +286,13 @@ public final class ZSkyWebViewActivity extends Activity {
         if (url != null && !url.trim().isEmpty() && webView != null
                 && !url.equals(webView.getUrl())) {
             webView.loadUrl(url);
-        } // Minimize only after the Generate click is confirmed.
+            if (backgroundRequested) main.post(() -> {
+                if (!isFinishing() && !isDestroyed()) {
+                    lastLifecycleEvent = "backgrounded_after_navigation";
+                    moveTaskToBack(true);
+                }
+            });
+        }
     }
 
     private void runPendingPrompt() {
@@ -448,7 +452,30 @@ public final class ZSkyWebViewActivity extends Activity {
     }
 
     public void closeStudio() {
-        runOnUiThread(this::finish);
+        runOnUiThread(() -> {
+            main.removeCallbacks(generationObserver);
+            main.removeCallbacks(diagPoll);
+            if (zskyPopup != null) {
+                try { zskyPopup.stopLoading(); } catch (Exception ignored) {}
+                try { zskyPopup.setWebViewClient(null); } catch (Exception ignored) {}
+                try { zskyPopup.destroy(); } catch (Exception ignored) {}
+                zskyPopup = null;
+            }
+            if (webView != null) {
+                try { webView.stopLoading(); } catch (Exception ignored) {}
+            }
+            lastLifecycleEvent = "closed_after_chat_handoff";
+            finish();
+        });
+    }
+
+    /** Called only after ChatActivity has inserted and persisted the delivered MP4. */
+    public static void onChatHandoffComplete() {
+        ZSkyWebViewActivity a = instance;
+        if (a != null) {
+            Log.i("ASTRA-ZSKY", "Chat handoff confirmed; closing active ZSky window(s)");
+            a.closeStudio();
+        }
     }
 
     public static String start(Context context, String url, boolean background) {
@@ -567,6 +594,12 @@ public final class ZSkyWebViewActivity extends Activity {
         if (zskyWakeLock != null && zskyWakeLock.isHeld()) zskyWakeLock.release();
         zskyWakeLock = null;
         if (instance == this) instance = null;
+        if (zskyPopup != null) {
+            try { zskyPopup.stopLoading(); } catch (Exception ignored) {}
+            try { zskyPopup.setWebViewClient(null); } catch (Exception ignored) {}
+            try { zskyPopup.destroy(); } catch (Exception ignored) {}
+            zskyPopup = null;
+        }
         if (webView != null) {
             webView.stopLoading();
             webView.setWebViewClient(null);
