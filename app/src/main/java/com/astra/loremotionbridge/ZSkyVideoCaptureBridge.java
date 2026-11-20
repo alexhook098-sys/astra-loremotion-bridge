@@ -62,6 +62,7 @@ public final class ZSkyVideoCaptureBridge {
                 ? pageUrl : "https://zsky.ai/create";
         try {
             downloadExecutor.execute(() -> downloadRemote(videoUrl, ua, referer));
+            ZSkyTaskState.update(activity, "downloading", "Скачиваю готовое видео");
             Log.i(TAG, "HTTPS MP4 queued on native worker");
             return true;
         } catch (Exception e) {
@@ -152,6 +153,7 @@ public final class ZSkyVideoCaptureBridge {
             ChatActivity.onZSkyVideoReady(activity.getApplicationContext(), saved);
         } catch (Exception e) {
             Log.e(TAG, "HTTPS video download failed", e);
+            ZSkyTaskState.update(activity, "failed", "Ошибка скачивания: " + e.getClass().getSimpleName());
         } finally {
             if (!published) {
                 if (saved != null) {
