@@ -457,6 +457,16 @@ public final class ZSkyWebViewActivity extends Activity {
 
     public static String start(Context context, String url, String prompt, boolean background) {
         try {
+            // A ZSky generation launched from chat must be backed by the same
+            // foreground browser service used by the dedicated browser agent.
+            // Starting it while ChatActivity is visible is permitted on Android 8+.
+            Intent browserService = new Intent(context, BrowserBridgeService.class);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                context.startForegroundService(browserService);
+            } else {
+                context.startService(browserService);
+            }
+
             Intent intent = new Intent(context, ZSkyWebViewActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP
                     | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_NO_ANIMATION);
