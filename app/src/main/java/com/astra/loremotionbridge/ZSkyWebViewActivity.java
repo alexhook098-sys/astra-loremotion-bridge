@@ -269,12 +269,16 @@ public final class ZSkyWebViewActivity extends Activity {
         // Send only the ZSky task to the back immediately; ChatActivity remains visible.
         // Page loading, prompt injection and generation automation continue on this retained WebView.
         if (backgroundRequested) {
-            // Minimize the dedicated ZSky task immediately after navigation is
-            // requested, before page hydration, prompt injection or Generate.
-            lastLifecycleEvent = "backgrounded_immediately";
-            boolean moved = moveTaskToBack(true);
-            Log.i("ASTRA-ZSKY", "Immediate background after loadUrl moved=" + moved
-                    + " url=" + currentUrl + " pageLoaded=" + pageLoaded);
+            // Preserve APK 401 timing: let WebView begin navigation before
+            // moving the dedicated ZSky task to the back.
+            main.postDelayed(() -> {
+                if (!isFinishing() && !isDestroyed()) {
+                    lastLifecycleEvent = "backgrounded_immediately";
+                    boolean moved = moveTaskToBack(true);
+                    Log.i("ASTRA-ZSKY", "Immediate background after launch moved=" + moved
+                            + " url=" + currentUrl + " pageLoaded=" + pageLoaded);
+                }
+            }, 120L);
         }
 
     }
