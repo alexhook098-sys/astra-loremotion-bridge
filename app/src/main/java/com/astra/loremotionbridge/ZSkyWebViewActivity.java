@@ -71,9 +71,25 @@ public final class ZSkyWebViewActivity extends Activity {
         }
     };
 
+    // Keep ZSky's own Page Visibility checks from pausing its render-to-result
+    // transition when Android moves this WebView task to the background.
+    private void keepZSkyPageLogicallyVisible(boolean dispatchEvent, String source) {
+        if (webView == null || isFinishing() || isDestroyed()) return;
+        String js = "(function(){try{const d=document;"
+                + "try{Object.defineProperty(d,'hidden',{configurable:true,get:function(){return false;}});}catch(e){}"
+                + "try{Object.defineProperty(d,'visibilityState',{configurable:true,get:function(){return 'visible';}});}catch(e){}"
+                + "try{Object.defineProperty(d,'hasFocus',{configurable:true,value:function(){return true;}});}catch(e){}"
+                + (dispatchEvent ? "d.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('focus'));" : "")
+                + "return JSON.stringify({hidden:d.hidden,visibility:d.visibilityState,focus:d.hasFocus()});"
+                + "}catch(e){return 'ERROR:'+String(e);}})()";
+        webView.evaluateJavascript(js, value ->
+                Log.i("ASTRA-ZSKY-BG", "visibility keep source=" + source + " result=" + value));
+    }
+
     private final Runnable generationObserver = new Runnable() {
         @Override public void run() {
             if (webView == null || generationStartedAt == 0L || isFinishing() || isDestroyed()) return;
+            keepZSkyPageLogicallyVisible(false, "generation-observer");
             String js = "(function(){const t=(document.body&&document.body.innerText)||'';return JSON.stringify({tail:t.slice(-1400),videos:document.querySelectorAll('video').length,busy:document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,visibility:document.visibilityState});})()";
             webView.evaluateJavascript(js, value -> {
                 observerPolls++;
@@ -505,6 +521,9 @@ public final class ZSkyWebViewActivity extends Activity {
         Log.i("ASTRA-ZSKY", "Lifecycle onPause: url="
                 + (webView != null ? webView.getUrl() : "null")
                 + ", generationState=" + generationState);
+        // Reassert a visible page state before Chromium applies background visibility.
+        // This lets ZSky's own visibility-gated render polling continue to the result view.
+        keepZSkyPageLogicallyVisible(true, "activity-onPause");
         // Deliberately do not call WebView.onPause() or pauseTimers():
         // the hidden page must continue its generation workflow like Flow.
         super.onPause();
