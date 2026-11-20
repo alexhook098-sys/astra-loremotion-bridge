@@ -7,9 +7,12 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
 import android.webkit.JavascriptInterface;
@@ -30,6 +33,7 @@ public final class ZSkyWebViewActivity extends Activity {
 
     private WebView webView;
     private WebView zskyPopup;
+    private LinearLayout rootLayout;
     private ZSkyVideoCaptureBridge videoCaptureBridge;
     private TextView status;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -49,6 +53,7 @@ public final class ZSkyWebViewActivity extends Activity {
     private String generationEvidence = "";
     private int diagPollCount;
     private long lastDiagAt;
+    private long lastNativeDownloadKickAt;
 
     // Native polling survives Activity backgrounding; the page heartbeat tells us
     // whether Chromium is still executing timers while the task is hidden.
@@ -87,15 +92,121 @@ public final class ZSkyWebViewActivity extends Activity {
                     }
                     org.json.JSONObject e = new org.json.JSONObject(payload);
                     String tail = e.optString("tail", "").toLowerCase(java.util.Locale.ROOT);
-                    if (tail.contains("generation failed") || tail.contains("ошибка генерации")) generationState = "failed";
-                    else if (e.optInt("busy", 0) > 0) generationState = "running";
-                    else if (baselineVideoCount >= 0 && e.optInt("videos", 0) > baselineVideoCount) generationState = "completed_unconfirmed";
+                    boolean finalResultReady = tail.contains("rendered on the free lane")
+                            && tail.contains("download");
+                    if (finalResultReady) {
+                        generationState = "completed_waiting_for_download";
+                        main.post(ZSkyWebViewActivity.this::attemptNativeFinalDownload);
+                    } else if (tail.contains("generation failed") || tail.contains("ошибка генерации")) {
+                        generationState = "failed";
+                    } else if (e.optInt("busy", 0) > 0) {
+                        generationState = "running";
+                    } else if (baselineVideoCount >= 0 && e.optInt("videos", 0) > baselineVideoCount) {
+                        generationState = "completed_unconfirmed";
+                    }
                 } catch (Exception ex) { Log.w("ASTRA-ZSKY-OBSERVER", "Evidence parse failed", ex); }
                 Log.i("ASTRA-ZSKY-OBSERVER", "poll=" + observerPolls + " state=" + generationState + " evidence=" + generationEvidence);
                 if (webView != null && !isFinishing() && !isDestroyed()) main.postDelayed(this, 5000L);
             });
         }
     };
+    /**
+     * Keep the actual WebView window visible to Chromium while the user works in
+     * ASTRA underneath it. A fake document.visibilityState cannot prevent renderer
+     * scheduling throttles; this keeps the WebView attached to a real visible,
+     * translucent Android window instead of moving its task to the background.
+     */
+    private void enterBackgroundRenderMode() {
+        if (!backgroundRequested || webView == null || isFinishing() || isDestroyed()) return;
+        runOnUiThread(() -> {
+            if (webView == null || isFinishing() || isDestroyed()) return;
+            getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                    | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
+            getWindow().getDecorView().setBackgroundColor(Color.TRANSPARENT);
+            if (rootLayout != null) rootLayout.setBackgroundColor(Color.TRANSPARENT);
+            if (status != null) status.setAlpha(0f);
+            // Keep the WebView attached, VISIBLE and composited in the foreground
+            // at near-zero opacity. The transparent, non-touchable window lets the
+            // ASTRA chat below remain visible and receive input.
+            webView.setVisibility(View.VISIBLE);
+            webView.setAlpha(0.01f);
+            webView.onResume();
+            webView.resumeTimers();
+            lastLifecycleEvent = "background-render-surface";
+            Log.i("ASTRA-ZSKY-BG", "Transparent foreground render surface enabled; "
+                    + "WebView remains attached and visible to Chromium");
+        });
+    }
+
+    private void restoreStudioRenderMode() {
+        runOnUiThread(() -> {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                    | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
+            getWindow().setBackgroundDrawable(new ColorDrawable(0xFF080B18));
+            if (rootLayout != null) rootLayout.setBackgroundColor(0xFF080B18);
+            if (status != null) status.setAlpha(1f);
+            if (webView != null) {
+                webView.setAlpha(1f);
+                webView.setVisibility(View.VISIBLE);
+                webView.onResume();
+                webView.resumeTimers();
+            }
+            Log.i("ASTRA-ZSKY-BG", "Normal studio surface restored");
+        });
+    }
+
+    /**
+     * The page's own one-second auto-download interval is background-throttled.
+     * The native observer detects the actual final-result text and clicks the
+     * existing Download control directly, then probes the result URL from native
+     * Handler callbacks rather than relying on page setTimeout().
+     */
+    private void attemptNativeFinalDownload() {
+        if (webView == null || isFinishing() || isDestroyed()) return;
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (now - lastNativeDownloadKickAt < 3500L) return;
+        lastNativeDownloadKickAt = now;
+
+        String click = "(function(){try{"
+                + "const t=(document.body&&document.body.innerText||'').toLowerCase();"
+                + "if(!t.includes('rendered on the free lane')||!t.includes('download'))return 'FINAL_STAGE_NOT_READY';"
+                + "window.__astraZSkyFinalResult=true;"
+                + "window.__astraZSkyFinalDownloadSince=performance.now();"
+                + "const b=[...document.querySelectorAll('button,[role=button],a')].find(x=>{"
+                + "const s=((x.innerText||x.textContent||'')+' '+(x.getAttribute('aria-label')||''))"
+                + ".replace(/\\s+/g,' ').trim().toLowerCase();"
+                + "return s==='download'&&!x.disabled&&x.getAttribute('aria-disabled')!=='true';});"
+                + "if(!b)return 'FINAL_DOWNLOAD_BUTTON_NOT_FOUND';"
+                + "if(!window.__astraZSkyDownloadButtonClicked){"
+                + "window.__astraZSkyDownloadButtonClicked=true;b.click();return 'NATIVE_OBSERVER_CLICKED_DOWNLOAD';}"
+                + "return 'DOWNLOAD_ALREADY_TRIGGERED';"
+                + "}catch(e){return 'FINAL_DOWNLOAD_ERROR:'+String(e);}})()";
+        webView.evaluateJavascript(click, value -> {
+            String result = value == null ? "" : value;
+            Log.i("ASTRA-ZSKY-DOWNLOAD", "native final-stage action=" + result);
+            if (result.contains("CLICKED_DOWNLOAD") || result.contains("ALREADY_TRIGGERED")) {
+                scheduleNativeDownloadProbe(250L);
+                scheduleNativeDownloadProbe(800L);
+                scheduleNativeDownloadProbe(1600L);
+                scheduleNativeDownloadProbe(3000L);
+            }
+        });
+    }
+
+    private void scheduleNativeDownloadProbe(long delayMs) {
+        main.postDelayed(() -> {
+            if (webView == null || isFinishing() || isDestroyed()) return;
+            webView.evaluateJavascript(
+                    "(function(){try{return window.__astraZSkyInspectDownloadResult"
+                    + "?window.__astraZSkyInspectDownloadResult():'INSPECTOR_NOT_READY';}"
+                    + "catch(e){return 'INSPECT_ERROR:'+String(e);}})()",
+                    value -> Log.i("ASTRA-ZSKY-DOWNLOAD",
+                            "native result probe after " + delayMs + "ms=" + value));
+        }, delayMs);
+    }
+
     private void downloadFinalZSkyMp4(String url, String source) {
         if (videoCaptureBridge == null || webView == null) return;
         boolean queued = videoCaptureBridge.downloadRemoteVideo(
@@ -120,21 +231,21 @@ public final class ZSkyWebViewActivity extends Activity {
             Log.i("ASTRA-ZSKY", "Partial WakeLock acquired");
         }
 
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(0xFF080B18);
+        rootLayout = new LinearLayout(this);
+        rootLayout.setOrientation(LinearLayout.VERTICAL);
+        rootLayout.setBackgroundColor(0xFF080B18);
         status = new TextView(this);
         status.setTextColor(0xFFE5C7FF);
         status.setTextSize(12);
         status.setPadding(18, 12, 18, 12);
         status.setText("ASTRA ZSky: открываю студию…");
-        root.addView(status, new LinearLayout.LayoutParams(-1, -2));
+        rootLayout.addView(status, new LinearLayout.LayoutParams(-1, -2));
 
         webView = new WebView(this);
         videoCaptureBridge = new ZSkyVideoCaptureBridge(this);
         webView.addJavascriptInterface(videoCaptureBridge, "ASTRAZSkyVideo");
-        root.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1f));
-        setContentView(root);
+        rootLayout.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1f));
+        setContentView(rootLayout);
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
@@ -244,6 +355,7 @@ public final class ZSkyWebViewActivity extends Activity {
         backgroundRequested = intent.getBooleanExtra("background", backgroundRequested);
         String prompt = intent.getStringExtra("prompt");
         if (prompt != null && !prompt.trim().isEmpty()) {
+            restoreStudioRenderMode();
             pendingPrompt = prompt.trim();
             promptInjected = false;
             automationAttempts = 0;
@@ -308,9 +420,8 @@ public final class ZSkyWebViewActivity extends Activity {
                         pendingPrompt = null;
                         main.removeCallbacks(generationObserver);
                         main.postDelayed(generationObserver, 1500L);
-                        if (backgroundRequested) main.postDelayed(() -> {
-                            if (!isFinishing() && !isDestroyed()) moveTaskToBack(true);
-                        }, 250L);
+                        if (backgroundRequested) main.postDelayed(
+                                this::enterBackgroundRenderMode, 250L);
                     } else {
                         main.postDelayed(this::runPendingPrompt, 1000L);
                     }
@@ -336,9 +447,10 @@ public final class ZSkyWebViewActivity extends Activity {
             + "window.__astraZSkyCaptureBusy=window.__astraZSkyCaptureBusy||new Set();"
             + "const roots=new WeakSet(),videos=new WeakSet();"
             + "function finalResultVisible(){if(window.__astraZSkyFinalResult)return true;const t=(document.body&&document.body.innerText||'').toLowerCase();if(t.includes('rendered on the free lane')&&t.includes('download')){window.__astraZSkyFinalResult=true;console.info('ASTRA_ZSKY_FINAL_STAGE_CONFIRMED');return true;}return false;}"
-            + "function queueDownloadUrl(u,source){try{if(!u||!/^https:\\/\\//i.test(u))return false;const x=new URL(u,location.href);if(!/\\.mp4(?:$|[?#])/i.test(x.href))return false;if(window.__astraZSkyDownloadSeen.has(x.href))return true;window.__astraZSkyDownloadSeen.add(x.href);const ok=window.ASTRAZSkyVideo.downloadRemoteVideo(x.href,navigator.userAgent,location.href);console.info('ASTRA_ZSKY_DOWNLOAD_URL',source,ok,x.href);return !!ok;}catch(e){console.warn('ASTRA_ZSKY_DOWNLOAD_URL_ERROR',String(e));return false;}}"
+            + "function queueDownloadUrl(u,source){try{if(!u||!/^https:\\/\\//i.test(u))return false;const x=new URL(u,location.href);if(!/\\.mp4(?:$|[?#])/i.test(x.href))return false;if(window.__astraZSkyDownloadSeen.has(x.href))return true;const ok=window.ASTRAZSkyVideo.downloadRemoteVideo(x.href,navigator.userAgent,location.href);if(ok)window.__astraZSkyDownloadSeen.add(x.href);console.info('ASTRA_ZSKY_DOWNLOAD_URL',source,ok,x.href);return !!ok;}catch(e){console.warn('ASTRA_ZSKY_DOWNLOAD_URL_ERROR',String(e));return false;}}"
             + "window.__astraZSkyDownloadSeen=window.__astraZSkyDownloadSeen||new Set();"
             + "function inspectDownloadResult(since){const links=[...document.querySelectorAll('a[href]')].map(a=>a.href);for(const u of links)if(queueDownloadUrl(u,'download-anchor'))return true;const entries=performance.getEntriesByType('resource').filter(e=>e.startTime>=since).map(e=>e.name);for(const u of entries)if(queueDownloadUrl(u,'post-download-resource'))return true;return false;}"
+            + "window.__astraZSkyInspectDownloadResult=function(){return inspectDownloadResult(window.__astraZSkyFinalDownloadSince||0);};"
             + "if(!window.__astraZSkyDownloadClickHook){window.__astraZSkyDownloadClickHook=true;document.addEventListener('click',e=>{const b=e.target&&e.target.closest?e.target.closest('button,[role=button],a'):null;if(!b||!finalResultVisible())return;const label=((b.innerText||b.textContent||'')+' '+(b.getAttribute('aria-label')||'')).replace(/\\s+/g,' ').trim().toLowerCase();if(!/(^|\\b)download(\\b|$)/.test(label))return;const since=performance.now();console.info('ASTRA_ZSKY_DOWNLOAD_BUTTON_CLICKED');[100,350,900,1800,3200].forEach(ms=>setTimeout(()=>inspectDownloadResult(since),ms));},true);}"
             + "if(!window.__astraZSkyAutoDownloadTimer){window.__astraZSkyAutoDownloadTimer=setInterval(()=>{if(!finalResultVisible()||window.__astraZSkyDownloadButtonClicked)return;const b=[...document.querySelectorAll('button,[role=button],a')].find(x=>{const t=((x.innerText||x.textContent||'')+' '+(x.getAttribute('aria-label')||'')).replace(/\\s+/g,' ').trim().toLowerCase();return t==='download'&&!x.disabled&&x.getAttribute('aria-disabled')!=='true';});if(b){window.__astraZSkyDownloadButtonClicked=true;console.info('ASTRA_ZSKY_AUTO_CLICK_DOWNLOAD');b.click();}},1000);}"
             + "async function capture(v){if(!finalResultVisible())return;let u='';try{u=v.currentSrc||v.src||'';if(!u){const q=v.querySelector('source[src]');u=q?q.src:'';}"
@@ -412,7 +524,11 @@ public final class ZSkyWebViewActivity extends Activity {
     }
 
     public void minimizeStudio() {
-        runOnUiThread(() -> moveTaskToBack(true));
+        if (generationStartedAt > 0L) {
+            enterBackgroundRenderMode();
+        } else {
+            runOnUiThread(() -> moveTaskToBack(true));
+        }
     }
 
     public void closeStudio() {
@@ -493,6 +609,8 @@ public final class ZSkyWebViewActivity extends Activity {
 
     public static String bringToFront(Context context) {
         if (instance == null) return "{\"ok\":false,\"error\":\"zsky_not_started\"}";
+        ZSkyWebViewActivity a = instance;
+        if (a != null) a.restoreStudioRenderMode();
         Intent intent = new Intent(context, ZSkyWebViewActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP
                 | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
