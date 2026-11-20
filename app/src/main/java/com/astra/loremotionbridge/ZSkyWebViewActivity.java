@@ -246,8 +246,7 @@ public final class ZSkyWebViewActivity extends Activity {
                         value -> Log.i("ASTRA-ZSKY-DIAG", "heartbeat setup=" + value));
                 main.removeCallbacks(diagPoll);
                 main.postDelayed(diagPoll, 2000L);
-                // Do not hide the page here: SPA hydration and prompt submission
-                // happen after onPageFinished. Minimize only after Generate is confirmed.
+                // The page is already backgrounded; continue hydration and automation in place.
                 Log.i("ASTRA-ZSKY", "Page finished: " + url);
             }
         });
@@ -257,7 +256,19 @@ public final class ZSkyWebViewActivity extends Activity {
         if (initialPrompt != null && !initialPrompt.trim().isEmpty()) pendingPrompt = initialPrompt.trim();
         String url = getIntent().getStringExtra("url");
         webView.loadUrl(url == null || url.trim().isEmpty() ? ZSKY_URL : url);
-        // Do not minimize before the SPA has hydrated; Android may throttle hidden WebViews.
+        // Background-first contract: this Activity lives in its own task affinity.
+        // Send only the ZSky task to the back immediately; ChatActivity remains visible.
+        // Page loading, prompt injection and generation automation continue on this retained WebView.
+        if (backgroundRequested) {
+            main.postDelayed(() -> {
+                if (!isFinishing() && !isDestroyed()) {
+                    lastLifecycleEvent = "backgrounded_immediately";
+                    boolean moved = moveTaskToBack(true);
+                    Log.i("ASTRA-ZSKY", "Immediate background after launch moved=" + moved
+                            + " url=" + currentUrl + " pageLoaded=" + pageLoaded);
+                }
+            }, 120L);
+        }
 
     }
 
@@ -331,9 +342,7 @@ public final class ZSkyWebViewActivity extends Activity {
                         pendingPrompt = null;
                         main.removeCallbacks(generationObserver);
                         main.postDelayed(generationObserver, 1500L);
-                        if (backgroundRequested) main.postDelayed(() -> {
-                            if (!isFinishing() && !isDestroyed()) moveTaskToBack(true);
-                        }, 250L);
+                        // Already backgrounded immediately after launch; never wait for Generate to hide.
                     } else {
                         main.postDelayed(this::runPendingPrompt, 1000L);
                     }
