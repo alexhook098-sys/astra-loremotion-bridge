@@ -431,7 +431,8 @@ public class ChatActivity extends Activity {
                         .putString("messages", history.toString()).apply();
             } catch (Exception e) { android.util.Log.e("ASTRA-ZSKY-CHAT", "Could not persist video message", e); }
             // The video bubble is now present in chat and its URI is persisted.
-            // Only now may the background ZSky task be closed.
+            // Stop the elapsed-time notification only after this confirmed handoff.
+            ZSkyTaskTimerService.stop(getApplicationContext());
             ZSkyWebViewActivity.onChatHandoffComplete();
         }
     }
