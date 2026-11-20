@@ -119,15 +119,32 @@ public final class ZSkyWebViewActivity extends Activity {
      */
     private void enterBackgroundRenderMode() {
         if (!backgroundRequested || webView == null || isFinishing() || isDestroyed()) return;
-        runOnUiThread(() -> {
-            if (webView == null || isFinishing() || isDestroyed()) return;
-            webView.setVisibility(View.VISIBLE);
-            webView.onResume();
-            webView.resumeTimers();
-            lastLifecycleEvent = "studio-task-backgrounded";
-            Log.i("ASTRA-ZSKY-BG", "Generate confirmed; moving isolated ZSky task behind ASTRA");
-            moveTaskToBack(true);
-        });
+        runOnUiThread(this::activateTransparentRenderSurface);
+    }
+
+    /**
+     * Keep Chromium's WebView in a foreground, visible rendering surface.
+     * The window is transparent and non-touchable, so ASTRA Chat remains visible
+     * underneath and receives taps/keyboard input. Do NOT move this Activity's
+     * task to the back: Android throttles hidden WebView renderers even when
+     * resumeTimers() and a partial WakeLock are active.
+     */
+    private void activateTransparentRenderSurface() {
+        if (webView == null || isFinishing() || isDestroyed()) return;
+        getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
+        getWindow().getDecorView().setBackgroundColor(Color.TRANSPARENT);
+        if (rootLayout != null) rootLayout.setBackgroundColor(Color.TRANSPARENT);
+        if (status != null) status.setAlpha(0f);
+        webView.setVisibility(View.VISIBLE);
+        webView.setAlpha(0.01f);
+        webView.onResume();
+        webView.resumeTimers();
+        lastLifecycleEvent = "transparent-foreground-render-surface";
+        Log.i("ASTRA-ZSKY-BG", "Transparent foreground WebView active; "
+                + "chat receives input through non-touchable host window");
     }
 
     private void restoreStudioRenderMode() {
@@ -521,14 +538,7 @@ public final class ZSkyWebViewActivity extends Activity {
     }
 
     public void minimizeStudio() {
-        runOnUiThread(() -> {
-            if (webView != null) {
-                webView.onResume();
-                webView.resumeTimers();
-            }
-            lastLifecycleEvent = "studio-task-backgrounded-manual";
-            moveTaskToBack(true);
-        });
+        runOnUiThread(this::activateTransparentRenderSurface);
     }
 
     /** Close the isolated ZSky task only after the native downloader has published a valid file. */

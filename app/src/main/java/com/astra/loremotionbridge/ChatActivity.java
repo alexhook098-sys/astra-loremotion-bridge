@@ -121,6 +121,56 @@ public class ChatActivity extends Activity {
         super.onPause();
     }
 
+    private void showTaskCenterDialog() {
+        android.content.SharedPreferences prefs = getSharedPreferences("astra_chat", MODE_PRIVATE);
+        String state = prefs.getString("zsky_task_state", "idle");
+        String detail = prefs.getString("zsky_task_detail", "Пока нет активных заданий");
+        long started = prefs.getLong("zsky_task_started", 0L);
+        long elapsed = started > 0L ? Math.max(0L, (System.currentTimeMillis() - started) / 1000L) : 0L;
+        String clock = String.format(java.util.Locale.ROOT, "%02d:%02d", elapsed / 60L, elapsed % 60L);
+        String label;
+        if ("loading".equals(state) || "queued".equals(state)) label = "ПОДКЛЮЧЕНИЕ";
+        else if ("prompt_entered".equals(state)) label = "ПОДГОТОВКА";
+        else if ("rendering".equals(state) || "submitted_unconfirmed".equals(state)) label = "РЕНДЕРИНГ";
+        else if ("result_ready".equals(state)) label = "РЕЗУЛЬТАТ ГОТОВ";
+        else if ("downloading".equals(state)) label = "СКАЧИВАНИЕ";
+        else if ("completed".equals(state)) label = "ГОТОВО";
+        else if ("failed".equals(state) || "automation_timeout".equals(state)) label = "ТРЕБУЕТ ВНИМАНИЯ";
+        else label = "ОЖИДАНИЕ";
+        StringBuilder message = new StringBuilder("ZSKY · ").append(label)
+                .append("\n").append(detail);
+        if (started > 0L) message.append("\nВремя задачи · ").append(clock);
+        JSONArray saved;
+        try { saved = new JSONArray(prefs.getString("messages", "[]")); }
+        catch (Exception e) { saved = new JSONArray(); }
+        String latestUri = "";
+        for (int i = saved.length() - 1; i >= 0; i--) {
+            JSONObject item = saved.optJSONObject(i);
+            if (item != null && "zsky_video".equals(item.optString("type"))) {
+                latestUri = item.optString("uri", "");
+                if (!latestUri.isEmpty()) break;
+            }
+        }
+        AlertDialog.Builder dialog = new AlertDialog.Builder(this)
+                .setTitle("✦ ASTRA · ЦЕНТР ЗАДАЧ")
+                .setMessage(message.toString())
+                .setPositiveButton("ЗАКРЫТЬ", null);
+        if (!latestUri.isEmpty()) {
+            final String uri = latestUri;
+            dialog.setNeutralButton("ОТКРЫТЬ ПОСЛЕДНЕЕ MP4", (d, which) -> {
+                try {
+                    Intent open = new Intent(Intent.ACTION_VIEW);
+                    open.setDataAndType(Uri.parse(uri), "video/mp4");
+                    open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    startActivity(open);
+                } catch (Exception e) {
+                    addMessage("Не удалось открыть сохранённое видео.", false, true);
+                }
+            });
+        }
+        dialog.show();
+    }
+
     private void buildScreen() {
         LinearLayout screen = new LinearLayout(this);
         screen.setOrientation(LinearLayout.VERTICAL);
@@ -181,7 +231,7 @@ public class ChatActivity extends Activity {
 
 
         Button taskCenter = smallButton("✦  ЦЕНТР ЗАДАЧ · ГЕНЕРАЦИИ", CYAN);
-        taskCenter.setOnClickListener(v -> startActivity(new Intent(this, TaskCenterActivity.class)));
+        taskCenter.setOnClickListener(v -> showTaskCenterDialog());
         LinearLayout.LayoutParams taskCenterParams = new LinearLayout.LayoutParams(-1, dp(43));
         taskCenterParams.bottomMargin = dp(8);
         root.addView(taskCenter, taskCenterParams);
