@@ -12,6 +12,7 @@ on:
       - fix/flow-download-auth-response
       - fix/zsky-372-restore-https-download
       - fix/zsky-372-restore-371-stream-downloader
+      - fix/zsky-active-render-surface
       - feature/zsky-chat-background-from-362
 
 jobs:
