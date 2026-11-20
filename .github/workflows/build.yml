@@ -14,6 +14,7 @@ on:
       - fix/zsky-372-restore-371-stream-downloader
       - fix/zsky-active-render-surface
       - feature/zsky-chat-background-from-362
+      - fix/chat-handoff-preserve-417-minimize
 
 jobs:
   build:
