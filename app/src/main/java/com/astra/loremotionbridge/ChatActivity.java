@@ -111,6 +111,7 @@ public class ChatActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         chatResumed = true;
+        renderZSkyTaskStatus();
         consumePendingPerchanceImages();
         consumePendingFlowVideos();
         consumePendingZSkyVideos();
@@ -457,8 +458,15 @@ public class ChatActivity extends Activity {
         try { pending = new JSONArray(prefs.getString("zsky_pending_videos", "[]")); }
         catch (Exception e) { pending = new JSONArray(); }
         try {
-            pending.put(new JSONObject().put("uri", video.toString()));
-            prefs.edit().putString("zsky_pending_videos", pending.toString()).apply();
+            boolean exists = false;
+            for (int i = 0; i < pending.length(); i++) {
+                JSONObject item = pending.optJSONObject(i);
+                if (item != null && video.toString().equals(item.optString("uri"))) { exists = true; break; }
+            }
+            if (!exists) {
+                pending.put(new JSONObject().put("uri", video.toString()));
+                prefs.edit().putString("zsky_pending_videos", pending.toString()).commit();
+            }
         } catch (Exception ignored) {}
         ChatActivity activity = activeInstance;
         // The chat remains alive beneath the translucent ZSky render host.
@@ -474,17 +482,29 @@ public class ChatActivity extends Activity {
         try { pending = new JSONArray(prefs.getString("zsky_pending_videos", "[]")); }
         catch (Exception e) { pending = new JSONArray(); }
         if (pending.length() == 0) return;
-        prefs.edit().remove("zsky_pending_videos").apply();
         for (int i = 0; i < pending.length(); i++) {
             JSONObject item = pending.optJSONObject(i);
             if (item == null) continue;
             String value = item.optString("uri", "");
-            if (!value.isEmpty()) addZSkyVideoMessage(Uri.parse(value), true);
+            if (!value.isEmpty() && !hasZSkyVideoInHistory(value))
+                addZSkyVideoMessage(Uri.parse(value), true);
         }
+        prefs.edit().remove("zsky_pending_videos").commit();
+    }
+
+    private boolean hasZSkyVideoInHistory(String uri) {
+        if (uri == null || uri.isEmpty() || history == null) return false;
+        for (int i = 0; i < history.length(); i++) {
+            JSONObject item = history.optJSONObject(i);
+            if (item != null && "zsky_video".equals(item.optString("type"))
+                    && uri.equals(item.optString("uri"))) return true;
+        }
+        return false;
     }
 
     private void addZSkyVideoMessage(Uri video, boolean save) {
-        if (video == null || video.toString().isEmpty() || messages == null) return;
+        if (video == null || video.toString().isEmpty() || messages == null
+                || hasZSkyVideoInHistory(video.toString())) return;
         String message = "✦ ASTRA ZSKY: видео сохранено · Movies/ASTRA/ZSky\\nНажми здесь, чтобы открыть MP4.";
         addMessage(message, false, false);
         int last = messages.getChildCount() - 1;

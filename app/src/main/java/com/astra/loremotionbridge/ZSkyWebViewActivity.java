@@ -95,9 +95,14 @@ public final class ZSkyWebViewActivity extends Activity {
                     boolean finalResultReady = tail.contains("rendered on the free lane")
                             && tail.contains("download");
                     if (finalResultReady) {
-                        generationState = "completed_waiting_for_download";
-                        ZSkyTaskState.update(ZSkyWebViewActivity.this, "result_ready", "Видео готово · запускаю скачивание");
-                        main.post(ZSkyWebViewActivity.this::attemptNativeFinalDownload);
+                        String savedState = getSharedPreferences("astra_chat", MODE_PRIVATE)
+                                .getString("zsky_task_state", "");
+                        if (!"downloading".equals(savedState) && !"completed".equals(savedState)
+                                && !"failed".equals(savedState)) {
+                            generationState = "completed_waiting_for_download";
+                            ZSkyTaskState.update(ZSkyWebViewActivity.this, "result_ready", "Видео готово · запускаю скачивание");
+                            main.post(ZSkyWebViewActivity.this::attemptNativeFinalDownload);
+                        }
                     } else if (tail.contains("generation failed") || tail.contains("ошибка генерации")) {
                         generationState = "failed";
                         ZSkyTaskState.update(ZSkyWebViewActivity.this, "failed", "ZSky сообщил об ошибке генерации");
@@ -119,48 +124,13 @@ public final class ZSkyWebViewActivity extends Activity {
      */
     private void enterBackgroundRenderMode() {
         if (!backgroundRequested || webView == null || isFinishing() || isDestroyed()) return;
-        runOnUiThread(this::activateTransparentRenderSurface);
-    }
-
-    /**
-     * Keep Chromium's WebView in a foreground, visible rendering surface.
-     * The window is transparent and non-touchable, so ASTRA Chat remains visible
-     * underneath and receives taps/keyboard input. Do NOT move this Activity's
-     * task to the back: Android throttles hidden WebView renderers even when
-     * resumeTimers() and a partial WakeLock are active.
-     */
-    private void activateTransparentRenderSurface() {
-        if (webView == null || isFinishing() || isDestroyed()) return;
-        getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
-        getWindow().getDecorView().setBackgroundColor(Color.TRANSPARENT);
-        if (rootLayout != null) rootLayout.setBackgroundColor(Color.TRANSPARENT);
-        if (status != null) status.setAlpha(0f);
-        webView.setVisibility(View.VISIBLE);
-        webView.setAlpha(0.01f);
-        webView.onResume();
-        webView.resumeTimers();
-        lastLifecycleEvent = "transparent-foreground-render-surface";
-        Log.i("ASTRA-ZSKY-BG", "Transparent foreground WebView active; "
-                + "chat receives input through non-touchable host window");
-    }
-
-    private void restoreStudioRenderMode() {
         runOnUiThread(() -> {
-            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                    | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
-            getWindow().setBackgroundDrawable(new ColorDrawable(0xFF080B18));
-            if (rootLayout != null) rootLayout.setBackgroundColor(0xFF080B18);
-            if (status != null) status.setAlpha(1f);
-            if (webView != null) {
-                webView.setAlpha(1f);
-                webView.setVisibility(View.VISIBLE);
-                webView.onResume();
-                webView.resumeTimers();
-            }
-            Log.i("ASTRA-ZSKY-BG", "Normal studio surface restored");
+            if (webView == null || isFinishing() || isDestroyed()) return;
+            webView.resumeTimers();
+            boolean moved = moveTaskToBack(true);
+            lastLifecycleEvent = moved ? "zsky-task-minimized" : "zsky-minimize-failed";
+            Log.i("ASTRA-ZSKY-BG", "ZSky task minimized=" + moved
+                    + "; page remains loaded for background rendering");
         });
     }
 
@@ -220,6 +190,7 @@ public final class ZSkyWebViewActivity extends Activity {
                 url, webView.getSettings().getUserAgentString(), webView.getUrl());
         Log.i("ASTRA-ZSKY-DOWNLOAD",
                 "FINAL MP4 routed to silent native stream queued=" + queued + " source=" + source);
+        if (queued) generationState = "downloading";
         ZSkyTaskState.update(this, queued ? "downloading" : "failed",
                 queued ? "Скачиваю готовое видео" : "Не удалось начать скачивание");
         if (status != null) status.setText(queued
@@ -365,7 +336,6 @@ public final class ZSkyWebViewActivity extends Activity {
         backgroundRequested = intent.getBooleanExtra("background", backgroundRequested);
         String prompt = intent.getStringExtra("prompt");
         if (prompt != null && !prompt.trim().isEmpty()) {
-            restoreStudioRenderMode();
             pendingPrompt = prompt.trim();
             promptInjected = false;
             automationAttempts = 0;
@@ -538,19 +508,24 @@ public final class ZSkyWebViewActivity extends Activity {
     }
 
     public void minimizeStudio() {
-        runOnUiThread(this::activateTransparentRenderSurface);
+        runOnUiThread(() -> {
+            if (webView != null && !isFinishing() && !isDestroyed()) {
+                webView.resumeTimers();
+                moveTaskToBack(true);
+            }
+        });
     }
 
     /** Close the isolated ZSky task only after the native downloader has published a valid file. */
     public static void closeAfterSuccessfulSave() {
         ZSkyWebViewActivity a = instance;
         if (a == null) return;
-        a.main.postDelayed(() -> {
+        a.main.post(() -> {
             if (instance == a && !a.isFinishing() && !a.isDestroyed()) {
-                Log.i("ASTRA-ZSKY", "Verified download complete; closing ZSky worker");
-                a.finish();
+                Log.i("ASTRA-ZSKY", "Verified MediaStore save and chat handoff; closing ZSky worker");
+                a.finishAndRemoveTask();
             }
-        }, 2200L);
+        });
     }
 
     public void closeStudio() {
@@ -631,8 +606,6 @@ public final class ZSkyWebViewActivity extends Activity {
 
     public static String bringToFront(Context context) {
         if (instance == null) return "{\"ok\":false,\"error\":\"zsky_not_started\"}";
-        ZSkyWebViewActivity a = instance;
-        if (a != null) a.restoreStudioRenderMode();
         Intent intent = new Intent(context, ZSkyWebViewActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP
                 | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
