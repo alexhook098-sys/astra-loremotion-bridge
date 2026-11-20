@@ -580,7 +580,10 @@ public class ChatActivity extends Activity {
         android.content.SharedPreferences prefs = getSharedPreferences("astra_chat", MODE_PRIVATE);
         String state = prefs.getString("zsky_task_state", "");
         String detail = prefs.getString("zsky_task_detail", "");
-        if (state.isEmpty() || "idle".equals(state)) {
+        // The elapsed timer belongs to a live ZSky worker, not to the chat screen.
+        // Old persisted task state must not keep a timer visible after ZSky is closed.
+        if (state.isEmpty() || "idle".equals(state)
+                || ZSkyWebViewActivity.getInstance() == null) {
             zskyTaskStatus.setVisibility(View.GONE);
             return;
         }
