@@ -140,9 +140,6 @@ public final class TaskCenterActivity extends Activity {
         bg.setColor(PANEL); bg.setCornerRadius(dp(18));
         bg.setStroke(dp(1), Color.rgb(65,103,140));
         box.setBackground(bg);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.bottomMargin = dp(12);
-        content.addView(box, lp);
         return box;
     }
     private TextView text(String value, int size, int color, boolean bold) {
