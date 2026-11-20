@@ -14,6 +14,7 @@ on:
       - fix/zsky-372-restore-371-stream-downloader
       - feature/zsky-chat-background-from-362
       - fix/zsky-395-native-final-stage-observer
+      - fix/zsky-immediate-background-session
 
 jobs:
   build:
