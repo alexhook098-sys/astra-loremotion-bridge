@@ -118,8 +118,8 @@ public final class ZSkyWebViewActivity extends Activity {
         }
     };
     /**
-     * ZSky runs in its own Android task. Once Generate is confirmed, send only
-     * the studio task to the back so ChatActivity becomes interactive again.
+     * ZSky runs in its own Android task. Minimize immediately after navigation
+     * starts; page hydration and prompt automation continue in the background.
      * WebView timers are intentionally left running in onPause().
      */
     private void enterBackgroundRenderMode() {
@@ -326,7 +326,9 @@ public final class ZSkyWebViewActivity extends Activity {
         if (initialPrompt != null && !initialPrompt.trim().isEmpty()) pendingPrompt = initialPrompt.trim();
         String url = getIntent().getStringExtra("url");
         webView.loadUrl(url == null || url.trim().isEmpty() ? ZSKY_URL : url);
-        // Do not minimize before the SPA has hydrated; Android may throttle hidden WebViews.
+        // Return to ASTRA immediately. The studio keeps loading in its own task;
+        // onPageFinished + runPendingPrompt wait for the real page controls.
+        if (backgroundRequested) main.postDelayed(this::enterBackgroundRenderMode, 180L);
 
     }
 
@@ -347,7 +349,9 @@ public final class ZSkyWebViewActivity extends Activity {
         if (url != null && !url.trim().isEmpty() && webView != null
                 && !url.equals(webView.getUrl())) {
             webView.loadUrl(url);
-        } // Minimize only after the Generate click is confirmed.
+        }
+        if (backgroundRequested) main.postDelayed(this::enterBackgroundRenderMode, 120L);
+        // A reused studio task also moves back before navigation/hydration.
     }
 
     private void runPendingPrompt() {
