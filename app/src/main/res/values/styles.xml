@@ -9,4 +9,15 @@
         <item name="android:windowBackground">#070B1A</item>
         <item name="android:colorButtonNormal">#151B35</item>
     </style>
+
+    <!-- Translucent host keeps the ZSky WebView attached to a foreground window
+         while ASTRA Chat remains visible behind it during background rendering. -->
+    <style name="ZSkyRenderHostTheme" parent="@style/AppTheme">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
 </resources>
