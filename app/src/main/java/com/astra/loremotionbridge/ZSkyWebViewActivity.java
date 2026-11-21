@@ -46,6 +46,7 @@ public final class ZSkyWebViewActivity extends Activity {
     private long generationStartedAt;
     private int baselineVideoCount = -1;
     private String generationState = "idle";
+    private boolean finalDownloadClickSent;
     private String generationEvidence = "";
     private int diagPollCount;
     private long lastDiagAt;
@@ -87,15 +88,51 @@ public final class ZSkyWebViewActivity extends Activity {
                     }
                     org.json.JSONObject e = new org.json.JSONObject(payload);
                     String tail = e.optString("tail", "").toLowerCase(java.util.Locale.ROOT);
-                    if (tail.contains("generation failed") || tail.contains("ошибка генерации")) generationState = "failed";
-                    else if (e.optInt("busy", 0) > 0) generationState = "running";
-                    else if (baselineVideoCount >= 0 && e.optInt("videos", 0) > baselineVideoCount) generationState = "completed_unconfirmed";
+                    boolean stage3Ready = tail.contains("rendered on the free lane")
+                            && tail.contains("download");
+                    if (stage3Ready) {
+                        generationState = "stage3_ready";
+                        if (!finalDownloadClickSent) clickStage3DownloadNatively();
+                    } else if (tail.contains("generation failed") || tail.contains("ошибка генерации")) {
+                        generationState = "failed";
+                    } else if (e.optInt("busy", 0) > 0) {
+                        generationState = "running";
+                    } else if (baselineVideoCount >= 0 && e.optInt("videos", 0) > baselineVideoCount) {
+                        generationState = "completed_unconfirmed";
+                    }
                 } catch (Exception ex) { Log.w("ASTRA-ZSKY-OBSERVER", "Evidence parse failed", ex); }
                 Log.i("ASTRA-ZSKY-OBSERVER", "poll=" + observerPolls + " state=" + generationState + " evidence=" + generationEvidence);
                 if (webView != null && !isFinishing() && !isDestroyed()) main.postDelayed(this, 5000L);
             });
         }
     };
+    /**
+     * Stage 3 is driven by the native observer, not a page timer. This keeps the
+     * existing minimized-task behavior and performs the same user-facing Download
+     * action as soon as ZSky exposes its final result screen.
+     */
+    private void clickStage3DownloadNatively() {
+        if (webView == null || isFinishing() || isDestroyed()) return;
+        String js = "(function(){try{"
+                + "const t=(document.body&&document.body.innerText||'').toLowerCase();"
+                + "if(!t.includes('rendered on the free lane')||!t.includes('download'))return 'STAGE3_NOT_READY';"
+                + "const b=[...document.querySelectorAll('button,[role=button],a')].find(x=>{"
+                + "const s=((x.innerText||x.textContent||'')+' '+(x.getAttribute('aria-label')||''))"
+                + ".replace(/\\s+/g,' ').trim().toLowerCase();"
+                + "return s==='download'&&!x.disabled&&x.getAttribute('aria-disabled')!=='true';});"
+                + "if(!b)return 'STAGE3_DOWNLOAD_CONTROL_NOT_FOUND';"
+                + "b.click();return 'STAGE3_DOWNLOAD_CLICKED';"
+                + "}catch(e){return 'STAGE3_ERROR:'+String(e);}})()";
+        webView.evaluateJavascript(js, value -> {
+            String result = value == null ? "" : value;
+            Log.i("ASTRA-ZSKY-STAGE3", "native transition result=" + result);
+            if (result.contains("STAGE3_DOWNLOAD_CLICKED")) {
+                finalDownloadClickSent = true;
+                generationState = "stage3_download_started";
+            }
+        });
+    }
+
     private void downloadFinalZSkyMp4(String url, String source) {
         if (videoCaptureBridge == null || webView == null) return;
         boolean queued = videoCaptureBridge.downloadRemoteVideo(
@@ -248,6 +285,7 @@ public final class ZSkyWebViewActivity extends Activity {
             promptInjected = false;
             automationAttempts = 0;
             generationState = "queued";
+            finalDownloadClickSent = false;
             if (pageLoaded) main.postDelayed(this::runPendingPrompt, 400L);
         }
         String url = intent.getStringExtra("url");
