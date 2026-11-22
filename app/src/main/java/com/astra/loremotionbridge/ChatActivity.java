@@ -84,6 +84,8 @@ public class ChatActivity extends Activity {
                         addPerchanceImageMessage(Uri.parse(m.optString("uri", "")), false);
                     } else if ("flow_video".equals(m.optString("type"))) {
                         addVideoMessage(Uri.parse(m.optString("uri", "")), false);
+                    } else if ("story_motion_video".equals(m.optString("type"))) {
+                        addStoryMotionVideoMessage(Uri.parse(m.optString("uri", "")), false);
                     } else if ("zsky_video".equals(m.optString("type"))) {
                         addZSkyVideoMessage(Uri.parse(m.optString("uri", "")), false);
                     } else {
