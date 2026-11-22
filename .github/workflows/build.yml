@@ -13,6 +13,7 @@ on:
       - fix/zsky-372-restore-https-download
       - fix/zsky-372-restore-371-stream-downloader
       - feature/zsky-chat-background-from-362
+      - feature/story-motion-diagnostics-on-stable-400
 
 jobs:
   build:
@@ -36,6 +37,12 @@ jobs:
         run: |
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.13113456"
           bash tools/build_ffmpeg_android.sh
+      - name: Build local RIFE v4.6 for Android ARM64
+        if: github.ref == 'refs/heads/feature/story-motion-diagnostics-on-stable-400'
+        shell: bash
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.13113456"
+          bash tools/build_rife_android.sh
       - name: Fetch pinned llama.cpp source
         run: |
           git clone --filter=blob:none https://github.com/ggml-org/llama.cpp.git llama.cpp
