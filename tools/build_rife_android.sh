@@ -32,6 +32,7 @@ VULKAN_LIB="$SYSROOT/usr/lib/aarch64-linux-android/24/libvulkan.so"
 test -f "$VULKAN_LIB" || { echo "Android NDK Vulkan stub not found: $VULKAN_LIB" >&2; exit 1; }
 
 cmake -S "$SOURCE/src" -B "$BUILD" \
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
   -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
   -DANDROID_ABI=arm64-v8a \
   -DANDROID_PLATFORM=android-24 \
