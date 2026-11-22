@@ -11,6 +11,7 @@ on:
       - fix/flow-video-capture-retry
       - fix/flow-download-auth-response
       - fix/one-click-motion-isolation
+      - feature/astra-story-motion
 
 jobs:
   build:
