@@ -50,6 +50,8 @@ public class ChatActivity extends Activity {
     private static final int PICK_STORY_MOTION_REFERENCE = 18770;
 
     private final ExecutorService modelExecutor = Executors.newSingleThreadExecutor();
+    // Keep long RIFE jobs isolated from chat/model requests and the existing One Click Motion queue.
+    private final ExecutorService storyMotionExecutor = Executors.newSingleThreadExecutor();
     private LinearLayout messages;
     private ScrollView messageScroll;
     private EditText input;
@@ -333,7 +335,7 @@ public class ChatActivity extends Activity {
     private void processStoryMotionReference(Uri uri) {
         addMessage("Референс принят для ASTRA STORY MOTION.", true, true);
         addMessage("Разделяю четыре сцены и запускаю локальную интерполяцию RIFE…", false, true);
-        modelExecutor.execute(() -> {
+        storyMotionExecutor.execute(() -> {
             try {
                 Uri video = AstraStoryMotionEngine.createVideo(this, uri);
                 runOnUiThread(() -> addStoryMotionVideoMessage(video));
