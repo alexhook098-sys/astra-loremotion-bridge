@@ -47,6 +47,7 @@ public class ChatActivity extends Activity {
     private static final int PICK_WALLPAPER = 18768;
     private static final int PICK_MODEL = 18767;
     private static final int PICK_MOTION_REFERENCE = 18769;
+    private static final int PICK_STORY_MOTION_REFERENCE = 18770;
 
     private final ExecutorService modelExecutor = Executors.newSingleThreadExecutor();
     private LinearLayout messages;
@@ -80,6 +81,8 @@ public class ChatActivity extends Activity {
                         addVideoMessage(Uri.parse(m.optString("uri", "")), false);
                     } else if ("motion_video".equals(m.optString("type"))) {
                         addMotionVideoMessage(Uri.parse(m.optString("uri", "")), false);
+                    } else if ("story_motion_video".equals(m.optString("type"))) {
+                        addStoryMotionVideoMessage(Uri.parse(m.optString("uri", "")), false);
                     } else {
                         addMessage(m.optString("text"), m.optBoolean("user"), false);
                     }
@@ -181,6 +184,12 @@ public class ChatActivity extends Activity {
         motionParams.bottomMargin = dp(8);
         root.addView(motionButton, motionParams);
 
+        Button storyMotionButton = smallButton("✧  ASTRA STORY MOTION · RIFE × 4 СЦЕНЫ", LILAC);
+        storyMotionButton.setOnClickListener(v -> chooseStoryMotionReference());
+        LinearLayout.LayoutParams storyMotionParams = new LinearLayout.LayoutParams(-1, dp(44));
+        storyMotionParams.bottomMargin = dp(8);
+        root.addView(storyMotionButton, storyMotionParams);
+
         Button radioButton = smallButton("♫  SOUNDPARK DEEP · RADIO", CYAN);
         radioButton.setOnClickListener(v -> startActivity(new Intent(this, RadioActivity.class)));
         LinearLayout.LayoutParams radioParams = new LinearLayout.LayoutParams(-1, dp(40));
@@ -276,6 +285,10 @@ public class ChatActivity extends Activity {
             processMotionReference(data.getData());
             return;
         }
+        if (requestCode == PICK_STORY_MOTION_REFERENCE && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            processStoryMotionReference(data.getData());
+            return;
+        }
         if (requestCode == PICK_WALLPAPER && resultCode == RESULT_OK && data != null && data.getData() != null) {
             try (InputStream in = getContentResolver().openInputStream(data.getData());
                  FileOutputStream out = new FileOutputStream(new File(getFilesDir(), "astra_chat_wallpaper.jpg"))) {
@@ -303,6 +316,35 @@ public class ChatActivity extends Activity {
         startActivityForResult(pick, PICK_MOTION_REFERENCE);
     }
 
+    private void chooseStoryMotionReference() {
+        Intent pick;
+        if (Build.VERSION.SDK_INT >= 33) {
+            pick = new Intent(android.provider.MediaStore.ACTION_PICK_IMAGES);
+            pick.setType("image/*");
+            pick.putExtra(android.provider.MediaStore.EXTRA_PICK_IMAGES_MAX, 1);
+        } else {
+            pick = new Intent(Intent.ACTION_GET_CONTENT);
+            pick.setType("image/*");
+            pick.addCategory(Intent.CATEGORY_OPENABLE);
+        }
+        startActivityForResult(pick, PICK_STORY_MOTION_REFERENCE);
+    }
+
+    private void processStoryMotionReference(Uri uri) {
+        addMessage("Референс принят для ASTRA STORY MOTION.", true, true);
+        addMessage("Разделяю четыре сцены и запускаю локальную интерполяцию RIFE…", false, true);
+        modelExecutor.execute(() -> {
+            try {
+                Uri video = AstraStoryMotionEngine.createVideo(this, uri);
+                runOnUiThread(() -> addStoryMotionVideoMessage(video));
+            } catch (Exception e) {
+                runOnUiThread(() -> addMessage("Не удалось создать STORY MOTION: " +
+                        (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()),
+                        false, true));
+            }
+        });
+    }
+
     private void processMotionReference(Uri uri) {
         addMessage("Референс принят для ASTRA One Click Motion.", true, true);
         addMessage("Разбираю лист 5×4 и создаю плавное видео…", false, true);
@@ -320,6 +362,43 @@ public class ChatActivity extends Activity {
 
     private void addVideoMessage(Uri video) {
         addVideoMessage(video, true);
+    }
+
+    private void addStoryMotionVideoMessage(Uri video) {
+        addStoryMotionVideoMessage(video, true);
+    }
+
+    private void addStoryMotionVideoMessage(Uri video, boolean save) {
+        if (video == null || video.toString().isEmpty() || messages == null) return;
+        String message = "✧ ASTRA STORY MOTION: видео создано · Movies/ASTRA/StoryMotion\\nНажми здесь, чтобы открыть MP4.";
+        addMessage(message, false, false);
+        int last = messages.getChildCount() - 1;
+        if (last >= 0) {
+            View row = messages.getChildAt(last);
+            if (row instanceof ViewGroup && ((ViewGroup) row).getChildCount() > 0) {
+                View bubble = ((ViewGroup) row).getChildAt(0);
+                bubble.setOnClickListener(v -> {
+                    Intent open = new Intent(Intent.ACTION_VIEW);
+                    open.setDataAndType(video, "video/mp4");
+                    open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    try { startActivity(open); }
+                    catch (Exception e) { addMessage("Не найдено приложение для просмотра MP4.", false, true); }
+                });
+            }
+        }
+        if (save) {
+            try {
+                history.put(new JSONObject()
+                        .put("type", "story_motion_video")
+                        .put("text", message)
+                        .put("uri", video.toString())
+                        .put("user", false));
+                getSharedPreferences("astra_chat", MODE_PRIVATE).edit()
+                        .putString("messages", history.toString()).apply();
+            } catch (Exception e) {
+                android.util.Log.e("ASTRA-STORY-MOTION-CHAT", "Could not persist Story Motion video", e);
+            }
+        }
     }
 
     private void addMotionVideoMessage(Uri video) {
