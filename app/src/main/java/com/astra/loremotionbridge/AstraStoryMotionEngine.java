@@ -43,7 +43,7 @@ public final class AstraStoryMotionEngine {
 
             File runtime = prepareRuntime(context);
             File rife = new File(runtime, "rife-ncnn-vulkan");
-            File model = new File(runtime, "model");
+            File model = new File(runtime, "rife-v4.6");
             File ffmpeg = new File(context.getApplicationInfo().nativeLibraryDir, "libffmpeg.so");
             if (!ffmpeg.isFile() || !ffmpeg.canExecute())
                 throw new IllegalStateException("Встроенный FFmpeg не найден или недоступен для запуска");
@@ -116,8 +116,8 @@ public final class AstraStoryMotionEngine {
         File bin = new File(model, "flownet.bin");
         File param = new File(model, "flownet.param");
         copyAssetIfMissing(context, "story_motion/rife-ncnn-vulkan", binary);
-        copyAssetIfMissing(context, "story_motion/model/flownet.bin", bin);
-        copyAssetIfMissing(context, "story_motion/model/flownet.param", param);
+        copyAssetIfMissing(context, "story_motion/rife-v4.6/flownet.bin", bin);
+        copyAssetIfMissing(context, "story_motion/rife-v4.6/flownet.param", param);
         if (!binary.setExecutable(true, true) && !binary.canExecute())
             throw new IllegalStateException("Android не разрешил запуск встроенного RIFE");
         if (!binary.isFile() || !bin.isFile() || !param.isFile())
