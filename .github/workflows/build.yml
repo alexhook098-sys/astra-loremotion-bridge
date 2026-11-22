@@ -1,16 +1,5 @@
 name: Build ASTRA APK (ARM64 + local Qwen)
 on:
-  workflow_dispatch:
-    inputs:
-      rife_archive_url:
-        description: "Direct download URL for ASTRA_STORY_MOTION_RIFE.zip"
-        required: false
-        type: string
-      rife_archive_sha256:
-        description: "SHA-256 of the RIFE ZIP"
-        required: false
-        default: "9477555bcfb6dec654ce99a2fe326a8c7c11bcd69ac274504c5789bf440bd3f3"
-        type: string
   push:
     branches:
       - feature/local-qwen-android
@@ -45,51 +34,12 @@ jobs:
         run: |
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.13113456"
           bash tools/build_ffmpeg_android.sh
-      - name: Require RIFE archive for manual Story Motion build
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feature/astra-story-motion'
-        env:
-          RIFE_ARCHIVE_URL: ${{ inputs.rife_archive_url }}
-        run: |
-          if [[ -z "${RIFE_ARCHIVE_URL}" ]]; then
-            echo "::error::Provide rife_archive_url to build the Story Motion APK with its local RIFE runtime."
-            exit 1
-          fi
-      - name: Package verified RIFE runtime into APK assets
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feature/astra-story-motion'
-        env:
-          RIFE_ARCHIVE_URL: ${{ inputs.rife_archive_url }}
-          RIFE_ARCHIVE_SHA256: ${{ inputs.rife_archive_sha256 }}
+      - name: Build local RIFE v4.6 for Android ARM64
+        if: github.ref == 'refs/heads/feature/astra-story-motion'
         shell: bash
         run: |
-          set -euo pipefail
-          mkdir -p .build/story-motion
-          curl --fail --location --retry 3 --retry-all-errors "${RIFE_ARCHIVE_URL}" -o .build/story-motion/rife.zip
-          echo "${RIFE_ARCHIVE_SHA256}  .build/story-motion/rife.zip" | sha256sum --check -
-          python3 - <<'PY'
-          import pathlib, zipfile
-          archive = pathlib.Path(".build/story-motion/rife.zip")
-          target = pathlib.Path("app/src/main/assets/story_motion")
-          expected = {
-              "rife-ncnn-vulkan": target / "rife-ncnn-vulkan",
-              "model/flownet.bin": target / "model/flownet.bin",
-              "model/flownet.param": target / "model/flownet.param",
-          }
-          with zipfile.ZipFile(archive) as z:
-              bad = z.testzip()
-              if bad:
-                  raise SystemExit(f"Corrupt ZIP member: {bad}")
-              names = set(z.namelist())
-              missing = set(expected) - names
-              if missing:
-                  raise SystemExit(f"Missing RIFE files: {sorted(missing)}")
-              for name, destination in expected.items():
-                  destination.parent.mkdir(parents=True, exist_ok=True)
-                  destination.write_bytes(z.read(name))
-          PY
-          chmod 0755 app/src/main/assets/story_motion/rife-ncnn-vulkan
-          readelf -h app/src/main/assets/story_motion/rife-ncnn-vulkan | grep -E 'Class:.*ELF64|Machine:.*AArch64'
-          test -s app/src/main/assets/story_motion/model/flownet.bin
-          test -s app/src/main/assets/story_motion/model/flownet.param
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.13113456"
+          bash tools/build_rife_android.sh
       - name: Fetch pinned llama.cpp source
         run: |
           git clone --filter=blob:none https://github.com/ggml-org/llama.cpp.git llama.cpp
