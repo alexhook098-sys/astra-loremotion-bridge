@@ -109,7 +109,7 @@ public final class AstraStoryMotionEngine {
 
     private static File prepareRuntime(Context context) throws Exception {
         File runtime = new File(context.getFilesDir(), "story_motion_runtime");
-        File model = new File(runtime, "model");
+        File model = new File(runtime, "rife-v4.6");
         if (!model.exists() && !model.mkdirs())
             throw new IllegalStateException("Не удалось создать папку модели RIFE");
         File binary = new File(runtime, "rife-ncnn-vulkan");
