@@ -12,6 +12,7 @@ import android.provider.MediaStore;
 import android.util.Base64;
 import android.util.Log;
 import android.view.Gravity;
+import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.ConsoleMessage;
 import android.webkit.DownloadListener;
@@ -88,8 +89,6 @@ public final class PerchanceBrowserPanel extends LinearLayout {
             main.postDelayed(this, 2000L);
         }
     };
-
-    public static PerchanceBrowserActivity getInstance() { return instance; }
 
     public PerchanceBrowserPanel(Activity host, boolean embedded, String initialPrompt) {
         super(host);
@@ -771,7 +770,7 @@ public final class PerchanceBrowserPanel extends LinearLayout {
         return result[0] == null ? statusErrorJson("status_unavailable") : result[0];
     }
 
-private void setStatus(String text) {
+    private void setStatus(String text) {
         main.post(() -> {
             if (status != null) status.setText(text);
         });
