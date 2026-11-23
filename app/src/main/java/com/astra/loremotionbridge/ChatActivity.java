@@ -126,14 +126,11 @@ public class ChatActivity extends Activity {
         screen.setOrientation(LinearLayout.VERTICAL);
         screen.setPadding(dp(16), dp(12), dp(16), dp(8));
 
-        ScrollView rootScroll = new ScrollView(this);
-        rootScroll.setFillViewport(true);
-        rootScroll.setBackgroundColor(Color.TRANSPARENT);
+        // Keep the header fixed and let the conversation occupy all remaining vertical space.
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(0, 0, 0, dp(8));
-        rootScroll.addView(root, new ScrollView.LayoutParams(-1, -2));
-        screen.addView(rootScroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        screen.addView(root, new LinearLayout.LayoutParams(-1, 0, 1));
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -165,8 +162,8 @@ public class ChatActivity extends Activity {
         modelStatus = label(OpenRouterClient.hasKey()
                 ? "● OPENROUTER ПОДКЛЮЧЁН · МОДЕЛЬ: FREE ROUTER"
                 : "OpenRouter не подключён", 10, Color.rgb(160, 181, 211), false);
-        modelStatus.setPadding(dp(3), dp(8), dp(3), dp(8));
-        root.addView(modelStatus);
+        // Provider status remains available to internal status updates, but is not shown above the chat.
+        modelStatus.setVisibility(View.GONE);
 
         Button radioButton = smallButton("♫  SOUNDPARK DEEP · RADIO", CYAN);
         radioButton.setOnClickListener(v -> startActivity(new Intent(this, RadioActivity.class)));
@@ -178,20 +175,23 @@ public class ChatActivity extends Activity {
         chatPanel.setOrientation(LinearLayout.VERTICAL);
         chatPanel.setPadding(dp(13), dp(13), dp(13), dp(10));
         chatPanel.setBackground(round(Color.rgb(20, 23, 45), Color.rgb(65, 103, 140), 22));
-        chatPanel.addView(label("ПЕРЕПИСКА  ·  ASTRA SESSION", 10, CYAN, true));
         flowDownloadStatus = label("", 11, Color.rgb(174, 224, 255), false);
         flowDownloadStatus.setPadding(dp(2), dp(7), dp(2), dp(4));
         flowDownloadStatus.setVisibility(View.GONE);
         chatPanel.addView(flowDownloadStatus, new LinearLayout.LayoutParams(-1, -2));
         // Perchance runs in a private worker layer behind the chat; no provider website is shown to the user.
         messageScroll = new ScrollView(this);
+        messageScroll.setFillViewport(true);
+        messageScroll.setVerticalScrollBarEnabled(true);
+        messageScroll.setSmoothScrollingEnabled(true);
+        messageScroll.setNestedScrollingEnabled(true);
         messages = new LinearLayout(this);
         messages.setOrientation(LinearLayout.VERTICAL);
         messageScroll.addView(messages, new ScrollView.LayoutParams(-1, -2));
-        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, dp(360));
-        sp.topMargin = dp(12);
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, 0, 1);
+        sp.topMargin = dp(4);
         chatPanel.addView(messageScroll, sp);
-        root.addView(chatPanel);
+        root.addView(chatPanel, new LinearLayout.LayoutParams(-1, 0, 1));
 
         LinearLayout composer = new LinearLayout(this);
         composer.setGravity(Gravity.CENTER_VERTICAL);
