@@ -33,7 +33,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class FlowBrowserPanel extends LinearLayout {
-    private static final String FLOW_PROJECT_URL = FlowWebViewActivity.FLOW_PROJECT_URL;
     public static final String FLOW_PROJECT_URL = "https://flow.google.com/u/1/project/c311a6f3-e3de-4490-b97c-54ddd8610af1";
     public static final String EXTRA_AUTOMATE = "astra_flow_automate";
     public static final String EXTRA_PROMPT = "astra_flow_prompt";
@@ -67,7 +66,7 @@ public final class FlowBrowserPanel extends LinearLayout {
     private String flowUserAgent = "";
     private final Runnable generationObserver = new Runnable() {
         @Override public void run() {
-            if (webView == null || isFinishing() || isDestroyed()
+            if (webView == null || host.isFinishing() || host.isDestroyed()
                     || generationStartedAt == 0L) return;
             String script = "(function(){try{const t=(document.body&&document.body.innerText)||'';"
                 + "const videos=[...document.querySelectorAll('video')].filter(x=>x.getBoundingClientRect().width>0).length;"
@@ -93,7 +92,7 @@ public final class FlowBrowserPanel extends LinearLayout {
                             && tiles > baselineFlowTileCount && !autoOpenCompleted) {
                         generationState = "completed_waiting_for_card";
                         Log.i("ASTRA-FLOW-OBSERVER", "New Flow result tile detected; opening from background observer");
-                        main.post(host::tryAutoOpenLatestFlowVideo);
+                        main.post(this::tryAutoOpenLatestFlowVideo);
                     } else if (busy > 0) {
                         generationState = "running";
                     } else {
@@ -104,7 +103,7 @@ public final class FlowBrowserPanel extends LinearLayout {
                 }
                 Log.i("ASTRA-FLOW-OBSERVER", "poll=" + generationObserverPolls
                         + " state=" + generationState + " evidence=" + generationEvidence);
-                if (webView != null && !isFinishing() && !isDestroyed())
+                if (webView != null && !host.isFinishing() && !host.isDestroyed())
                     main.postDelayed(this, 5000L);
             });
         }
@@ -112,7 +111,7 @@ public final class FlowBrowserPanel extends LinearLayout {
 
     private final Runnable diagPoll = new Runnable() {
         @Override public void run() {
-            if (webView == null || isFinishing() || isDestroyed()) return;
+            if (webView == null || host.isFinishing() || host.isDestroyed()) return;
             if (diagRequestPending) return;
 
             diagRequestPending = true;
@@ -126,7 +125,7 @@ public final class FlowBrowserPanel extends LinearLayout {
                     diagRequestPending = false;
                     Log.w("ASTRA-FLOW-DIAG",
                         "JavaScript diagnostic callback timeout");
-                    if (webView != null && !isFinishing() && !isDestroyed()) {
+                    if (webView != null && !host.isFinishing() && !host.isDestroyed()) {
                         main.postDelayed(diagPoll, 5000L);
                     }
                 }
@@ -156,7 +155,7 @@ public final class FlowBrowserPanel extends LinearLayout {
                             + " elapsedMs=" + (lastDiagAt - startedAt)
                             + " page=" + lastPageDiag);
 
-                        if (webView != null && !isFinishing() && !isDestroyed()) {
+                        if (webView != null && !host.isFinishing() && !host.isDestroyed()) {
                             main.postDelayed(diagPoll, 5000L);
                         }
                     }
@@ -166,21 +165,12 @@ public final class FlowBrowserPanel extends LinearLayout {
                 completed[0] = true;
                 diagRequestPending = false;
                 Log.e("ASTRA-FLOW-DIAG", "Diagnostic request failed", e);
-                if (webView != null && !isFinishing() && !isDestroyed()) {
+                if (webView != null && !host.isFinishing() && !host.isDestroyed()) {
                     main.postDelayed(diagPoll, 5000L);
                 }
             }
         }
     };
-
-
-
-    @Override
-
-
-
-
-
     public FlowBrowserPanel(Activity host, String prompt) {
         super(host);
         this.host = host;
@@ -288,10 +278,10 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
                 super.onPageFinished(view, url);
                 status.setText("ASTRA Flow: " + url);
                 pageLoaded = true;
-                main.postDelayed(host::diagnoseFlowPage, 700L);
-                main.postDelayed(host::installVideoCapture, 1400L);
-                main.postDelayed(host::installNetworkDiagnostics, 1700L);
-                if (pendingPrompt != null) main.postDelayed(host::attemptFlowAutomation, 1200L);
+                main.postDelayed(this::diagnoseFlowPage, 700L);
+                main.postDelayed(this::installVideoCapture, 1400L);
+                main.postDelayed(this::installNetworkDiagnostics, 1700L);
+                if (pendingPrompt != null) main.postDelayed(this::attemptFlowAutomation, 1200L);
                 Log.i("ASTRA-FLOW", "Page finished: " + url);
                 lastLifecycleEvent = "pageFinished";
                 view.evaluateJavascript(
@@ -308,7 +298,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
                         && url.equals(view.getUrl())) {
                     reloadMoveToBackAfterLoad = false;
                     main.postDelayed(() -> {
-                        if (!isFinishing() && !isDestroyed()) {
+                        if (!host.isFinishing() && !host.isDestroyed()) {
                             setVisibility(View.VISIBLE);
                             Log.i("ASTRA-FLOW",
                                     "Background mode restored after reload page finished");
@@ -318,7 +308,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
                 if (hideAfterPageLoad) {
                     hideAfterPageLoad = false;
                     main.postDelayed(() -> {
-                        if (!isFinishing() && !isDestroyed()) {
+                        if (!host.isFinishing() && !host.isDestroyed()) {
                             setVisibility(View.VISIBLE);
                             Log.i("ASTRA-FLOW", "Background mode: moved task to back after page load");
                         }
@@ -338,7 +328,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
         // continue in this hidden task.
         if (backgroundRequested) {
             main.postDelayed(() -> {
-                if (!isFinishing() && !isDestroyed()) {
+                if (!host.isFinishing() && !host.isDestroyed()) {
                     setVisibility(View.VISIBLE);
                     Log.i("ASTRA-FLOW", "Perchance-style background task started; WebView retained");
                 }
@@ -348,7 +338,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
     }
 
     private void diagnoseFlowPage() {
-        if (webView == null || isFinishing() || isDestroyed()) return;
+        if (webView == null || host.isFinishing() || host.isDestroyed()) return;
         String script = "(function(){try{const roots=[],frames=[],seen=new Set();"
             + "function collect(root){if(!root||seen.has(root))return;seen.add(root);roots.push(root);"
             + "try{Array.from(root.querySelectorAll('iframe')).forEach((f,i)=>{let same=false;try{same=!!f.contentDocument;}catch(e){}"
@@ -380,7 +370,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
     }
 
     private void attemptFlowAutomation() {
-        if (webView == null || pendingPrompt == null || isFinishing() || isDestroyed()) return;
+        if (webView == null || pendingPrompt == null || host.isFinishing() || host.isDestroyed()) return;
         if (++automationAttempts > 45) {
             Log.w("ASTRA-FLOW-AUTO", "Timeout waiting for Flow controls");
             generationState = "automation_timeout";
@@ -408,7 +398,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
                 main.removeCallbacks(generationObserver);
                 main.postDelayed(generationObserver, 1500L);
                 if (backgroundRequested) main.postDelayed(() -> {
-                    if (!isFinishing() && !isDestroyed()) {
+                    if (!host.isFinishing() && !host.isDestroyed()) {
                         setVisibility(View.VISIBLE);
                         Log.i("ASTRA-FLOW", "Background task reaffirmed after generate click; native observer remains active");
                     }
@@ -559,7 +549,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
         private void reportVideoDownloadResult(String videoUrl, boolean success) {
             String quoted = org.json.JSONObject.quote(videoUrl);
             main.post(() -> {
-                if (webView == null || isFinishing() || isDestroyed()) return;
+                if (webView == null || host.isFinishing() || host.isDestroyed()) return;
                 webView.evaluateJavascript(
                     "(function(){if(window.__astraFlowVideoDownloadResult)"
                     + "window.__astraFlowVideoDownloadResult(" + quoted + "," + success + ");return 'reported';})()",
@@ -760,7 +750,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
     }
 
     private void installNetworkDiagnostics() {
-        if (webView == null || isFinishing() || isDestroyed()) return;
+        if (webView == null || host.isFinishing() || host.isDestroyed()) return;
         String js = "(function(){try{"
             + "if(window.__astraFlowNetDiagInstalled)return 'already-installed';"
             + "window.__astraFlowNetDiagInstalled=true;"
@@ -794,7 +784,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
     }
 
     private void installVideoCapture() {
-        if (webView == null || isFinishing() || isDestroyed()) return;
+        if (webView == null || host.isFinishing() || host.isDestroyed()) return;
         String js = "(function(){"
             + "if(window.__astraFlowVideoCaptureInstalled){window.__astraFlowVideoScan&&window.__astraFlowVideoScan();return 'already-installed-rescanned';}"
             + "window.__astraFlowVideoCaptureInstalled=true;"
@@ -858,6 +848,20 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
         webView.evaluateJavascript(js, value -> Log.i("ASTRA-FLOW-CAPTURE", "Capture bridge setup=" + value));
     }
 
+    public void submitPrompt(String prompt) {
+        if (prompt == null || prompt.trim().isEmpty() || host.isFinishing()) return;
+        pendingPrompt = prompt.trim();
+        promptInjected = false;
+        automationAttempts = 0;
+        backgroundRequested = true;
+        generationState = "queued";
+        generationStartedAt = 0L;
+        autoOpenAttempts = 0;
+        autoOpenCompleted = false;
+        baselineFlowTileCount = -1;
+        if (pageLoaded) main.postDelayed(this::attemptFlowAutomation, 500L);
+    }
+
     public void openUrl(String url) {
         main.post(() -> {
             if (webView != null && url != null && !url.isEmpty()) {
@@ -872,7 +876,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
                 hideAfterPageLoad = false;
                 webView.loadUrl(url);
                 main.postDelayed(() -> {
-                    if (!isFinishing() && !isDestroyed()) {
+                    if (!host.isFinishing() && !host.isDestroyed()) {
                         setVisibility(View.VISIBLE);
                         Log.i("ASTRA-FLOW", "Background mode: moved task to back after load start");
                     }
@@ -883,7 +887,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
 
     public void reloadInBackground() {
         main.post(() -> {
-            if (webView == null || isFinishing() || isDestroyed()) {
+            if (webView == null || host.isFinishing() || host.isDestroyed()) {
                 Log.w("ASTRA-FLOW", "reloadInBackground: WebView unavailable");
                 return;
             }
@@ -967,7 +971,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
     // When the user returns to Flow after generation, open the newest project tile
     // automatically. The existing video bridge then downloads video.currentSrc.
     private void tryAutoOpenLatestFlowVideo() {
-        if (webView == null || isFinishing() || isDestroyed() || autoOpenCompleted) return;
+        if (webView == null || host.isFinishing() || host.isDestroyed() || autoOpenCompleted) return;
         if (++autoOpenAttempts > 8) {
             Log.w("ASTRA-FLOW-AUTOOPEN", "No ready video tile after resume; attempts=" + autoOpenAttempts);
             return;
@@ -986,9 +990,9 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
             if (result.contains("OPENED") || result.contains("ALREADY_OPEN")) {
                 autoOpenCompleted = true;
                 main.postDelayed(() -> {
-                    if (webView != null && !isFinishing() && !isDestroyed()) {
+                    if (webView != null && !host.isFinishing() && !host.isDestroyed()) {
                         webView.evaluateJavascript(videoCaptureScanScript(), null);
-                        main.postDelayed(host::installVideoCapture, 900L);
+                        main.postDelayed(this::installVideoCapture, 900L);
                     }
                 }, 1200L);
             } else if (result.contains("NOT_PROJECT")) {
