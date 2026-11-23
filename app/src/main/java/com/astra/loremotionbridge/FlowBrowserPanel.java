@@ -1011,7 +1011,8 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
                 .replace("\r", "\\r");
-    
+    }
+
     public void onHostPause() {
         lastLifecycleEvent = "onPause";
         if (webView != null) webView.onPause();
