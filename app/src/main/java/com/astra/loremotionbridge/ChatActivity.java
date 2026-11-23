@@ -160,17 +160,17 @@ public class ChatActivity extends Activity {
         actions.addView(monitor, mp);
         root.addView(actions);
 
-        Button perchance = smallButton("✦  ASTRA · ГЕНЕРАТОР ИЗОБРАЖЕНИЙ", LILAC);
-        perchance.setOnClickListener(v -> showPerchancePromptDialog());
-        LinearLayout.LayoutParams perchanceParams = new LinearLayout.LayoutParams(-1, dp(43));
-        perchanceParams.bottomMargin = dp(8);
-        root.addView(perchance, perchanceParams);
-
         Button googleFlow = smallButton("✦  GOOGLE FLOW · AI VIDEO GENERATOR", CYAN);
         googleFlow.setOnClickListener(v -> BrowserSessionManager.openFlow(this));
         LinearLayout.LayoutParams flowParams = new LinearLayout.LayoutParams(-1, dp(43));
         flowParams.bottomMargin = dp(8);
         root.addView(googleFlow, flowParams);
+
+        Button perchanceStudio = smallButton("✦  PERCHANCE · ВОЙТИ / НАСТРОЙКИ", LILAC);
+        perchanceStudio.setOnClickListener(v -> openPerchanceStudio());
+        LinearLayout.LayoutParams perchanceStudioParams = new LinearLayout.LayoutParams(-1, dp(43));
+        perchanceStudioParams.bottomMargin = dp(8);
+        root.addView(perchanceStudio, perchanceStudioParams);
 
         Button zskyStudio = smallButton("✦  ZSKY STUDIO · ВОЙТИ В АККАУНТ", LILAC);
         zskyStudio.setOnClickListener(v -> {
@@ -237,6 +237,12 @@ public class ChatActivity extends Activity {
         composer.setGravity(Gravity.CENTER_VERTICAL);
         composer.setPadding(dp(13), dp(5), dp(6), dp(5));
         composer.setBackground(round(PANEL, Color.rgb(56, 67, 98), 25));
+        Button plus = smallButton("+", LILAC);
+        plus.setTextSize(23);
+        plus.setOnClickListener(v -> showComposerPlusMenu());
+        LinearLayout.LayoutParams plusParams = new LinearLayout.LayoutParams(dp(42), dp(46));
+        plusParams.rightMargin = dp(7);
+        composer.addView(plus, plusParams);
         input = new EditText(this);
         input.setSingleLine(false);
         input.setMinLines(1);
@@ -776,6 +782,29 @@ public class ChatActivity extends Activity {
                 updateProviderStatus();
             });
         });
+    }
+
+    private void showComposerPlusMenu() {
+        new AlertDialog.Builder(this)
+                .setItems(new String[]{"✦  Сгенерировать картину"}, (dialog, which) -> {
+                    if (which == 0) showImageProviderMenu();
+                })
+                .show();
+    }
+
+    private void showImageProviderMenu() {
+        new AlertDialog.Builder(this)
+                .setTitle("Выбери генератор изображений")
+                .setItems(new String[]{"Perchance"}, (dialog, which) -> {
+                    if (which == 0) showPerchancePromptDialog();
+                })
+                .setNegativeButton("ОТМЕНА", null)
+                .show();
+    }
+
+    private void openPerchanceStudio() {
+        // Open the full provider page for manual login, model/settings changes and account maintenance.
+        startActivity(new Intent(this, PerchanceBrowserActivity.class));
     }
 
     private void showPerchancePromptDialog() {
