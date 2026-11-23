@@ -600,7 +600,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
                             Environment.DIRECTORY_MOVIES + "/ASTRA/Flow");
                     values.put(MediaStore.Video.Media.IS_PENDING, 1);
                 }
-                target = getContentResolver().insert(
+                target = host.getContentResolver().insert(
                         MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
                 if (target == null) throw new java.io.IOException("MediaStore insert failed");
 
@@ -608,7 +608,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
                 long lastUpdate = 0L;
                 int lastPercent = -1;
                 try (InputStream input = connection.getInputStream();
-                     OutputStream output = getContentResolver().openOutputStream(target, "w")) {
+                     OutputStream output = host.getContentResolver().openOutputStream(target, "w")) {
                     if (output == null) throw new java.io.IOException("Android не открыл файл для записи");
                     byte[] buffer = new byte[64 * 1024];
                     int count;
@@ -637,7 +637,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
                 if (Build.VERSION.SDK_INT >= 29) {
                     ContentValues ready = new ContentValues();
                     ready.put(MediaStore.Video.Media.IS_PENDING, 0);
-                    if (getContentResolver().update(target, ready, null, null) <= 0)
+                    if (host.getContentResolver().update(target, ready, null, null) <= 0)
                         throw new java.io.IOException("MediaStore publish failed");
                 }
                 published = true;
@@ -653,7 +653,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
                 publishFlowDownloadProgress("Ошибка скачивания: " + reason);
             } finally {
                 if (!published && target != null) {
-                    try { getContentResolver().delete(target, null, null); }
+                    try { host.getContentResolver().delete(target, null, null); }
                     catch (Exception ignored) {}
                 }
                 if (connection != null) connection.disconnect();
@@ -675,9 +675,9 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
                     values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/ASTRA/Flow");
                     values.put(MediaStore.Video.Media.IS_PENDING, 1);
                 }
-                target = getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
+                target = host.getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
                 if (target == null) throw new java.io.IOException("MediaStore insert failed");
-                output = getContentResolver().openOutputStream(target, "w");
+                output = host.getContentResolver().openOutputStream(target, "w");
                 if (output == null) throw new java.io.IOException("MediaStore stream unavailable");
                 written = 0L;
                 Log.i("ASTRA-FLOW-CAPTURE", "Video capture started: " + target);
@@ -716,7 +716,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
                 if (Build.VERSION.SDK_INT >= 29) {
                     ContentValues ready = new ContentValues();
                     ready.put(MediaStore.Video.Media.IS_PENDING, 0);
-                    if (getContentResolver().update(target, ready, null, null) <= 0)
+                    if (host.getContentResolver().update(target, ready, null, null) <= 0)
                         throw new java.io.IOException("publish failed");
                 }
                 Uri saved = target;
@@ -742,7 +742,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
             try { if (output != null) output.close(); } catch (Exception ignored) {}
             output = null;
             if (deleteTarget && target != null) {
-                try { getContentResolver().delete(target, null, null); } catch (Exception ignored) {}
+                try { host.getContentResolver().delete(target, null, null); } catch (Exception ignored) {}
             }
             target = null;
             written = 0L;
