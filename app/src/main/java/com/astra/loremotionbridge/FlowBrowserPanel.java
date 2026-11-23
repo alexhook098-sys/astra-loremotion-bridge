@@ -92,7 +92,7 @@ public final class FlowBrowserPanel extends LinearLayout {
                             && tiles > baselineFlowTileCount && !autoOpenCompleted) {
                         generationState = "completed_waiting_for_card";
                         Log.i("ASTRA-FLOW-OBSERVER", "New Flow result tile detected; opening from background observer");
-                        main.post(this::tryAutoOpenLatestFlowVideo);
+                        main.post(FlowBrowserPanel.this::tryAutoOpenLatestFlowVideo);
                     } else if (busy > 0) {
                         generationState = "running";
                     } else {
@@ -278,10 +278,10 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
                 super.onPageFinished(view, url);
                 status.setText("ASTRA Flow: " + url);
                 pageLoaded = true;
-                main.postDelayed(this::diagnoseFlowPage, 700L);
-                main.postDelayed(this::installVideoCapture, 1400L);
-                main.postDelayed(this::installNetworkDiagnostics, 1700L);
-                if (pendingPrompt != null) main.postDelayed(this::attemptFlowAutomation, 1200L);
+                main.postDelayed(FlowBrowserPanel.this::diagnoseFlowPage, 700L);
+                main.postDelayed(FlowBrowserPanel.this::installVideoCapture, 1400L);
+                main.postDelayed(FlowBrowserPanel.this::installNetworkDiagnostics, 1700L);
+                if (pendingPrompt != null) main.postDelayed(FlowBrowserPanel.this::attemptFlowAutomation, 1200L);
                 Log.i("ASTRA-FLOW", "Page finished: " + url);
                 lastLifecycleEvent = "pageFinished";
                 view.evaluateJavascript(
@@ -384,7 +384,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
                 promptInjected = true;
                 generationState = "prompt_entered";
                 status.setText("ASTRA Flow: prompt entered");
-                main.postDelayed(this::attemptFlowAutomation, 700L);
+                main.postDelayed(FlowBrowserPanel.this::attemptFlowAutomation, 700L);
             } else if (value.contains("GENERATE_CLICKED")) {
                 generationStartedAt = System.currentTimeMillis();
                 autoOpenAttempts = 0;
@@ -404,7 +404,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
                     }
                 }, 250L);
             } else {
-                main.postDelayed(this::attemptFlowAutomation, 1000L);
+                main.postDelayed(FlowBrowserPanel.this::attemptFlowAutomation, 1000L);
             }
         });
     }
@@ -859,7 +859,7 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
         autoOpenAttempts = 0;
         autoOpenCompleted = false;
         baselineFlowTileCount = -1;
-        if (pageLoaded) main.postDelayed(this::attemptFlowAutomation, 500L);
+        if (pageLoaded) main.postDelayed(FlowBrowserPanel.this::attemptFlowAutomation, 500L);
     }
 
     public void openUrl(String url) {
@@ -992,13 +992,13 @@ PowerManager powerManager = (PowerManager) host.getSystemService(android.content
                 main.postDelayed(() -> {
                     if (webView != null && !host.isFinishing() && !host.isDestroyed()) {
                         webView.evaluateJavascript(videoCaptureScanScript(), null);
-                        main.postDelayed(this::installVideoCapture, 900L);
+                        main.postDelayed(FlowBrowserPanel.this::installVideoCapture, 900L);
                     }
                 }, 1200L);
             } else if (result.contains("NOT_PROJECT")) {
                 Log.w("ASTRA-FLOW-AUTOOPEN", "Current page is not the Flow project grid");
             } else if (autoOpenAttempts < 8) {
-                main.postDelayed(this::tryAutoOpenLatestFlowVideo, 1500L);
+                main.postDelayed(FlowBrowserPanel.this::tryAutoOpenLatestFlowVideo, 1500L);
             }
         });
     }
