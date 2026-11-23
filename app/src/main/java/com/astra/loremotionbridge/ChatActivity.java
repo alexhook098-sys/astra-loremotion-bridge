@@ -143,9 +143,14 @@ public class ChatActivity extends Activity {
         header.addView(mark, new LinearLayout.LayoutParams(dp(48), dp(48)));
         TextView headerSpacer = label("", 10, WHITE, false);
         header.addView(headerSpacer, new LinearLayout.LayoutParams(0, 1, 1));
-        Button connect = smallButton("◈  СЕРВИСЫ", CYAN);
+        Button studio = smallButton("✦ STUDIO", LILAC);
+        studio.setOnClickListener(v -> showStudioPanel());
+        LinearLayout.LayoutParams studioParams = new LinearLayout.LayoutParams(dp(78), dp(42));
+        studioParams.rightMargin = dp(6);
+        header.addView(studio, studioParams);
+        Button connect = smallButton("◈ СЕРВИСЫ", CYAN);
         connect.setOnClickListener(v -> showConnectPanel());
-        header.addView(connect, new LinearLayout.LayoutParams(dp(132), dp(42)));
+        header.addView(connect, new LinearLayout.LayoutParams(dp(92), dp(42)));
         root.addView(header);
 
         Button appearance = smallButton("✧  ОБОИ И ЦВЕТОВАЯ СХЕМА", LILAC);
@@ -157,26 +162,11 @@ public class ChatActivity extends Activity {
 
 
 
-        installButton = smallButton("＋  ПОДКЛЮЧИТЬ OPENROUTER · API KEY", CYAN);
-        installButton.setOnClickListener(v -> showOpenRouterSetup());
-        root.addView(installButton, new LinearLayout.LayoutParams(-1, dp(44)));
-
-        modelStatus = label("Нужен API-ключ OpenRouter", 10, Color.rgb(160, 181, 211), false);
+        modelStatus = label(OpenRouterClient.hasKey()
+                ? "● OPENROUTER ПОДКЛЮЧЁН · МОДЕЛЬ: FREE ROUTER"
+                : "OpenRouter не подключён", 10, Color.rgb(160, 181, 211), false);
         modelStatus.setPadding(dp(3), dp(8), dp(3), dp(8));
         root.addView(modelStatus);
-
-        Button motionButton = smallButton("✦  ONE CLICK MOTION · ИЗОБРАЖЕНИЕ В ВИДЕО", CYAN);
-        motionButton.setOnClickListener(v -> chooseMotionReference());
-        LinearLayout.LayoutParams motionParams = new LinearLayout.LayoutParams(-1, dp(44));
-        motionParams.bottomMargin = dp(8);
-        root.addView(motionButton, motionParams);
-
- 
-        Button storyMotionButton = smallButton("✧  ASTRA STORY MOTION · RIFE × 4 СЦЕНЫ", LILAC);
-        storyMotionButton.setOnClickListener(v -> chooseStoryMotionReference());
-        LinearLayout.LayoutParams storyMotionParams = new LinearLayout.LayoutParams(-1, dp(44));
-        storyMotionParams.bottomMargin = dp(8);
-        root.addView(storyMotionButton, storyMotionParams);
 
         Button radioButton = smallButton("♫  SOUNDPARK DEEP · RADIO", CYAN);
         radioButton.setOnClickListener(v -> startActivity(new Intent(this, RadioActivity.class)));
@@ -251,6 +241,7 @@ public class ChatActivity extends Activity {
 
     private void showConnectPanel() {
         final String[] entries = new String[]{
+                "＋  Подключить OpenRouter · API KEY",
                 "✦  Perchance  ·  вход и настройки",
                 "▶  Google Flow  ·  вход и настройки",
                 "✦  ZSky  ·  вход в аккаунт",
@@ -258,26 +249,43 @@ public class ChatActivity extends Activity {
                 "⌁  Bridge Monitor  ·  состояние локального моста"
         };
         new AlertDialog.Builder(this)
-                .setTitle("ASTRA CONNECT")
+                .setTitle("ASTRA CONNECT · СЕРВИСЫ")
                 .setItems(entries, (dialog, which) -> {
                     switch (which) {
                         case 0:
-                            openPerchanceStudio();
+                            showOpenRouterSetup();
                             break;
                         case 1:
-                            BrowserSessionManager.openFlow(this);
+                            openPerchanceStudio();
                             break;
                         case 2:
+                            BrowserSessionManager.openFlow(this);
+                            break;
+                        case 3:
                             // Open the authenticated studio for manual sign-in; never submit a prompt here.
                             ZSkyWebViewActivity.start(this, ZSkyWebViewActivity.ZSKY_URL, false);
                             break;
-                        case 3:
+                        case 4:
                             launchBrowser();
                             break;
-                        case 4:
+                        case 5:
                             startActivity(new Intent(this, MainActivity.class));
                             break;
                     }
+                })
+                .setNegativeButton("ЗАКРЫТЬ", null)
+                .show();
+    }
+
+    private void showStudioPanel() {
+        new AlertDialog.Builder(this)
+                .setTitle("ASTRA STUDIO")
+                .setItems(new String[]{
+                        "✦  One Click Motion · изображение в видео",
+                        "✧  ASTRA Story Motion · RIFE × 4 сцены"
+                }, (dialog, which) -> {
+                    if (which == 0) chooseMotionReference();
+                    else if (which == 1) chooseStoryMotionReference();
                 })
                 .setNegativeButton("ЗАКРЫТЬ", null)
                 .show();
@@ -688,7 +696,7 @@ public class ChatActivity extends Activity {
         boolean ready = OpenRouterClient.hasKey();
         modelStatus.setText(ready ? "● OPENROUTER ПОДКЛЮЧЁН · МОДЕЛЬ: FREE ROUTER"
                 : "Вставь API-ключ OpenRouter один раз для подключения");
-        installButton.setText(ready ? "✓ OPENROUTER ПОДКЛЮЧЁН · ИЗМЕНИТЬ КЛЮЧ" : "＋  ПОДКЛЮЧИТЬ OPENROUTER · API KEY");
+        // OpenRouter management is available from the Services panel.
     }
 
     private void showOpenRouterSetup() {
@@ -765,7 +773,7 @@ public class ChatActivity extends Activity {
             return;
         }
         if (!OpenRouterClient.hasKey()) {
-            addMessage("Сначала подключи OpenRouter: нажми кнопку API KEY и вставь ключ.", false, true);
+            addMessage("Сначала открой «СЕРВИСЫ» → «Подключить OpenRouter · API KEY» и вставь ключ.", false, true);
             return;
         }
         addMessage(value, true, true);
