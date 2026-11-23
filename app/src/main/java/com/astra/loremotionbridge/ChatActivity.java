@@ -156,17 +156,13 @@ public class ChatActivity extends Activity {
         root.addView(actions);
 
         Button perchance = smallButton("✦  PERCHANCE · AI IMAGE GENERATOR", LILAC);
-        perchance.setOnClickListener(v -> startActivity(new Intent(this, PerchanceBrowserActivity.class)));
+        perchance.setOnClickListener(v -> BrowserSessionManager.openPerchance(this));
         LinearLayout.LayoutParams perchanceParams = new LinearLayout.LayoutParams(-1, dp(43));
         perchanceParams.bottomMargin = dp(8);
         root.addView(perchance, perchanceParams);
 
         Button googleFlow = smallButton("✦  GOOGLE FLOW · AI VIDEO GENERATOR", CYAN);
-        googleFlow.setOnClickListener(v -> {
-            Intent flowIntent = new Intent(this, FlowWebViewActivity.class);
-            flowIntent.putExtra("url", FlowWebViewActivity.FLOW_PROJECT_URL);
-            startActivity(flowIntent);
-        });
+        googleFlow.setOnClickListener(v -> BrowserSessionManager.openFlow(this));
         LinearLayout.LayoutParams flowParams = new LinearLayout.LayoutParams(-1, dp(43));
         flowParams.bottomMargin = dp(8);
         root.addView(googleFlow, flowParams);
@@ -735,12 +731,7 @@ public class ChatActivity extends Activity {
             addMessage(value, true, true);
             input.setText("");
             addMessage("✦ ASTRA · передаю запрос в Google Flow в фоне…", false, true);
-            Intent generation = new Intent(this, FlowWebViewActivity.class);
-            generation.putExtra("url", FlowWebViewActivity.FLOW_PROJECT_URL);
-            generation.putExtra(FlowWebViewActivity.EXTRA_AUTOMATE, true);
-            generation.putExtra(FlowWebViewActivity.EXTRA_PROMPT, flowPrompt);
-            generation.putExtra("background", true);
-            startActivity(generation);
+            BrowserSessionManager.submitFlow(this, flowPrompt);
             modelStatus.setText("● ASTRA · GOOGLE FLOW РАБОТАЕТ В ФОНЕ");
             return;
         }
@@ -749,10 +740,7 @@ public class ChatActivity extends Activity {
             addMessage(value, true, true);
             input.setText("");
             addMessage("✦ ASTRA · открываю Perchance в фоне и запускаю генерацию…", false, true);
-            Intent generation = new Intent(this, PerchanceBrowserActivity.class);
-            generation.putExtra(PerchanceBrowserActivity.EXTRA_AUTOMATE, true);
-            generation.putExtra(PerchanceBrowserActivity.EXTRA_PROMPT, perchancePrompt);
-            startActivity(generation);
+            BrowserSessionManager.submitPerchance(this, perchancePrompt);
             modelStatus.setText("● ASTRA · PERCHANCE РАБОТАЕТ В ФОНЕ");
             return;
         }
