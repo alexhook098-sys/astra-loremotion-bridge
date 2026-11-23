@@ -60,6 +60,7 @@ public class ChatActivity extends Activity {
     private LinearLayout chatPanel;
     private FrameLayout workerHost;
     private PerchanceBrowserPanel perchanceBrowserPanel;
+    private FlowBrowserPanel flowBrowserPanel;
     private Button installButton;
     private JSONArray history;
     private volatile boolean busy = false;
@@ -110,11 +111,13 @@ public class ChatActivity extends Activity {
         consumePendingFlowVideos();
         consumePendingZSkyVideos();
         if (perchanceBrowserPanel != null) perchanceBrowserPanel.onHostResume();
+        if (flowBrowserPanel != null) flowBrowserPanel.onHostResume();
     }
 
     @Override protected void onPause() {
         chatResumed = false;
         if (perchanceBrowserPanel != null) perchanceBrowserPanel.onHostPause();
+        if (flowBrowserPanel != null) flowBrowserPanel.onHostPause();
         super.onPause();
     }
 
@@ -748,7 +751,7 @@ public class ChatActivity extends Activity {
             addMessage(value, true, true);
             input.setText("");
             addMessage("✦ ASTRA · передаю запрос в Google Flow в фоне…", false, true);
-            BrowserSessionManager.submitFlow(this, flowPrompt);
+            startFlowGeneration(flowPrompt);
             modelStatus.setText("● ASTRA · GOOGLE FLOW РАБОТАЕТ В ФОНЕ");
             return;
         }
@@ -782,6 +785,20 @@ public class ChatActivity extends Activity {
                 updateProviderStatus();
             });
         });
+    }
+
+    private void startFlowGeneration(String prompt) {
+        if (prompt == null || prompt.trim().isEmpty() || isFinishing()) return;
+        addMessage("✦ ASTRA · создаю видео: " + prompt.trim(), false, true);
+        if (flowBrowserPanel == null) {
+            flowBrowserPanel = new FlowBrowserPanel(this, prompt.trim());
+            if (workerHost != null) workerHost.addView(flowBrowserPanel,
+                    new FrameLayout.LayoutParams(-1, -1));
+        } else {
+            flowBrowserPanel.submitPrompt(prompt.trim());
+        }
+        flowBrowserPanel.onHostResume();
+        modelStatus.setText("● ASTRA · GOOGLE FLOW РАБОТАЕТ В ЧАТЕ");
     }
 
     private void showComposerPlusMenu() {
@@ -821,7 +838,7 @@ public class ChatActivity extends Activity {
                         return;
                     }
                     addMessage("✦ ASTRA · создаю видео: " + prompt, false, true);
-                    BrowserSessionManager.submitFlow(this, prompt);
+                    startFlowGeneration(prompt);
                     modelStatus.setText("● ASTRA · GOOGLE FLOW РАБОТАЕТ В ФОНЕ");
                 })
                 .setNegativeButton("ОТМЕНА", null)
@@ -1007,6 +1024,7 @@ public class ChatActivity extends Activity {
     @Override protected void onDestroy() {
         if (activeInstance == this) activeInstance = null;
         if (perchanceBrowserPanel != null) { perchanceBrowserPanel.dispose(); perchanceBrowserPanel = null; }
+        if (flowBrowserPanel != null) { flowBrowserPanel.dispose(); flowBrowserPanel = null; }
         // Keep the native model alive for the process; do not unload on screen close.
         super.onDestroy();
     }
