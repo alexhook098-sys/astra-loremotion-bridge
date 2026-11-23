@@ -14,6 +14,7 @@ on:
       - fix/zsky-372-restore-371-stream-downloader
       - feature/zsky-chat-background-from-362
       - feature/story-motion-diagnostics-on-stable-400
+      - feature/astra-browser-core-in-chat
 
 jobs:
   build:
