@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.os.Bundle;
 
 public class PerchanceBrowserActivity extends Activity {
+    public static final String EXTRA_AUTOMATE = PerchanceBrowserPanel.EXTRA_AUTOMATE;
+    public static final String EXTRA_PROMPT = PerchanceBrowserPanel.EXTRA_PROMPT;
     private static volatile PerchanceBrowserActivity instance;
     private PerchanceBrowserPanel panel;
 
