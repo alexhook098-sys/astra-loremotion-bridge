@@ -58,6 +58,7 @@ public class ChatActivity extends Activity {
     private TextView modelStatus;
     private TextView flowDownloadStatus;
     private LinearLayout chatPanel;
+    private FrameLayout workerHost;
     private PerchanceBrowserPanel perchanceBrowserPanel;
     private Button installButton;
     private JSONArray history;
@@ -159,8 +160,8 @@ public class ChatActivity extends Activity {
         actions.addView(monitor, mp);
         root.addView(actions);
 
-        Button perchance = smallButton("✦  PERCHANCE · AI IMAGE GENERATOR", LILAC);
-        perchance.setOnClickListener(v -> showPerchancePanel(null));
+        Button perchance = smallButton("✦  ASTRA · ГЕНЕРАТОР ИЗОБРАЖЕНИЙ", LILAC);
+        perchance.setOnClickListener(v -> showPerchancePromptDialog());
         LinearLayout.LayoutParams perchanceParams = new LinearLayout.LayoutParams(-1, dp(43));
         perchanceParams.bottomMargin = dp(8);
         root.addView(perchance, perchanceParams);
@@ -222,10 +223,7 @@ public class ChatActivity extends Activity {
         flowDownloadStatus.setPadding(dp(2), dp(7), dp(2), dp(4));
         flowDownloadStatus.setVisibility(View.GONE);
         chatPanel.addView(flowDownloadStatus, new LinearLayout.LayoutParams(-1, -2));
-        if (perchanceBrowserPanel != null) {
-            chatPanel.addView(perchanceBrowserPanel, new LinearLayout.LayoutParams(-1, dp(420)));
-        }
-        // The Perchance WebView is mounted here on demand; its automation and capture bridge stay alive in this Activity.
+        // Perchance runs in a private worker layer behind the chat; no provider website is shown to the user.
         messageScroll = new ScrollView(this);
         messages = new LinearLayout(this);
         messages.setOrientation(LinearLayout.VERTICAL);
@@ -265,6 +263,11 @@ public class ChatActivity extends Activity {
             if (bitmap != null) wallpaper.setImageBitmap(bitmap);
         }
         frame.addView(wallpaper, new FrameLayout.LayoutParams(-1, -1));
+        workerHost = new FrameLayout(this);
+        workerHost.setAlpha(0f);
+        workerHost.setClickable(false);
+        workerHost.setFocusable(false);
+        frame.addView(workerHost, new FrameLayout.LayoutParams(-1, -1));
         frame.addView(screen, new FrameLayout.LayoutParams(-1, -1));
         setContentView(frame);
     }
@@ -747,9 +750,8 @@ public class ChatActivity extends Activity {
         if (perchancePrompt != null && !perchancePrompt.isEmpty()) {
             addMessage(value, true, true);
             input.setText("");
-            addMessage("✦ ASTRA · открываю Perchance в фоне и запускаю генерацию…", false, true);
-            showPerchancePanel(perchancePrompt);
-            modelStatus.setText("● ASTRA · PERCHANCE РАБОТАЕТ В ФОНЕ");
+            startPerchanceGeneration(perchancePrompt);
+            modelStatus.setText("● ASTRA · СОЗДАЮ ИЗОБРАЖЕНИЕ");
             return;
         }
         if (!OpenRouterClient.hasKey()) {
@@ -776,20 +778,34 @@ public class ChatActivity extends Activity {
         });
     }
 
-    private void showPerchancePanel(String prompt) {
-        if (chatPanel == null || isFinishing()) return;
+    private void showPerchancePromptDialog() {
+        EditText promptInput = new EditText(this);
+        promptInput.setHint("Например: красивая девушка в фантастическом городе");
+        promptInput.setTextColor(WHITE);
+        promptInput.setHintTextColor(Color.GRAY);
+        LinearLayout box = new LinearLayout(this);
+        box.setPadding(dp(18), dp(8), dp(18), 0);
+        box.addView(promptInput, new LinearLayout.LayoutParams(-1, dp(76)));
+        new AlertDialog.Builder(this)
+                .setTitle("ASTRA · Новое изображение")
+                .setView(box)
+                .setPositiveButton("СОЗДАТЬ", (dialog, which) -> startPerchanceGeneration(promptInput.getText().toString().trim()))
+                .setNegativeButton("ОТМЕНА", null)
+                .show();
+    }
+
+    private void startPerchanceGeneration(String prompt) {
+        if (prompt == null || prompt.trim().isEmpty() || isFinishing()) return;
+        addMessage("✦ ASTRA · создаю изображение: " + prompt.trim(), false, true);
         if (perchanceBrowserPanel == null) {
-            perchanceBrowserPanel = new PerchanceBrowserPanel(this, true, prompt);
-            chatPanel.addView(perchanceBrowserPanel, 1,
-                    new LinearLayout.LayoutParams(-1, dp(420)));
-        } else if (prompt != null && !prompt.trim().isEmpty()) {
-            perchanceBrowserPanel.submitPrompt(prompt);
+            perchanceBrowserPanel = new PerchanceBrowserPanel(this, true, prompt.trim());
+            if (workerHost != null) workerHost.addView(perchanceBrowserPanel,
+                    new FrameLayout.LayoutParams(-1, -1));
+        } else {
+            perchanceBrowserPanel.submitPrompt(prompt.trim());
         }
-        perchanceBrowserPanel.setVisibility(View.VISIBLE);
         perchanceBrowserPanel.onHostResume();
-        modelStatus.setText(prompt == null || prompt.trim().isEmpty()
-                ? "● ASTRA · PERCHANCE ОТКРЫТ В ЧАТЕ"
-                : "● ASTRA · PERCHANCE ГЕНЕРИРУЕТ В ЧАТЕ");
+        modelStatus.setText("● ASTRA · ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЯ");
     }
 
     private boolean isZSkyRequest(String text) {
