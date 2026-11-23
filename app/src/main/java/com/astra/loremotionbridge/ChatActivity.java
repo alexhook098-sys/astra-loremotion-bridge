@@ -141,7 +141,11 @@ public class ChatActivity extends Activity {
         mark.setGravity(Gravity.CENTER);
         mark.setBackground(round(Color.rgb(54, 43, 83), LILAC, 16));
         header.addView(mark, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        // Minimal header: keep the ASTRA symbol, remove redundant title/provider/status labels.
+        TextView headerSpacer = label("", 10, WHITE, false);
+        header.addView(headerSpacer, new LinearLayout.LayoutParams(0, 1, 1));
+        Button connect = smallButton("◈  СЕРВИСЫ", CYAN);
+        connect.setOnClickListener(v -> showConnectPanel());
+        header.addView(connect, new LinearLayout.LayoutParams(dp(132), dp(42)));
         root.addView(header);
 
         Button appearance = smallButton("✧  ОБОИ И ЦВЕТОВАЯ СХЕМА", LILAC);
@@ -151,38 +155,7 @@ public class ChatActivity extends Activity {
         appearanceParams.bottomMargin = dp(8);
         root.addView(appearance, appearanceParams);
 
-        LinearLayout actions = new LinearLayout(this);
-        actions.setPadding(0, dp(13), 0, dp(8));
-        Button browser = smallButton("◉ ASTRA BROWSER", CYAN);
-        browser.setOnClickListener(v -> launchBrowser());
-        actions.addView(browser, new LinearLayout.LayoutParams(0, dp(43), 1));
-        Button monitor = smallButton("BRIDGE", LILAC);
-        monitor.setOnClickListener(v -> startActivity(new Intent(this, MainActivity.class)));
-        LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(0, dp(43), 1);
-        mp.leftMargin = dp(8);
-        actions.addView(monitor, mp);
-        root.addView(actions);
 
-        Button googleFlow = smallButton("✦  GOOGLE FLOW · ВОЙТИ / НАСТРОЙКИ", CYAN);
-        googleFlow.setOnClickListener(v -> BrowserSessionManager.openFlow(this));
-        LinearLayout.LayoutParams flowParams = new LinearLayout.LayoutParams(-1, dp(43));
-        flowParams.bottomMargin = dp(8);
-        root.addView(googleFlow, flowParams);
-
-        Button perchanceStudio = smallButton("✦  PERCHANCE · ВОЙТИ / НАСТРОЙКИ", LILAC);
-        perchanceStudio.setOnClickListener(v -> openPerchanceStudio());
-        LinearLayout.LayoutParams perchanceStudioParams = new LinearLayout.LayoutParams(-1, dp(43));
-        perchanceStudioParams.bottomMargin = dp(8);
-        root.addView(perchanceStudio, perchanceStudioParams);
-
-        Button zskyStudio = smallButton("✦  ZSKY STUDIO · ВОЙТИ В АККАУНТ", LILAC);
-        zskyStudio.setOnClickListener(v -> {
-            // Open the authenticated studio for manual sign-in; never submit a prompt here.
-            ZSkyWebViewActivity.start(this, ZSkyWebViewActivity.ZSKY_URL, false);
-        });
-        LinearLayout.LayoutParams zskyParams = new LinearLayout.LayoutParams(-1, dp(43));
-        zskyParams.bottomMargin = dp(8);
-        root.addView(zskyStudio, zskyParams);
 
         installButton = smallButton("＋  ПОДКЛЮЧИТЬ OPENROUTER · API KEY", CYAN);
         installButton.setOnClickListener(v -> showOpenRouterSetup());
@@ -281,6 +254,40 @@ public class ChatActivity extends Activity {
         setContentView(frame);
     }
 
+
+    private void showConnectPanel() {
+        final String[] entries = new String[]{
+                "✦  Perchance  ·  вход и настройки",
+                "▶  Google Flow  ·  вход и настройки",
+                "✦  ZSky  ·  вход в аккаунт",
+                "◉  ASTRA Browser  ·  браузер и Browser Bridge",
+                "⌁  Bridge Monitor  ·  состояние локального моста"
+        };
+        new AlertDialog.Builder(this)
+                .setTitle("ASTRA CONNECT")
+                .setItems(entries, (dialog, which) -> {
+                    switch (which) {
+                        case 0:
+                            openPerchanceStudio();
+                            break;
+                        case 1:
+                            BrowserSessionManager.openFlow(this);
+                            break;
+                        case 2:
+                            // Open the authenticated studio for manual sign-in; never submit a prompt here.
+                            ZSkyWebViewActivity.start(this, ZSkyWebViewActivity.ZSKY_URL, false);
+                            break;
+                        case 3:
+                            launchBrowser();
+                            break;
+                        case 4:
+                            startActivity(new Intent(this, MainActivity.class));
+                            break;
+                    }
+                })
+                .setNegativeButton("ЗАКРЫТЬ", null)
+                .show();
+    }
 
     private void showAppearanceMenu() {
         new AlertDialog.Builder(this)
