@@ -222,6 +222,9 @@ public class ChatActivity extends Activity {
         flowDownloadStatus.setPadding(dp(2), dp(7), dp(2), dp(4));
         flowDownloadStatus.setVisibility(View.GONE);
         chatPanel.addView(flowDownloadStatus, new LinearLayout.LayoutParams(-1, -2));
+        if (perchanceBrowserPanel != null) {
+            chatPanel.addView(perchanceBrowserPanel, new LinearLayout.LayoutParams(-1, dp(420)));
+        }
         // The Perchance WebView is mounted here on demand; its automation and capture bridge stay alive in this Activity.
         messageScroll = new ScrollView(this);
         messages = new LinearLayout(this);
