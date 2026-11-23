@@ -23,8 +23,8 @@ public final class BrowserSessionManager {
         if (host == null || host.isFinishing() || TextUtils.isEmpty(prompt)) return;
 
         Intent intent = new Intent(host, PerchanceBrowserActivity.class);
-        intent.putExtra(PerchanceBrowserActivity.EXTRA_AUTOMATE, true);
-        intent.putExtra(PerchanceBrowserActivity.EXTRA_PROMPT, prompt);
+        intent.putExtra(PerchanceBrowserPanel.EXTRA_AUTOMATE, true);
+        intent.putExtra(PerchanceBrowserPanel.EXTRA_PROMPT, prompt);
         host.startActivity(intent);
     }
 
