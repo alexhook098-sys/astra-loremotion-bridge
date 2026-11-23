@@ -57,6 +57,8 @@ public class ChatActivity extends Activity {
     private EditText input;
     private TextView modelStatus;
     private TextView flowDownloadStatus;
+    private LinearLayout chatPanel;
+    private PerchanceBrowserPanel perchanceBrowserPanel;
     private Button installButton;
     private JSONArray history;
     private volatile boolean busy = false;
@@ -106,10 +108,12 @@ public class ChatActivity extends Activity {
         consumePendingPerchanceImages();
         consumePendingFlowVideos();
         consumePendingZSkyVideos();
+        if (perchanceBrowserPanel != null) perchanceBrowserPanel.onHostResume();
     }
 
     @Override protected void onPause() {
         chatResumed = false;
+        if (perchanceBrowserPanel != null) perchanceBrowserPanel.onHostPause();
         super.onPause();
     }
 
@@ -156,7 +160,7 @@ public class ChatActivity extends Activity {
         root.addView(actions);
 
         Button perchance = smallButton("✦  PERCHANCE · AI IMAGE GENERATOR", LILAC);
-        perchance.setOnClickListener(v -> BrowserSessionManager.openPerchance(this));
+        perchance.setOnClickListener(v -> showPerchancePanel(null));
         LinearLayout.LayoutParams perchanceParams = new LinearLayout.LayoutParams(-1, dp(43));
         perchanceParams.bottomMargin = dp(8);
         root.addView(perchance, perchanceParams);
@@ -209,7 +213,7 @@ public class ChatActivity extends Activity {
         radioParams.bottomMargin = dp(10);
         root.addView(radioButton, radioParams);
 
-        LinearLayout chatPanel = new LinearLayout(this);
+        chatPanel = new LinearLayout(this);
         chatPanel.setOrientation(LinearLayout.VERTICAL);
         chatPanel.setPadding(dp(13), dp(13), dp(13), dp(10));
         chatPanel.setBackground(round(Color.rgb(20, 23, 45), Color.rgb(65, 103, 140), 22));
@@ -218,6 +222,7 @@ public class ChatActivity extends Activity {
         flowDownloadStatus.setPadding(dp(2), dp(7), dp(2), dp(4));
         flowDownloadStatus.setVisibility(View.GONE);
         chatPanel.addView(flowDownloadStatus, new LinearLayout.LayoutParams(-1, -2));
+        // The Perchance WebView is mounted here on demand; its automation and capture bridge stay alive in this Activity.
         messageScroll = new ScrollView(this);
         messages = new LinearLayout(this);
         messages.setOrientation(LinearLayout.VERTICAL);
@@ -740,7 +745,7 @@ public class ChatActivity extends Activity {
             addMessage(value, true, true);
             input.setText("");
             addMessage("✦ ASTRA · открываю Perchance в фоне и запускаю генерацию…", false, true);
-            BrowserSessionManager.submitPerchance(this, perchancePrompt);
+            showPerchancePanel(perchancePrompt);
             modelStatus.setText("● ASTRA · PERCHANCE РАБОТАЕТ В ФОНЕ");
             return;
         }
@@ -766,6 +771,22 @@ public class ChatActivity extends Activity {
                 updateProviderStatus();
             });
         });
+    }
+
+    private void showPerchancePanel(String prompt) {
+        if (chatPanel == null || isFinishing()) return;
+        if (perchanceBrowserPanel == null) {
+            perchanceBrowserPanel = new PerchanceBrowserPanel(this, true, prompt);
+            chatPanel.addView(perchanceBrowserPanel, 1,
+                    new LinearLayout.LayoutParams(-1, dp(420)));
+        } else if (prompt != null && !prompt.trim().isEmpty()) {
+            perchanceBrowserPanel.submitPrompt(prompt);
+        }
+        perchanceBrowserPanel.setVisibility(View.VISIBLE);
+        perchanceBrowserPanel.onHostResume();
+        modelStatus.setText(prompt == null || prompt.trim().isEmpty()
+                ? "● ASTRA · PERCHANCE ОТКРЫТ В ЧАТЕ"
+                : "● ASTRA · PERCHANCE ГЕНЕРИРУЕТ В ЧАТЕ");
     }
 
     private boolean isZSkyRequest(String text) {
@@ -901,6 +922,7 @@ public class ChatActivity extends Activity {
 
     @Override protected void onDestroy() {
         if (activeInstance == this) activeInstance = null;
+        if (perchanceBrowserPanel != null) { perchanceBrowserPanel.dispose(); perchanceBrowserPanel = null; }
         // Keep the native model alive for the process; do not unload on screen close.
         super.onDestroy();
     }
