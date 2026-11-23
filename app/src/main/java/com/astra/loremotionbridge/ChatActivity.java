@@ -160,7 +160,7 @@ public class ChatActivity extends Activity {
         actions.addView(monitor, mp);
         root.addView(actions);
 
-        Button googleFlow = smallButton("✦  GOOGLE FLOW · AI VIDEO GENERATOR", CYAN);
+        Button googleFlow = smallButton("✦  GOOGLE FLOW · ВОЙТИ / НАСТРОЙКИ", CYAN);
         googleFlow.setOnClickListener(v -> BrowserSessionManager.openFlow(this));
         LinearLayout.LayoutParams flowParams = new LinearLayout.LayoutParams(-1, dp(43));
         flowParams.bottomMargin = dp(8);
@@ -786,9 +786,45 @@ public class ChatActivity extends Activity {
 
     private void showComposerPlusMenu() {
         new AlertDialog.Builder(this)
-                .setItems(new String[]{"✦  Сгенерировать картину"}, (dialog, which) -> {
+                .setItems(new String[]{"✦  Сгенерировать картину", "▶  Сгенерировать видео"}, (dialog, which) -> {
                     if (which == 0) showImageProviderMenu();
+                    else if (which == 1) showVideoProviderMenu();
                 })
+                .show();
+    }
+
+    private void showVideoProviderMenu() {
+        new AlertDialog.Builder(this)
+                .setTitle("Выбери генератор видео")
+                .setItems(new String[]{"Google Flow"}, (dialog, which) -> {
+                    if (which == 0) showFlowPromptDialog();
+                })
+                .setNegativeButton("ОТМЕНА", null)
+                .show();
+    }
+
+    private void showFlowPromptDialog() {
+        EditText promptInput = new EditText(this);
+        promptInput.setHint("Опиши видео, которое нужно создать");
+        promptInput.setTextColor(WHITE);
+        promptInput.setHintTextColor(Color.GRAY);
+        LinearLayout box = new LinearLayout(this);
+        box.setPadding(dp(18), dp(8), dp(18), 0);
+        box.addView(promptInput, new LinearLayout.LayoutParams(-1, dp(76)));
+        new AlertDialog.Builder(this)
+                .setTitle("ASTRA · Новое видео")
+                .setView(box)
+                .setPositiveButton("СОЗДАТЬ", (dialog, which) -> {
+                    String prompt = promptInput.getText().toString().trim();
+                    if (prompt.isEmpty()) {
+                        addMessage("Опиши видео перед запуском Google Flow.", false, true);
+                        return;
+                    }
+                    addMessage("✦ ASTRA · создаю видео: " + prompt, false, true);
+                    BrowserSessionManager.submitFlow(this, prompt);
+                    modelStatus.setText("● ASTRA · GOOGLE FLOW РАБОТАЕТ В ФОНЕ");
+                })
+                .setNegativeButton("ОТМЕНА", null)
                 .show();
     }
 
