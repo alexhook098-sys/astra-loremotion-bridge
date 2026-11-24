@@ -79,6 +79,8 @@ public class ChatActivity extends Activity {
                 if (m != null) {
                     if ("perchance_image".equals(m.optString("type"))) {
                         addPerchanceImageMessage(Uri.parse(m.optString("uri", "")), false);
+                    } else if ("bing_image".equals(m.optString("type"))) {
+                        addBingImageMessage(Uri.parse(m.optString("uri", "")), false);
                     } else if ("flow_video".equals(m.optString("type"))) {
                         addVideoMessage(Uri.parse(m.optString("uri", "")), false);
                     } else if ("zsky_video".equals(m.optString("type"))) {
@@ -91,6 +93,7 @@ public class ChatActivity extends Activity {
         }
         updateProviderStatus();
         consumePendingPerchanceImages();
+        consumePendingBingImages();
         consumePendingFlowVideos();
         consumePendingZSkyVideos();
     }
@@ -509,6 +512,81 @@ public class ChatActivity extends Activity {
             if (item == null) continue;
             String value = item.optString("uri", "");
             if (!value.isEmpty()) addVideoMessage(Uri.parse(value), true);
+        }
+    }
+
+    public static void onBingImageReady(Context context, Uri image) {
+        if (context == null || image == null) return;
+        android.content.SharedPreferences prefs = context.getSharedPreferences("astra_chat", MODE_PRIVATE);
+        JSONArray pending;
+        try { pending = new JSONArray(prefs.getString("bing_pending", "[]")); }
+        catch (Exception e) { pending = new JSONArray(); }
+        try {
+            pending.put(new JSONObject().put("uri", image.toString()));
+            prefs.edit().putString("bing_pending", pending.toString()).apply();
+        } catch (Exception ignored) {}
+        ChatActivity activity = activeInstance;
+        if (activity != null) activity.runOnUiThread(activity::consumePendingBingImages);
+    }
+
+    private void consumePendingBingImages() {
+        if (isFinishing() || messages == null) return;
+        android.content.SharedPreferences prefs = getSharedPreferences("astra_chat", MODE_PRIVATE);
+        JSONArray pending;
+        try { pending = new JSONArray(prefs.getString("bing_pending", "[]")); }
+        catch (Exception e) { pending = new JSONArray(); }
+        if (pending.length() == 0) return;
+        prefs.edit().remove("bing_pending").apply();
+        for (int i=0;i<pending.length();i++) {
+            JSONObject item = pending.optJSONObject(i);
+            if (item == null) continue;
+            String value = item.optString("uri", "");
+            if (!value.isEmpty()) addBingImageMessage(Uri.parse(value), true);
+        }
+    }
+
+    private void addBingImageMessage(Uri image, boolean save) {
+        addGeneratedImageMessage(image, save, "bing_image",
+                "✦ BING IMAGE CREATOR · сохранено в Pictures/ASTRA/Bing");
+    }
+
+    private void addGeneratedImageMessage(Uri image, boolean save, String type, String captionText) {
+        if (image == null || image.toString().isEmpty() || messages == null) return;
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(10), dp(9), dp(10), dp(10));
+        card.setBackground(round(Color.rgb(30, 42, 65), Color.rgb(57, 91, 119), 17));
+        TextView caption = label(captionText, 13, WHITE, false);
+        caption.setPadding(dp(3), dp(2), dp(3), dp(8));
+        card.addView(caption, new LinearLayout.LayoutParams(-1, -2));
+        ImageView preview = new ImageView(this);
+        preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        preview.setAdjustViewBounds(true);
+        preview.setMaxHeight(dp(280));
+        preview.setBackground(round(Color.rgb(16, 22, 38), Color.rgb(57, 91, 119), 12));
+        preview.setImageURI(image);
+        card.addView(preview, new LinearLayout.LayoutParams(-1, dp(280)));
+        card.setOnClickListener(v -> {
+            Intent open = new Intent(Intent.ACTION_VIEW);
+            open.setDataAndType(image, "image/*");
+            open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            try { startActivity(open); }
+            catch (Exception e) { addMessage("Не удалось открыть изображение из Галереи.", false, true); }
+        });
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.LEFT);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.setMargins(dp(2), dp(5), dp(2), dp(7));
+        row.addView(card, params);
+        messages.addView(row);
+        messageScroll.post(() -> messageScroll.fullScroll(View.FOCUS_DOWN));
+        if (save) {
+            try {
+                history.put(new JSONObject().put("type", type).put("text", captionText)
+                        .put("uri", image.toString()).put("user", false));
+                getSharedPreferences("astra_chat", MODE_PRIVATE).edit()
+                        .putString("messages", history.toString()).apply();
+            } catch (Exception ignored) {}
         }
     }
 
