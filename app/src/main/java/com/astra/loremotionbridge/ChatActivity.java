@@ -50,6 +50,8 @@ public class ChatActivity extends Activity {
 
     private final ExecutorService modelExecutor = Executors.newSingleThreadExecutor();
     private LinearLayout messages;
+    private FrameLayout workerHost;
+    private BingBrowserPanel bingBrowserPanel;
     private ScrollView messageScroll;
     private EditText input;
     private TextView modelStatus;
@@ -101,6 +103,7 @@ public class ChatActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         chatResumed = true;
+        if (bingBrowserPanel != null) bingBrowserPanel.onHostResume();
         consumePendingPerchanceImages();
         consumePendingBingImages();
         consumePendingFlowVideos();
@@ -109,6 +112,7 @@ public class ChatActivity extends Activity {
 
     @Override protected void onPause() {
         chatResumed = false;
+        if (bingBrowserPanel != null) bingBrowserPanel.onHostPause();
         super.onPause();
     }
 
@@ -159,6 +163,12 @@ public class ChatActivity extends Activity {
         LinearLayout.LayoutParams perchanceParams = new LinearLayout.LayoutParams(-1, dp(43));
         perchanceParams.bottomMargin = dp(8);
         root.addView(perchance, perchanceParams);
+
+        Button bingLogin = smallButton("✦  BING IMAGE CREATOR · ВОЙТИ В АККАУНТ", CYAN);
+        bingLogin.setOnClickListener(v -> openBingLogin());
+        LinearLayout.LayoutParams bingLoginParams = new LinearLayout.LayoutParams(-1, dp(43));
+        bingLoginParams.bottomMargin = dp(8);
+        root.addView(bingLogin, bingLoginParams);
 
         Button googleFlow = smallButton("✦  GOOGLE FLOW · AI VIDEO GENERATOR", CYAN);
         googleFlow.setOnClickListener(v -> {
@@ -253,6 +263,11 @@ public class ChatActivity extends Activity {
             if (bitmap != null) wallpaper.setImageBitmap(bitmap);
         }
         frame.addView(wallpaper, new FrameLayout.LayoutParams(-1, -1));
+        workerHost = new FrameLayout(this);
+        workerHost.setAlpha(0f);
+        workerHost.setClickable(false);
+        workerHost.setFocusable(false);
+        frame.addView(workerHost, new FrameLayout.LayoutParams(-1, -1));
         frame.addView(screen, new FrameLayout.LayoutParams(-1, -1));
         setContentView(frame);
     }
@@ -530,6 +545,15 @@ public class ChatActivity extends Activity {
         });
     }
 
+    public static void onBingStatus(Context context, String message) {
+        ChatActivity activity = activeInstance;
+        if (activity == null || message == null || !activity.chatResumed) return;
+        activity.runOnUiThread(() -> {
+            if (activity.chatResumed && activity.modelStatus != null)
+                activity.modelStatus.setText("● ASTRA · BING: " + message);
+        });
+    }
+
     public static void onBingImageReady(Context context, Uri image) {
         if (context == null || image == null) return;
         android.content.SharedPreferences prefs = context.getSharedPreferences("astra_chat", MODE_PRIVATE);
@@ -714,6 +738,27 @@ public class ChatActivity extends Activity {
                 .show();
     }
 
+    private void openBingLogin() {
+        Intent intent = new Intent(this, WebViewBrowserActivity.class);
+        intent.putExtra("url", "https://www.bing.com/images/create");
+        intent.putExtra("background", false);
+        startActivity(intent);
+    }
+
+    private void startBingGeneration(String prompt) {
+        if (prompt == null || prompt.trim().isEmpty() || isFinishing()) return;
+        addMessage("✦ ASTRA · Bing Image Creator: " + prompt.trim(), false, true);
+        if (bingBrowserPanel == null) {
+            bingBrowserPanel = new BingBrowserPanel(this, prompt.trim());
+            if (workerHost != null) workerHost.addView(bingBrowserPanel,
+                    new FrameLayout.LayoutParams(-1, -1));
+        } else {
+            bingBrowserPanel.submitPrompt(prompt.trim());
+        }
+        bingBrowserPanel.onHostResume();
+        modelStatus.setText("● ASTRA · BING ПОДКЛЮЧАЕТСЯ");
+    }
+
     private void launchBrowser() {
         Intent service = new Intent(this, BrowserBridgeService.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(service);
@@ -763,21 +808,7 @@ public class ChatActivity extends Activity {
         if (bingPrompt != null && !bingPrompt.isEmpty()) {
             addMessage(value, true, true);
             input.setText("");
-            addMessage("✦ ASTRA · открываю Bing и жду подтверждения настоящей отправки промпта…", false, true);
-            String launch = WebViewBrowserController.startBingGeneration(this, bingPrompt);
-            try {
-                JSONObject result = new JSONObject(launch);
-                if (!result.optBoolean("ok", false)) {
-                    addMessage("Не удалось открыть Bing: " + result.optString("error", "unknown_error"), false, true);
-                    modelStatus.setText("● ASTRA · BING НЕ ЗАПУЩЕН");
-                    return;
-                }
-            } catch (Exception e) {
-                addMessage("Не удалось проверить запуск Bing: " + e.getMessage(), false, true);
-                modelStatus.setText("● ASTRA · ОШИБКА ЗАПУСКА BING");
-                return;
-            }
-            modelStatus.setText("● ASTRA · BING ОЖИДАЕТ ПОДТВЕРЖДЕНИЯ");
+            startBingGeneration(bingPrompt);
             return;
         }
         String perchancePrompt = extractPerchancePrompt(value);
@@ -970,6 +1001,7 @@ public class ChatActivity extends Activity {
 
     @Override protected void onDestroy() {
         if (activeInstance == this) activeInstance = null;
+        if (bingBrowserPanel != null) { bingBrowserPanel.dispose(); bingBrowserPanel = null; }
         // Keep the native model alive for the process; do not unload on screen close.
         super.onDestroy();
     }
