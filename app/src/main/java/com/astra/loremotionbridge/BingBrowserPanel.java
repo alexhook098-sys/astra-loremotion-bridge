@@ -88,11 +88,12 @@ public final class BingBrowserPanel extends LinearLayout {
             @Override public void onPageFinished(WebView view, String url) {
                 pageLoaded = true;
                 setStatus("BING · страница загружена, проверяю интерфейс");
-                inspectLoginState();
                 baselineImages = -1;
                 main.removeCallbacks(observer);
                 main.post(observer);
-                if (pendingPrompt != null) main.postDelayed(BingBrowserPanel.this::attemptPrompt, 1200L);
+                inspectLoginState(() -> {
+                    if (pendingPrompt != null) main.postDelayed(BingBrowserPanel.this::attemptPrompt, 300L);
+                });
                 Log.i(TAG, "Bing page loaded: " + url);
             }
         });
@@ -105,8 +106,11 @@ public final class BingBrowserPanel extends LinearLayout {
         ChatActivity.onBingStatus(host, value == null ? "" : value.replace("BING · ", ""));
     }
 
-    private void inspectLoginState() {
-        if (webView == null) return;
+    private void inspectLoginState(Runnable afterCheck) {
+        if (webView == null) {
+            if (afterCheck != null) main.post(afterCheck);
+            return;
+        }
         String js = "(function(){const t=(document.body&&document.body.innerText||'').toLowerCase();"
                 + "const u=location.href.toLowerCase();"
                 + "return /login.live.com|login.microsoftonline.com/.test(u)||"
@@ -116,8 +120,9 @@ public final class BingBrowserPanel extends LinearLayout {
             String result = decode(raw);
             loginRequired = result.contains("LOGIN_REQUIRED");
             if (loginRequired)
-                setStatus("BING · требуется вход. Открой СЕРВИСЫ → Bing Image Creator · вход в аккаунт");
+                setStatus("BING · требуется вход. Открой BING IMAGE CREATOR · ВОЙТИ В АККАУНТ");
             else setStatus("BING · страница доступна");
+            if (afterCheck != null) main.postDelayed(afterCheck, 250L);
         });
     }
 
