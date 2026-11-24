@@ -73,8 +73,8 @@ public final class WebViewBrowserController {
         final String url = "https://www.bing.com/images/create";
         WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
         if (a != null) {
-            a.queueBingPrompt(prompt);
             a.openUrlInBackground(url);
+            a.queueBingPrompt(prompt);
             return "{\\"ok\\":true,\\"action\\":\\"bing-generation-requested\\"}";
         }
         try {
