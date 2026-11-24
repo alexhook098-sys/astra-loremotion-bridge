@@ -498,7 +498,10 @@ public class ChatActivity extends Activity {
             prefs.edit().putString("zsky_pending_videos", pending.toString()).apply();
         } catch (Exception ignored) {}
         ChatActivity activity = activeInstance;
-        if (activity != null && activity.chatResumed) activity.runOnUiThread(activity::consumePendingZSkyVideos);
+        if (activity != null && activity.chatResumed) activity.runOnUiThread(() -> {
+            if (activity.zskyBrowserPanel != null) activity.zskyBrowserPanel.onVideoSaved();
+            activity.consumePendingZSkyVideos();
+        });
     }
 
     private void consumePendingZSkyVideos() {
@@ -808,6 +811,23 @@ public class ChatActivity extends Activity {
         } else {
             zskyBrowserPanel.submitPrompt(prompt.trim());
         }
+        zskyBrowserPanel.setStatusListener((state, detail) -> {
+            String label;
+            switch (state) {
+                case "queued": label = "ЗАПРОС ПОДГОТОВЛЕН"; break;
+                case "prompt_entered": label = "ПРОМПТ ВВЕДЁН"; break;
+                case "submitted_unconfirmed": label = "ЗАПРОС ОТПРАВЛЕН · ПРОВЕРЯЮ СТАРТ"; break;
+                case "running": label = "RENDERING · ZSKY РЕНДЕРИТ"; break;
+                case "final_stage": label = "ФИНАЛЬНЫЙ ЭКРАН ОБНАРУЖЕН"; break;
+                case "download_retry": label = "ПОЛУЧЕНИЕ MP4 · ПОВТОРНАЯ ПРОВЕРКА"; break;
+                case "completed_unconfirmed": label = "ВИДЕО ОБНАРУЖЕНО · ПРОВЕРЯЮ ФАЙЛ"; break;
+                case "delivered": label = "ГОТОВО · MP4 СОХРАНЁН"; break;
+                case "failed": label = "ZSKY СООБЩИЛ ОБ ОШИБКЕ"; break;
+                case "automation_timeout": label = "ТРЕБУЕТСЯ ПРОВЕРКА ФОРМЫ ZSKY"; break;
+                default: label = state.toUpperCase(java.util.Locale.ROOT);
+            }
+            addMessage("✦ ASTRA · ZSKY WATCHER\n" + label + "\n" + detail, false, true);
+        });
         zskyBrowserPanel.onHostResume();
         modelStatus.setText("● ASTRA · ZSKY РАБОТАЕТ В ЧАТЕ");
     }
