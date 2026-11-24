@@ -48,6 +48,7 @@ public final class BingBrowserPanel extends LinearLayout {
     private boolean disposed;
     private int attempts;
     private int baselineImages;
+    private boolean generationActive;
 
     private final Runnable observer = new Runnable() {
         @Override public void run() {
@@ -126,7 +127,8 @@ public final class BingBrowserPanel extends LinearLayout {
             script = "(function(){const bs=[...document.querySelectorAll('button,[role=button],input[type=submit]')];"
                     + "const b=bs.find(x=>{const t=((x.innerText||x.textContent||'')+' '+(x.getAttribute('aria-label')||'')+' '+(x.id||'')).replace(/\\s+/g,' ').trim();"
                     + "return /^(create|создать|generate|создать изображения)$/i.test(t)||/create_btn/i.test(x.id||'');});"
-                    + "if(!b)return 'BUTTON_NOT_FOUND';if(b.disabled||b.getAttribute('aria-disabled')==='true')return 'BUTTON_DISABLED';b.click();return 'GENERATE_CLICKED';})()";
+                    + "if(!b)return 'BUTTON_NOT_FOUND';if(b.disabled||b.getAttribute('aria-disabled')==='true')return 'BUTTON_DISABLED';"
+                    + "window.__astraBingBaseline=new Set([...document.images].map(i=>i.currentSrc||i.src||''));b.click();return 'GENERATE_CLICKED';})()";
         }
         webView.evaluateJavascript(script, result -> {
             String value = decode(result);
@@ -138,6 +140,7 @@ public final class BingBrowserPanel extends LinearLayout {
             } else if (value.contains("GENERATE_CLICKED")) {
                 pendingPrompt = null;
                 baselineImages = -1;
+                generationActive = true;
                 status.setText("BING · генерация отправлена, ожидаю результат");
                 main.postDelayed(observer, 1500L);
             } else {
@@ -156,11 +159,11 @@ public final class BingBrowserPanel extends LinearLayout {
     }
 
     private void scanResults() {
-        if (webView == null) return;
+        if (webView == null || !generationActive) return;
         String js = "(function(){const out=[];for(const i of [...document.images]){const u=i.currentSrc||i.src||'';const r=i.getBoundingClientRect();"
                 + "if(r.width<180||r.height<180||!i.complete||i.naturalWidth<180||i.naturalHeight<180)continue;"
                 + "if(!/^https:\\/\\/th\\.bing\\.com\\/th\\/id\\//i.test(u))continue;"
-                + "if(!/(OIG|image)/i.test(u))continue;out.push(u);}return JSON.stringify([...new Set(out)]);})()";
+                + "if(!/(OIG|image)/i.test(u))continue;if(window.__astraBingBaseline&&window.__astraBingBaseline.has(u))continue;out.push(u);}return JSON.stringify([...new Set(out)]);})()";
         webView.evaluateJavascript(js, raw -> {
             try {
                 Object parsed = new org.json.JSONTokener(raw == null ? "[]" : raw).nextValue();
