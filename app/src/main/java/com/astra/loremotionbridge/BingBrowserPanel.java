@@ -49,6 +49,7 @@ public final class BingBrowserPanel extends LinearLayout {
     private int attempts;
     private int baselineImages;
     private boolean generationActive;
+    private boolean loginRequired;
 
     private final Runnable observer = new Runnable() {
         @Override public void run() {
@@ -112,7 +113,8 @@ public final class BingBrowserPanel extends LinearLayout {
                 + "/microsoft|bing|image creator/.test(t))?'LOGIN_REQUIRED':'PAGE_READY';})()";
         webView.evaluateJavascript(js, raw -> {
             String result = decode(raw);
-            if (result.contains("LOGIN_REQUIRED"))
+            loginRequired = result.contains("LOGIN_REQUIRED");
+            if (loginRequired)
                 setStatus("BING · требуется вход. Открой СЕРВИСЫ → Bing Image Creator · вход в аккаунт");
             else setStatus("BING · страница доступна");
         });
@@ -129,6 +131,10 @@ public final class BingBrowserPanel extends LinearLayout {
     private void attemptPrompt() {
         if (disposed || webView == null || !pageLoaded || pendingPrompt == null
                 || host.isFinishing() || host.isDestroyed()) return;
+        if (loginRequired) {
+            setStatus("BING · вход не выполнен. Открой СЕРВИСЫ → Bing Image Creator · вход в аккаунт");
+            return;
+        }
         if (++attempts > 50) {
             setStatus("BING · не удалось подтвердить поле или кнопку генерации");
             Log.w(TAG, "Automation timeout; url=" + webView.getUrl());
@@ -257,7 +263,18 @@ public final class BingBrowserPanel extends LinearLayout {
         main.post(() -> setStatus("BING · готово! Изображение сохранено и передано в чат"));
     }
 
-    public void onHostResume() { if (webView != null) { webView.onResume(); webView.resumeTimers(); } }
+    public void onHostResume() {
+        if (webView != null) {
+            webView.onResume();
+            webView.resumeTimers();
+            if (loginRequired) {
+                loginRequired = false;
+                pageLoaded = false;
+                setStatus("BING · обновляю сессию после входа");
+                webView.loadUrl(HOME);
+            }
+        }
+    }
     public void onHostPause() { if (webView != null) webView.onPause(); }
     public void dispose() {
         disposed = true; main.removeCallbacks(observer);
