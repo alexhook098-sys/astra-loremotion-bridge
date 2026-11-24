@@ -61,6 +61,7 @@ public class ChatActivity extends Activity {
     private FrameLayout workerHost;
     private PerchanceBrowserPanel perchanceBrowserPanel;
     private FlowBrowserPanel flowBrowserPanel;
+    private ZSkyBrowserPanel zskyBrowserPanel;
     private Button installButton;
     private JSONArray history;
     private volatile boolean busy = false;
@@ -112,12 +113,14 @@ public class ChatActivity extends Activity {
         consumePendingZSkyVideos();
         if (perchanceBrowserPanel != null) perchanceBrowserPanel.onHostResume();
         if (flowBrowserPanel != null) flowBrowserPanel.onHostResume();
+        if (zskyBrowserPanel != null) zskyBrowserPanel.onHostResume();
     }
 
     @Override protected void onPause() {
         chatResumed = false;
         if (perchanceBrowserPanel != null) perchanceBrowserPanel.onHostPause();
         if (flowBrowserPanel != null) flowBrowserPanel.onHostPause();
+        if (zskyBrowserPanel != null) zskyBrowserPanel.onHostPause();
         super.onPause();
     }
 
@@ -750,9 +753,9 @@ public class ChatActivity extends Activity {
         if (zskyPrompt != null && !zskyPrompt.isEmpty()) {
             addMessage(value, true, true);
             input.setText("");
-            addMessage("✦ ASTRA · открываю ZSky, запускаю генерацию в фоне…", false, true);
-            ZSkyWebViewActivity.start(this, ZSkyWebViewActivity.ZSKY_URL, zskyPrompt, true);
-            modelStatus.setText("● ASTRA · ZSKY РАБОТАЕТ В ФОНЕ");
+            addMessage("✦ ASTRA · запускаю ZSky внутри фонового слоя чата…", false, true);
+            startZSkyGeneration(zskyPrompt);
+            modelStatus.setText("● ASTRA · ZSKY РАБОТАЕТ В ЧАТЕ");
             return;
         }
         String flowPrompt = extractFlowPrompt(value);
@@ -794,6 +797,19 @@ public class ChatActivity extends Activity {
                 updateProviderStatus();
             });
         });
+    }
+
+    private void startZSkyGeneration(String prompt) {
+        if (prompt == null || prompt.trim().isEmpty() || isFinishing()) return;
+        if (zskyBrowserPanel == null) {
+            zskyBrowserPanel = new ZSkyBrowserPanel(this, prompt.trim());
+            if (workerHost != null) workerHost.addView(zskyBrowserPanel,
+                    new FrameLayout.LayoutParams(-1, -1));
+        } else {
+            zskyBrowserPanel.submitPrompt(prompt.trim());
+        }
+        zskyBrowserPanel.onHostResume();
+        modelStatus.setText("● ASTRA · ZSKY РАБОТАЕТ В ЧАТЕ");
     }
 
     private void startFlowGeneration(String prompt) {
@@ -1035,6 +1051,7 @@ public class ChatActivity extends Activity {
         if (activeInstance == this) activeInstance = null;
         if (perchanceBrowserPanel != null) { perchanceBrowserPanel.dispose(); perchanceBrowserPanel = null; }
         if (flowBrowserPanel != null) { flowBrowserPanel.dispose(); flowBrowserPanel = null; }
+        if (zskyBrowserPanel != null) { zskyBrowserPanel.dispose(); zskyBrowserPanel = null; }
         // Keep the native model alive for the process; do not unload on screen close.
         super.onDestroy();
     }
