@@ -76,6 +76,14 @@ public final class ZSkyBrowserPanel extends LinearLayout {
             webView.evaluateJavascript(js, value -> {
                 observerPolls++;
                 generationEvidence = value == null ? "" : value;
+                long elapsedSeconds = generationStartedAt > 0L
+                        ? Math.max(0L, (System.currentTimeMillis() - generationStartedAt) / 1000L) : 0L;
+                if (elapsedSeconds >= 210L && ("running".equals(generationState)
+                        || "submitted_unconfirmed".equals(generationState))) {
+                    setGenerationState("render_slow", "Рендеринг длится уже " + (elapsedSeconds / 60L)
+                            + " мин. " + (elapsedSeconds % 60L)
+                            + " сек. · продолжаю наблюдать за финальным экраном, генерацию не перезапускаю");
+                }
                 if (observerPolls % 12 == 0 && "running".equals(generationState)) {
                     long elapsed = Math.max(0L, (System.currentTimeMillis() - generationStartedAt) / 1000L);
                     notifyStatus("render_heartbeat", "Наблюдение активно · " + elapsed + " сек · проверок страницы: " + observerPolls);
