@@ -660,6 +660,33 @@ public class ChatActivity extends Activity {
             modelStatus.setText("● ASTRA · GOOGLE FLOW РАБОТАЕТ В ФОНЕ");
             return;
         }
+        String bingPrompt = extractBingPrompt(value);
+        if (isBingRequest(value) && (bingPrompt == null || bingPrompt.isEmpty())) {
+            addMessage(value, true, true);
+            input.setText("");
+            addMessage("Укажи описание после команды Bing, например: «Bing: футуристический город на берегу моря на закате».", false, true);
+            return;
+        }
+        if (bingPrompt != null && !bingPrompt.isEmpty()) {
+            addMessage(value, true, true);
+            input.setText("");
+            addMessage("✦ ASTRA · открываю Bing Image Creator в фоновой сессии. Подготовка автоматической отправки и возврата изображения — следующий этап.", false, true);
+            String launch = WebViewBrowserController.start(this, "https://www.bing.com/images/create");
+            try {
+                JSONObject result = new JSONObject(launch);
+                if (!result.optBoolean("ok", false)) {
+                    addMessage("Не удалось открыть Bing: " + result.optString("error", "unknown_error"), false, true);
+                    modelStatus.setText("● ASTRA · BING НЕ ЗАПУЩЕН");
+                    return;
+                }
+            } catch (Exception e) {
+                addMessage("Не удалось проверить запуск Bing: " + e.getMessage(), false, true);
+                modelStatus.setText("● ASTRA · ОШИБКА ЗАПУСКА BING");
+                return;
+            }
+            modelStatus.setText("● ASTRA · BING ОТКРЫТ В ФОНЕ");
+            return;
+        }
         String perchancePrompt = extractPerchancePrompt(value);
         if (perchancePrompt != null && !perchancePrompt.isEmpty()) {
             addMessage(value, true, true);
@@ -733,6 +760,27 @@ public class ChatActivity extends Activity {
         Pattern en = Pattern.compile("(?i)^\\s*(?:please\\s+)?(?:generate|create|make)\\s+(?:a\\s+)?video\\s*[:—-]?\\s*(.+)$");
         Matcher em = en.matcher(value);
         return em.matches() ? em.group(1).trim() : null;
+    }
+
+    private boolean isBingRequest(String text) {
+        if (text == null) return false;
+        String v = text.trim().toLowerCase(java.util.Locale.ROOT);
+        return v.startsWith("bing:") || v.startsWith("bing image:")
+                || v.startsWith("bing image creator:")
+                || v.startsWith("bing create:");
+    }
+
+    private String extractBingPrompt(String text) {
+        if (text == null) return null;
+        String value = text.trim();
+        String lower = value.toLowerCase(java.util.Locale.ROOT);
+        String[] prefixes = {"bing image creator:", "bing image:", "bing create:", "bing:"};
+        for (String prefix : prefixes) {
+            if (lower.startsWith(prefix)) {
+                return value.substring(prefix.length()).replaceFirst("^[\\s:—-]+", "").trim();
+            }
+        }
+        return null;
     }
 
     private String extractPerchancePrompt(String text) {
