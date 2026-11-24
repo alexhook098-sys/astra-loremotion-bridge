@@ -61,7 +61,7 @@ public final class ZSkyBrowserPanel extends LinearLayout {
                     || host.isFinishing() || host.isDestroyed()) return;
             String js = "(function(){const t=(document.body&&document.body.innerText)||'';"
                 + "const final=/rendered on the free lane/i.test(t)&&/\\bdownload\\b/i.test(t);"
-                + "let clicked=false;const now=Date.now();if(final&&!window.__astraZSkyDownloadButtonClicked&&(!window.__astraZSkyLastDownloadAttempt||now-window.__astraZSkyLastDownloadAttempt>8000)){"
+                + "let clicked=false;const now=Date.now();if(final&&(!window.__astraZSkyLastDownloadAttempt||now-window.__astraZSkyLastDownloadAttempt>8000)){"
                 + "const b=[...document.querySelectorAll('button,[role=button],a')].find(x=>{"
                 + "const q=((x.innerText||x.textContent||'')+' '+(x.getAttribute('aria-label')||'')).replace(/\\s+/g,' ').trim().toLowerCase();"
                 + "return q==='download'&&!x.disabled&&x.getAttribute('aria-disabled')!=='true';});"
