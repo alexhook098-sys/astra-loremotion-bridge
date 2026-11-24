@@ -48,6 +48,8 @@ public class WebViewBrowserActivity extends Activity {
     private String pendingBingPrompt;
     private boolean bingPromptSubmitted;
     private int bingPromptAttempts;
+    private final Set<String> seenBingImages = new HashSet<>();
+    private boolean bingObserverRunning;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService perchanceDownloads = Executors.newSingleThreadExecutor();
     private final Set<String> seenPerchanceImages = new HashSet<>();
@@ -61,6 +63,102 @@ public class WebViewBrowserActivity extends Activity {
             main.postDelayed(this, 2500L);
         }
     };
+
+    private final Runnable bingObserver = new Runnable() {
+        @Override public void run() {
+            if (webView == null || isFinishing() || !bingObserverRunning) return;
+            if (webView.getUrl() == null || !webView.getUrl().contains("bing.com")) {
+                bingObserverRunning = false;
+                return;
+            }
+            scanBingImages();
+            main.postDelayed(this, 2500L);
+        }
+    };
+
+    private void startBingObserver() {
+        if (bingObserverRunning) return;
+        bingObserverRunning = true;
+        main.removeCallbacks(bingObserver);
+        main.postDelayed(bingObserver, 1800L);
+        Log.i("ASTRA-BING", "Result observer started");
+    }
+
+    private void scanBingImages() {
+        if (webView == null) return;
+        String js = "(()=>Array.from(document.images).filter(i=>i.complete&&i.naturalWidth>=256&&i.naturalHeight>=256&&i.getClientRects().length)"
+                + ".map(i=>i.currentSrc||i.src).filter(u=>/^https:\\/\\/th\\.bing\\.com\\/th\\/id\\//.test(u)))()";
+        webView.evaluateJavascript(js, raw -> {
+            try {
+                Object decoded = new org.json.JSONTokener(raw == null ? "null" : raw).nextValue();
+                if (!(decoded instanceof String)) return;
+                org.json.JSONArray urls = new org.json.JSONArray((String) decoded);
+                for (int i=0;i<urls.length();i++) {
+                    String url = urls.optString(i, "");
+                    if (url.isEmpty() || !seenBingImages.add(url)) continue;
+                    saveBingImage(url, (value,error) -> {
+                        if (error != null) {
+                            Log.w("ASTRA-BING", "New image capture failed: " + error);
+                            return;
+                        }
+                        try {
+                            org.json.JSONObject meta = new org.json.JSONObject(value);
+                            String name = meta.getString("name");
+                            String mime = meta.getString("type");
+                            if (!name.matches("[0-9a-f]{32}\\.(png|jpg|webp)")) throw new IOException("invalid_bing_cache_name");
+                            File source = new File(new File(getCacheDir(), "bing_images"), name);
+                            Uri saved = publishBingImageToGallery(source, mime);
+                            setStatus("Bing image saved and delivered to ASTRA Chat");
+                            ChatActivity.onBingImageReady(getApplicationContext(), saved);
+                        } catch (Exception e) {
+                            Log.e("ASTRA-BING", "Could not publish generated image", e);
+                            setStatus("Bing image delivery failed: " + e.getMessage());
+                        }
+                    });
+                }
+            } catch (Exception e) {
+                Log.w("ASTRA-BING", "Could not parse result image list", e);
+            }
+        });
+    }
+
+    private Uri publishBingImageToGallery(File source, String mime) throws IOException {
+        if (source == null || !source.isFile() || source.length() < 1) throw new IOException("bing_image_file_missing");
+        final String ext = "image/png".equals(mime) ? ".png"
+                : "image/jpeg".equals(mime) ? ".jpg"
+                : "image/webp".equals(mime) ? ".webp" : null;
+        if (ext == null) throw new IOException("unsupported_bing_image_type");
+        ContentValues values = new ContentValues();
+        values.put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "ASTRA_BING_" + System.currentTimeMillis() + ext);
+        values.put(android.provider.MediaStore.Images.Media.MIME_TYPE, mime);
+        if (Build.VERSION.SDK_INT >= 29) {
+            values.put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/ASTRA/Bing");
+            values.put(android.provider.MediaStore.Images.Media.IS_PENDING, 1);
+        }
+        Uri target = getContentResolver().insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+        if (target == null) throw new IOException("bing_gallery_insert_failed");
+        boolean complete = false;
+        try (FileInputStream in = new FileInputStream(source);
+             OutputStream out = getContentResolver().openOutputStream(target, "w")) {
+            if (out == null) throw new IOException("bing_gallery_stream_unavailable");
+            byte[] buffer = new byte[16384]; int count; long total=0;
+            while ((count=in.read(buffer))!=-1) {
+                total += count;
+                if (total > 20L*1024L*1024L) throw new IOException("bing_image_too_large");
+                out.write(buffer,0,count);
+            }
+            complete = total > 0;
+        } finally {
+            if (Build.VERSION.SDK_INT >= 29) {
+                ContentValues ready = new ContentValues();
+                ready.put(android.provider.MediaStore.Images.Media.IS_PENDING, 0);
+                if (complete) getContentResolver().update(target,ready,null,null);
+                else getContentResolver().delete(target,null,null);
+            } else if (!complete) getContentResolver().delete(target,null,null);
+        }
+        if (!complete) throw new IOException("bing_image_empty");
+        return target;
+    }
 
     public static WebViewBrowserActivity getInstance() { return instance; }
 
@@ -282,8 +380,9 @@ public class WebViewBrowserActivity extends Activity {
                 if (result.optBoolean("ok", false)) {
                     bingPromptSubmitted = true;
                     pendingBingPrompt = null;
-                    setStatus("Bing prompt submitted");
+                    setStatus("Bing prompt submitted; watching for new images");
                     Log.i("ASTRA-BING", "Prompt submitted through verified visible controls");
+                    startBingObserver();
                 } else {
                     String stage = result.optString("stage", "unknown");
                     int count = result.optInt("count", -1);
@@ -1189,6 +1288,8 @@ public class WebViewBrowserActivity extends Activity {
 
     @Override protected void onDestroy() {
         stopPerchanceObserver();
+        bingObserverRunning = false;
+        main.removeCallbacks(bingObserver);
         Log.i("ASTRA-WV-DIAG", "Activity onDestroy entered");
         if (webView != null) {
             webView.stopLoading();
