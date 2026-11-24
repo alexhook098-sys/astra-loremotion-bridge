@@ -183,7 +183,7 @@ public final class BingBrowserPanel extends LinearLayout {
             connection.setConnectTimeout(15000);
             connection.setReadTimeout(30000);
             connection.setInstanceFollowRedirects(true);
-            connection.setRequestProperty("User-Agent", webView == null ? "Mozilla/5.0" : webView.getSettings().getUserAgentString());
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
             connection.setRequestProperty("Referer", HOME);
             String cookie = CookieManager.getInstance().getCookie(imageUrl);
             if (cookie != null) connection.setRequestProperty("Cookie", cookie);
