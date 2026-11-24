@@ -88,6 +88,8 @@ public class ChatActivity extends Activity {
                 if (m != null) {
                     if ("perchance_image".equals(m.optString("type"))) {
                         addPerchanceImageMessage(Uri.parse(m.optString("uri", "")), false);
+                    } else if ("bing_image".equals(m.optString("type"))) {
+                        addGeneratedImageMessage(Uri.parse(m.optString("uri", "")), false, "Bing Image Creator", "bing_image");
                     } else if ("flow_video".equals(m.optString("type"))) {
                         addVideoMessage(Uri.parse(m.optString("uri", "")), false);
                     } else if ("story_motion_video".equals(m.optString("type"))) {
@@ -102,6 +104,7 @@ public class ChatActivity extends Activity {
         }
         updateProviderStatus();
         consumePendingPerchanceImages();
+        consumePendingBingImages();
         consumePendingFlowVideos();
         consumePendingZSkyVideos();
     }
@@ -249,6 +252,7 @@ public class ChatActivity extends Activity {
         final String[] entries = new String[]{
                 "＋  Подключить OpenRouter · API KEY",
                 "✦  Perchance  ·  вход и настройки",
+                "◉  Bing Image Creator  ·  вход в аккаунт",
                 "▶  Google Flow  ·  вход и настройки",
                 "✦  ZSky  ·  вход в аккаунт",
                 "◉  ASTRA Browser  ·  браузер и Browser Bridge",
@@ -265,16 +269,19 @@ public class ChatActivity extends Activity {
                             openPerchanceStudio();
                             break;
                         case 2:
-                            BrowserSessionManager.openFlow(this);
+                            openBingLogin();
                             break;
                         case 3:
+                            BrowserSessionManager.openFlow(this);
+                            break;
+                        case 4:
                             // Open the authenticated studio for manual sign-in; never submit a prompt here.
                             ZSkyWebViewActivity.start(this, ZSkyWebViewActivity.ZSKY_URL, false);
                             break;
-                        case 4:
+                        case 5:
                             launchBrowser();
                             break;
-                        case 5:
+                        case 6:
                             startActivity(new Intent(this, MainActivity.class));
                             break;
                     }
@@ -645,38 +652,32 @@ public class ChatActivity extends Activity {
     }
 
     private void addPerchanceImageMessage(Uri image, boolean save) {
+        addGeneratedImageMessage(image, save, "Perchance", "perchance_image");
+    }
+
+    private void addGeneratedImageMessage(Uri image, boolean save, String provider, String historyType) {
         if (image == null || image.toString().isEmpty()) return;
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(10), dp(9), dp(10), dp(10));
         card.setBackground(round(Color.rgb(30, 42, 65), Color.rgb(57, 91, 119), 17));
-
-        TextView caption = label("✦ ASTRA · изображение сохранено в галерею", 13, WHITE, false);
+        TextView caption = label("✦ ASTRA · " + provider + " · изображение сохранено", 13, WHITE, false);
         caption.setPadding(dp(3), dp(2), dp(3), dp(8));
         card.addView(caption, new LinearLayout.LayoutParams(-1, -2));
-
         ImageView preview = new ImageView(this);
         preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
         preview.setAdjustViewBounds(true);
         preview.setMaxHeight(dp(280));
         preview.setBackground(round(Color.rgb(16, 22, 38), Color.rgb(57, 91, 119), 12));
-        try {
-            preview.setImageURI(image);
-        } catch (Exception e) {
-            preview.setImageDrawable(null);
-        }
-        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(-1, dp(280));
-        card.addView(preview, imageParams);
+        try { preview.setImageURI(image); } catch (Exception e) { preview.setImageDrawable(null); }
+        card.addView(preview, new LinearLayout.LayoutParams(-1, dp(280)));
         card.setOnClickListener(v -> {
             Intent open = new Intent(Intent.ACTION_VIEW);
             open.setDataAndType(image, "image/*");
             open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             try { startActivity(open); }
-            catch (Exception e) {
-                addMessage("Не удалось открыть изображение из Галереи.", false, true);
-            }
+            catch (Exception e) { addMessage("Не удалось открыть изображение из Галереи.", false, true); }
         });
-
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.LEFT);
         LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1, -2);
@@ -684,18 +685,55 @@ public class ChatActivity extends Activity {
         row.addView(card, cardParams);
         messages.addView(row);
         messageScroll.post(() -> messageScroll.fullScroll(View.FOCUS_DOWN));
-
         if (save) {
             try {
-                history.put(new JSONObject()
-                        .put("type", "perchance_image")
-                        .put("text", "ASTRA · изображение сохранено")
-                        .put("uri", image.toString())
-                        .put("user", false));
-                getSharedPreferences("astra_chat", MODE_PRIVATE).edit()
-                        .putString("messages", history.toString()).apply();
+                history.put(new JSONObject().put("type", historyType)
+                        .put("text", "ASTRA · " + provider + " · изображение сохранено")
+                        .put("uri", image.toString()).put("user", false));
+                getSharedPreferences("astra_chat", MODE_PRIVATE).edit().putString("messages", history.toString()).apply();
             } catch (Exception ignored) {}
         }
+    }
+
+    private void consumePendingBingImages() {
+        if (isFinishing() || messages == null) return;
+        android.content.SharedPreferences prefs = getSharedPreferences("astra_chat", MODE_PRIVATE);
+        JSONArray pending;
+        try { pending = new JSONArray(prefs.getString("bing_pending", "[]")); }
+        catch (Exception e) { pending = new JSONArray(); }
+        if (pending.length() == 0) return;
+        prefs.edit().remove("bing_pending").apply();
+        for (int i = 0; i < pending.length(); i++) {
+            JSONObject item = pending.optJSONObject(i);
+            if (item == null) continue;
+            Uri image = Uri.parse(item.optString("uri", ""));
+            if (!image.toString().isEmpty()) addGeneratedImageMessage(image, true, "Bing Image Creator", "bing_image");
+        }
+    }
+
+    public static void onBingImageReady(Context context, Uri image) {
+        if (context == null || image == null) return;
+        android.content.SharedPreferences prefs = context.getSharedPreferences("astra_chat", MODE_PRIVATE);
+        JSONArray pending;
+        try { pending = new JSONArray(prefs.getString("bing_pending", "[]")); }
+        catch (Exception e) { pending = new JSONArray(); }
+        try { pending.put(new JSONObject().put("uri", image.toString())); prefs.edit().putString("bing_pending", pending.toString()).apply(); }
+        catch (Exception ignored) {}
+        ChatActivity activity = activeInstance;
+        if (activity != null && activity.chatResumed) activity.runOnUiThread(() -> { if (activity.chatResumed) activity.consumePendingBingImages(); });
+    }
+
+    public static void onBingStatus(Context context, String message) {
+        ChatActivity activity = activeInstance;
+        if (activity == null || message == null || !activity.chatResumed) return;
+        activity.runOnUiThread(() -> { if (activity.chatResumed && activity.modelStatus != null) activity.modelStatus.setText("● ASTRA · BING: " + message); });
+    }
+
+    private void openBingLogin() {
+        Intent intent = new Intent(this, WebViewBrowserActivity.class);
+        intent.putExtra("url", "https://www.bing.com/images/create");
+        intent.putExtra("background", false);
+        startActivity(intent);
     }
 
     private void updateProviderStatus() {
