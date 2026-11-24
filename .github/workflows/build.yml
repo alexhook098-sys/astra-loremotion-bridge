@@ -15,6 +15,7 @@ on:
       - feature/zsky-chat-background-from-362
       - feature/story-motion-diagnostics-on-stable-400
       - feature/astra-browser-core-in-chat
+      - fix/zsky-embedded-worker-462
 
 jobs:
   build:
