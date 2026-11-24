@@ -948,7 +948,11 @@ public class ChatActivity extends Activity {
         };
         for (Pattern pattern : patterns) {
             Matcher matcher = pattern.matcher(value);
-            if (matcher.matches()) return matcher.group(1).trim();
+            if (matcher.matches()) {
+                String prompt = matcher.group(1).trim();
+                prompt = prompt.replaceFirst("(?iu)[,;]?\\s*(?:и\\s+)?не\\s+(?:используй|применяй)\\s+perchance.*$", "").trim();
+                return prompt;
+            }
         }
         return null;
     }
