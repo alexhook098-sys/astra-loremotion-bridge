@@ -55,18 +55,32 @@ public final class ZSkyWebViewActivity extends Activity {
     private final Runnable diagPoll = new Runnable() {
         @Override public void run() {
             if (webView == null || isFinishing() || isDestroyed()) return;
+            final boolean[] completed = {false};
+            Runnable timeout = new Runnable() {
+                @Override public void run() {
+                    if (completed[0]) return;
+                    completed[0] = true;
+                    Log.w("ASTRA-ZSKY-DIAG", "background evaluateJavascript callback timed out; restarting poll");
+                    if (webView != null && !isFinishing() && !isDestroyed())
+                        main.postDelayed(diagPoll, 2500L);
+                }
+            };
+            main.postDelayed(timeout, 4000L);
             webView.evaluateJavascript(
                     "(function(){const h=window.__astraZSkyDiag||{};return JSON.stringify({"
                     + "visibility:document.visibilityState,hidden:document.hidden,"
                     + "ready:document.readyState,tick:h.tick||0,heartbeatAt:h.at||0,"
                     + "url:location.href});})()",
                     value -> {
+                        if (completed[0]) return;
+                        completed[0] = true;
+                        main.removeCallbacks(timeout);
                         diagPollCount++;
                         lastDiagAt = android.os.SystemClock.elapsedRealtime();
                         Log.i("ASTRA-ZSKY-DIAG", "background poll=" + diagPollCount
                                 + " lifecycle=" + lastLifecycleEvent + " page=" + value);
                         if (webView != null && !isFinishing() && !isDestroyed())
-                            main.postDelayed(this, 5000L);
+                            main.postDelayed(diagPoll, 5000L);
                     });
         }
     };
@@ -88,7 +102,21 @@ public final class ZSkyWebViewActivity extends Activity {
                     + "return JSON.stringify({tail:t.slice(-1400),videos:document.querySelectorAll('video').length,"
                     + "busy:document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,"
                     + "visibility:document.visibilityState,final:final,clicked:clicked,urls:urls});})()";
+            final boolean[] completed = {false};
+            Runnable timeout = new Runnable() {
+                @Override public void run() {
+                    if (completed[0]) return;
+                    completed[0] = true;
+                    Log.w("ASTRA-ZSKY-OBSERVER", "render observer callback timed out; retrying without touching generation");
+                    if (webView != null && !isFinishing() && !isDestroyed())
+                        main.postDelayed(generationObserver, 2500L);
+                }
+            };
+            main.postDelayed(timeout, 4500L);
             webView.evaluateJavascript(js, value -> {
+                if (completed[0]) return;
+                completed[0] = true;
+                main.removeCallbacks(timeout);
                 observerPolls++;
                 if (webView != null) webView.evaluateJavascript(videoCaptureScanScript(), null);
                 generationEvidence = value == null ? "" : value;
@@ -164,6 +192,7 @@ public final class ZSkyWebViewActivity extends Activity {
         }
         webView.setFocusable(true);
         webView.setFocusableInTouchMode(true);
+        webView.requestFocus();
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -567,6 +596,11 @@ public final class ZSkyWebViewActivity extends Activity {
         if (webView != null) {
             webView.onResume();
             webView.resumeTimers();
+            webView.requestFocus();
+            Log.i("ASTRA-ZSKY", "WebView foreground execution reasserted; renderer priority="
+                    + (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O
+                    ? "IMPORTANT" : "platform-default")
+                    + " wakeLockHeld=" + (zskyWakeLock != null && zskyWakeLock.isHeld()));
         }
     }
 
