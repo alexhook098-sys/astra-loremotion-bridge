@@ -47,6 +47,7 @@ public class WebViewBrowserActivity extends Activity {
     private String pendingUploadPath;
     private String pendingBingPrompt;
     private boolean bingPromptSubmitted;
+    private boolean bingPromptAttemptInFlight;
     private int bingPromptAttempts;
     private final Set<String> seenBingImages = new HashSet<>();
     private boolean bingObserverRunning;
@@ -341,12 +342,13 @@ public class WebViewBrowserActivity extends Activity {
         if (prompt == null || prompt.trim().isEmpty()) return;
         pendingBingPrompt = prompt.trim();
         bingPromptSubmitted = false;
+        bingPromptAttemptInFlight = false;
         bingPromptAttempts = 0;
         Log.i("ASTRA-BING", "Prompt queued; waiting for Bing navigation/page-finished handshake");
     }
 
     private void trySubmitBingPrompt() {
-        if (webView == null || pendingBingPrompt == null || bingPromptSubmitted) return;
+        if (webView == null || pendingBingPrompt == null || bingPromptSubmitted || bingPromptAttemptInFlight) return;
         final String prompt = pendingBingPrompt;
         if (++bingPromptAttempts > 12) {
             pendingBingPrompt = null;
@@ -369,8 +371,13 @@ public class WebViewBrowserActivity extends Activity {
                 + "var baseline=Array.from(document.images).filter(function(i){return i.complete&&i.naturalWidth>=256&&i.naturalHeight>=256;}).map(function(i){return i.currentSrc||i.src;});"
                 + "buttons[0].click();return JSON.stringify({ok:true,stage:'submitted',baseline:baseline});"
                 + "}catch(e){return JSON.stringify({ok:false,stage:'exception',error:String(e)});}})()";
+        bingPromptAttemptInFlight = true;
         webView.evaluateJavascript(js, raw -> {
-            if (raw == null) return;
+            bingPromptAttemptInFlight = false;
+            if (raw == null) {
+                main.postDelayed(() -> trySubmitBingPrompt(), 2000L);
+                return;
+            }
             try {
                 Object decoded = new org.json.JSONTokener(raw).nextValue();
                 if (!(decoded instanceof String)) return;
