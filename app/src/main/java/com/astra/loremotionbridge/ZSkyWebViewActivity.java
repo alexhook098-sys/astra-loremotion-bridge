@@ -287,17 +287,10 @@ public final class ZSkyWebViewActivity extends Activity {
         String url = getIntent().getStringExtra("url");
         webView.loadUrl(url == null || url.trim().isEmpty() ? ZSKY_URL : url);
 
-        // Match Google Flow's headless launch: keep the dedicated WebView alive,
-        // but return to ASTRA immediately instead of showing the ZSky tab.
-        // The page continues loading and automation/observers run in this Activity.
-        if (backgroundRequested) {
-            main.postDelayed(() -> {
-                if (!isFinishing() && !isDestroyed()) {
-                    moveTaskToBack(true);
-                    Log.i("ASTRA-ZSKY", "Headless background task started; WebView retained");
-                }
-            }, 120L);
-        }
+        // Experimental: do not background ZSky during initial page load.
+        // Let SPA hydration and prompt automation complete before minimizing
+        // after Generate is confirmed in runPendingPrompt().
+        Log.i("ASTRA-ZSKY", "Delayed backgrounding enabled; waiting for Generate confirmation");
 
     }
 
@@ -318,15 +311,9 @@ public final class ZSkyWebViewActivity extends Activity {
                 && !url.equals(webView.getUrl())) {
             webView.loadUrl(url);
         }
-        // A new automated request must also stay invisible, just like Flow.
-        if (backgroundRequested) {
-            main.postDelayed(() -> {
-                if (!isFinishing() && !isDestroyed()) {
-                    moveTaskToBack(true);
-                    Log.i("ASTRA-ZSKY", "Background task reaffirmed after new intent");
-                }
-            }, 120L);
-        }
+        // Experimental: keep a newly loaded ZSky page in foreground until
+        // the automated Generate action is confirmed; do not minimize after 120 ms.
+        Log.i("ASTRA-ZSKY", "New request will background only after Generate confirmation");
     }
 
     private void runPendingPrompt() {
