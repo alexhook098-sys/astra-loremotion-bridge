@@ -66,7 +66,7 @@ public final class BingBrowserPanel extends LinearLayout {
         setBackgroundColor(Color.rgb(8, 11, 24));
         status = new TextView(host);
         status.setTextColor(Color.WHITE);
-        status.setText("BING · подключаю фоновый генератор");
+        setStatus("BING · подключаю фоновый генератор");
         status.setPadding(8, 4, 8, 4);
         addView(status, new LayoutParams(-1, -2));
 
@@ -86,7 +86,7 @@ public final class BingBrowserPanel extends LinearLayout {
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) {
                 pageLoaded = true;
-                status.setText("BING · страница загружена, проверяю интерфейс");
+                setStatus("BING · страница загружена, проверяю интерфейс");
                 baselineImages = -1;
                 main.removeCallbacks(observer);
                 main.post(observer);
@@ -96,6 +96,26 @@ public final class BingBrowserPanel extends LinearLayout {
         });
         addView(webView, new LayoutParams(-1, 0, 1f));
         webView.loadUrl(HOME);
+    }
+
+    private void setStatus(String value) {
+        if (status != null) status.setText(value);
+        ChatActivity.onBingStatus(host, value == null ? "" : value.replace("BING · ", ""));
+    }
+
+    private void inspectLoginState() {
+        if (webView == null) return;
+        String js = "(function(){const t=(document.body&&document.body.innerText||'').toLowerCase();"
+                + "const u=location.href.toLowerCase();"
+                + "return /login.live.com|login.microsoftonline.com/.test(u)||"
+                + "(/sign in|войти|вход в учетную запись|войдите в учетную запись/.test(t)&&"
+                + "/microsoft|bing|image creator/.test(t))?'LOGIN_REQUIRED':'PAGE_READY';})()";
+        webView.evaluateJavascript(js, raw -> {
+            String result = decode(raw);
+            if (result.contains("LOGIN_REQUIRED"))
+                setStatus("BING · требуется вход. Открой СЕРВИСЫ → Bing Image Creator · вход в аккаунт");
+            else setStatus("BING · страница доступна");
+        });
     }
 
     public void submitPrompt(String prompt) {
@@ -110,7 +130,7 @@ public final class BingBrowserPanel extends LinearLayout {
         if (disposed || webView == null || !pageLoaded || pendingPrompt == null
                 || host.isFinishing() || host.isDestroyed()) return;
         if (++attempts > 50) {
-            status.setText("BING · не удалось подтвердить поле или кнопку генерации");
+            setStatus("BING · не удалось подтвердить поле или кнопку генерации");
             Log.w(TAG, "Automation timeout; url=" + webView.getUrl());
             pendingPrompt = null;
             return;
@@ -135,16 +155,16 @@ public final class BingBrowserPanel extends LinearLayout {
             Log.i(TAG, "automation attempt=" + attempts + " result=" + value);
             if (value.contains("FIELD_SET")) {
                 promptInjected = true;
-                status.setText("BING · запрос введён, запускаю генерацию");
+                setStatus("BING · запрос введён, запускаю генерацию");
                 main.postDelayed(this::attemptPrompt, 650L);
             } else if (value.contains("GENERATE_CLICKED")) {
                 pendingPrompt = null;
                 baselineImages = -1;
                 generationActive = true;
-                status.setText("BING · генерация отправлена, ожидаю результат");
+                setStatus("BING · генерация отправлена, ожидаю результат");
                 main.postDelayed(observer, 1500L);
             } else {
-                status.setText("BING · ожидаю интерфейс генератора");
+                setStatus("BING · ожидаю интерфейс генератора");
                 main.postDelayed(this::attemptPrompt, 1000L);
             }
         });
@@ -169,7 +189,7 @@ public final class BingBrowserPanel extends LinearLayout {
                 Object parsed = new org.json.JSONTokener(raw == null ? "[]" : raw).nextValue();
                 org.json.JSONArray array = new org.json.JSONArray(parsed instanceof String ? (String) parsed : "[]");
                 if (array.length() == 0) return;
-                status.setText("BING · обнаружены изображения: " + array.length() + " · сохраняю");
+                setStatus("BING · обнаружены изображения: " + array.length() + " · сохраняю");
                 for (int i = 0; i < array.length(); i++) {
                     String url = array.optString(i, "");
                     if (!url.isEmpty() && seen.add(url)) downloads.execute(() -> saveImage(url));
@@ -208,7 +228,7 @@ public final class BingBrowserPanel extends LinearLayout {
         } catch (Exception e) {
             seen.remove(imageUrl);
             Log.w(TAG, "Bing image save failed: " + e.getMessage(), e);
-            main.post(() -> status.setText("BING · ошибка сохранения результата: " + e.getClass().getSimpleName()));
+            main.post(() -> setStatus("BING · ошибка сохранения результата: " + e.getClass().getSimpleName()));
         } finally { if (connection != null) connection.disconnect(); }
     }
 
@@ -232,8 +252,9 @@ public final class BingBrowserPanel extends LinearLayout {
             host.getContentResolver().update(target, ready, null, null);
         }
         Log.i(TAG, "Bing image saved: " + target + " bytes=" + data.length);
-        ChatActivity.onPerchanceImageReady(host, target);
-        main.post(() -> status.setText("BING · изображение сохранено в Pictures/ASTRA/Bing"));
+        generationActive = false;
+        ChatActivity.onBingImageReady(host, target);
+        main.post(() -> setStatus("BING · готово! Изображение сохранено и передано в чат"));
     }
 
     public void onHostResume() { if (webView != null) { webView.onResume(); webView.resumeTimers(); } }
