@@ -102,6 +102,7 @@ public class ChatActivity extends Activity {
         super.onResume();
         chatResumed = true;
         consumePendingPerchanceImages();
+        consumePendingBingImages();
         consumePendingFlowVideos();
         consumePendingZSkyVideos();
     }
