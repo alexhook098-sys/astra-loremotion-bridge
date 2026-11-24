@@ -516,6 +516,20 @@ public class ChatActivity extends Activity {
         }
     }
 
+    public static void onBingPromptSubmitted(String prompt) {
+        ChatActivity activity = activeInstance;
+        if (activity != null) activity.runOnUiThread(() -> {
+            if (!activity.isFinishing()) activity.addMessage("✦ Bing подтвердил отправку промпта. Ожидаю новое изображение…", false, true);
+        });
+    }
+
+    public static void onBingPromptFailed(String reason) {
+        ChatActivity activity = activeInstance;
+        if (activity != null) activity.runOnUiThread(() -> {
+            if (!activity.isFinishing()) activity.addMessage("✦ Bing не подтвердил отправку: " + (reason == null ? "элементы страницы не найдены" : reason) + ". Генерация не считается запущенной.", false, true);
+        });
+    }
+
     public static void onBingImageReady(Context context, Uri image) {
         if (context == null || image == null) return;
         android.content.SharedPreferences prefs = context.getSharedPreferences("astra_chat", MODE_PRIVATE);
@@ -749,7 +763,7 @@ public class ChatActivity extends Activity {
         if (bingPrompt != null && !bingPrompt.isEmpty()) {
             addMessage(value, true, true);
             input.setText("");
-            addMessage("✦ ASTRA · передаю описание в Bing Image Creator в фоновой сессии…", false, true);
+            addMessage("✦ ASTRA · открываю Bing и жду подтверждения настоящей отправки промпта…", false, true);
             String launch = WebViewBrowserController.startBingGeneration(this, bingPrompt);
             try {
                 JSONObject result = new JSONObject(launch);
@@ -763,7 +777,7 @@ public class ChatActivity extends Activity {
                 modelStatus.setText("● ASTRA · ОШИБКА ЗАПУСКА BING");
                 return;
             }
-            modelStatus.setText("● ASTRA · BING ЗАПРОС ПЕРЕДАН");
+            modelStatus.setText("● ASTRA · BING ОЖИДАЕТ ПОДТВЕРЖДЕНИЯ");
             return;
         }
         String perchancePrompt = extractPerchancePrompt(value);
