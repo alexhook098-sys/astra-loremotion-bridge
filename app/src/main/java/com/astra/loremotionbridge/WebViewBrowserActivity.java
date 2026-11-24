@@ -369,7 +369,8 @@ public class WebViewBrowserActivity extends Activity {
                 + "f.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:v}));f.dispatchEvent(new Event('change',{bubbles:true}));"
                 + "var buttons=[...document.querySelectorAll('button,[role=button]')].filter(vis).filter(function(b){var t=((b.innerText||'')+' '+(b.getAttribute('aria-label')||'')).trim().toLowerCase();return /^(create|создать|generate|сгенерировать|создать изображение)$/.test(t)&&!b.disabled&&b.getAttribute('aria-disabled')!=='true';});"
                 + "if(buttons.length!==1)return JSON.stringify({ok:false,stage:'button',count:buttons.length});"
-                + "buttons[0].click();return JSON.stringify({ok:true,stage:'submitted'});"
+                + "var baseline=Array.from(document.images).filter(function(i){return i.complete&&i.naturalWidth>=256&&i.naturalHeight>=256;}).map(function(i){return i.currentSrc||i.src;});"
+                + "buttons[0].click();return JSON.stringify({ok:true,stage:'submitted',baseline:baseline});"
                 + "}catch(e){return JSON.stringify({ok:false,stage:'exception',error:String(e)});}})()";
         webView.evaluateJavascript(js, raw -> {
             if (raw == null) return;
@@ -378,6 +379,13 @@ public class WebViewBrowserActivity extends Activity {
                 if (!(decoded instanceof String)) return;
                 org.json.JSONObject result = new org.json.JSONObject((String) decoded);
                 if (result.optBoolean("ok", false)) {
+                    org.json.JSONArray baseline = result.optJSONArray("baseline");
+                    if (baseline != null) {
+                        for (int i = 0; i < baseline.length(); i++) {
+                            String oldUrl = baseline.optString(i, "");
+                            if (!oldUrl.isEmpty()) seenBingImages.add(oldUrl);
+                        }
+                    }
                     bingPromptSubmitted = true;
                     pendingBingPrompt = null;
                     setStatus("Bing prompt submitted; watching for new images");
