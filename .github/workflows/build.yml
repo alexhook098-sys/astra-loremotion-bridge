@@ -15,6 +15,7 @@ on:
       - feature/zsky-chat-background-from-362
       - fix/zsky-395-native-final-stage-observer
       - feature/chat-bing-loremotion-background
+      - fix/bing-chat-submit-handshake
 
 jobs:
   build:
