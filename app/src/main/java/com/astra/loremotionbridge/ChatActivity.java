@@ -819,6 +819,7 @@ public class ChatActivity extends Activity {
                 case "submitted_unconfirmed": label = "ЗАПРОС ОТПРАВЛЕН · ПРОВЕРЯЮ СТАРТ"; break;
                 case "running": label = "RENDERING · ZSKY РЕНДЕРИТ"; break;
                 case "render_heartbeat": label = "RENDERING · НАБЛЮДЕНИЕ АКТИВНО"; break;
+                case "render_slow": label = "РЕНДЕРИНГ ДОЛЬШЕ ОБЫЧНОГО · ПРОВЕРЯЮ ZSKY"; break;
                 case "final_stage": label = "ФИНАЛЬНЫЙ ЭКРАН ОБНАРУЖЕН"; break;
                 case "download_retry": label = "ПОЛУЧЕНИЕ MP4 · ПОВТОРНАЯ ПРОВЕРКА"; break;
                 case "completed_unconfirmed": label = "ВИДЕО ОБНАРУЖЕНО · ПРОВЕРЯЮ ФАЙЛ"; break;
