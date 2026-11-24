@@ -45,6 +45,8 @@ public class WebViewBrowserActivity extends Activity {
     private TextView status;
     private ValueCallback<Uri[]> pendingFileCallback;
     private String pendingUploadPath;
+    private String pendingBingPrompt;
+    private boolean bingPromptSubmitted;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService perchanceDownloads = Executors.newSingleThreadExecutor();
     private final Set<String> seenPerchanceImages = new HashSet<>();
@@ -97,8 +99,14 @@ public class WebViewBrowserActivity extends Activity {
     @Override protected void onNewIntent(android.content.Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        String prompt = intent.getStringExtra("bing_prompt");
+        if (prompt != null && !prompt.trim().isEmpty()) {
+            pendingBingPrompt = prompt.trim();
+            bingPromptSubmitted = false;
+        }
         String url = intent.getStringExtra("url");
         if (url != null && !url.isEmpty() && webView != null && !"about:blank".equals(url)) openUrl(url);
+        else if (pendingBingPrompt != null) trySubmitBingPrompt();
     }
 
     private void sendToBackSoon() {
@@ -232,6 +240,47 @@ public class WebViewBrowserActivity extends Activity {
         }
     }
 
+    // Submit only when a visible prompt field and an enabled Create button are unambiguous.
+    private void trySubmitBingPrompt() {
+        if (webView == null || pendingBingPrompt == null || bingPromptSubmitted) return;
+        final String prompt = pendingBingPrompt;
+        final String js = "(function(){try{"
+                + "var vis=function(e){var r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';};"
+                + "var fields=[...document.querySelectorAll('textarea,input,[contenteditable=true],[role=textbox]')].filter(vis).filter(function(e){"
+                + "var t=((e.getAttribute('placeholder')||'')+' '+(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('data-testid')||'')).toLowerCase();"
+                + "return e.tagName==='TEXTAREA'||e.isContentEditable||e.getAttribute('role')==='textbox'||/prompt|describe|what.*create|созда|описа/.test(t);});"
+                + "if(fields.length!==1)return JSON.stringify({ok:false,stage:'field',count:fields.length});"
+                + "var f=fields[0],v=" + org.json.JSONObject.quote(prompt) + ";"
+                + "f.focus();if(f.isContentEditable){f.textContent=v;}else{var p=Object.getPrototypeOf(f),d=Object.getOwnPropertyDescriptor(p,'value');if(d&&d.set)d.set.call(f,v);else f.value=v;}"
+                + "f.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:v}));f.dispatchEvent(new Event('change',{bubbles:true}));"
+                + "var buttons=[...document.querySelectorAll('button,[role=button]')].filter(vis).filter(function(b){var t=((b.innerText||'')+' '+(b.getAttribute('aria-label')||'')).trim().toLowerCase();return /^(create|создать|generate|сгенерировать|создать изображение)$/.test(t)&&!b.disabled&&b.getAttribute('aria-disabled')!=='true';});"
+                + "if(buttons.length!==1)return JSON.stringify({ok:false,stage:'button',count:buttons.length});"
+                + "buttons[0].click();return JSON.stringify({ok:true,stage:'submitted'});"
+                + "}catch(e){return JSON.stringify({ok:false,stage:'exception',error:String(e)});}})()";
+        webView.evaluateJavascript(js, raw -> {
+            if (raw == null) return;
+            try {
+                Object decoded = new org.json.JSONTokener(raw).nextValue();
+                if (!(decoded instanceof String)) return;
+                org.json.JSONObject result = new org.json.JSONObject((String) decoded);
+                if (result.optBoolean("ok", false)) {
+                    bingPromptSubmitted = true;
+                    pendingBingPrompt = null;
+                    setStatus("Bing prompt submitted");
+                    Log.i("ASTRA-BING", "Prompt submitted through verified visible controls");
+                } else {
+                    String stage = result.optString("stage", "unknown");
+                    int count = result.optInt("count", -1);
+                    setStatus("Bing waiting for unambiguous " + stage + " control (count=" + count + ")");
+                    Log.w("ASTRA-BING", "Prompt not submitted: " + result);
+                }
+            } catch (Exception e) {
+                setStatus("Bing prompt automation could not verify page controls");
+                Log.w("ASTRA-BING", "Prompt submission response invalid", e);
+            }
+        });
+    }
+
     private void configure(WebView wv) {
         WebSettings s = wv.getSettings();
         s.setJavaScriptEnabled(true);
@@ -279,6 +328,9 @@ public class WebViewBrowserActivity extends Activity {
             @Override public void onPageFinished(WebView view, String url) {
                 Log.i("ASTRA-WV-DIAG", "onPageFinished url=" + url);
                 updateStatus();
+                if (url != null && url.contains("bing.com") && pendingBingPrompt != null) {
+                    main.postDelayed(() -> trySubmitBingPrompt(), 900L);
+                }
                 if (hideAfterPageLoad) {
                     hideAfterPageLoad = false;
                     sendToBackSoon();
