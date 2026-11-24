@@ -36,6 +36,24 @@ public final class ZSkyBrowserPanel extends LinearLayout {
     private int baselineVideoCount = -1;
     private String generationState = "idle";
     private String generationEvidence = "";
+    private StatusListener statusListener;
+    private int downloadAttempts;
+    private boolean videoSaved;
+
+    public interface StatusListener { void onZSkyStatus(String state, String detail); }
+    public void setStatusListener(StatusListener listener) { statusListener = listener; }
+    private void setGenerationState(String state, String detail) {
+        if (state == null || state.equals(generationState)) return;
+        generationState = state;
+        Log.i("ASTRA-ZSKY-STATE", state + " · " + detail);
+        if (statusListener != null) host.runOnUiThread(() -> {
+            if (!disposed && statusListener != null) statusListener.onZSkyStatus(state, detail);
+        });
+    }
+    public void onVideoSaved() {
+        videoSaved = true;
+        setGenerationState("delivered", "Видео сохранено в Movies/ASTRA/ZSky");
+    }
 
     private final Runnable generationObserver = new Runnable() {
         @Override public void run() {
@@ -43,14 +61,14 @@ public final class ZSkyBrowserPanel extends LinearLayout {
                     || host.isFinishing() || host.isDestroyed()) return;
             String js = "(function(){const t=(document.body&&document.body.innerText)||'';"
                 + "const final=/rendered on the free lane/i.test(t)&&/\\bdownload\\b/i.test(t);"
-                + "let clicked=false;if(final&&!window.__astraZSkyDownloadButtonClicked){"
+                + "let clicked=false;const now=Date.now();if(final&&!window.__astraZSkyDownloadButtonClicked&&(!window.__astraZSkyLastDownloadAttempt||now-window.__astraZSkyLastDownloadAttempt>8000)){"
                 + "const b=[...document.querySelectorAll('button,[role=button],a')].find(x=>{"
                 + "const q=((x.innerText||x.textContent||'')+' '+(x.getAttribute('aria-label')||'')).replace(/\\s+/g,' ').trim().toLowerCase();"
                 + "return q==='download'&&!x.disabled&&x.getAttribute('aria-disabled')!=='true';});"
-                + "if(b){window.__astraZSkyDownloadButtonClicked=true;window.__astraZSkyNativeDownloadSince=performance.now();b.click();clicked=true;}}"
+                + "if(b){window.__astraZSkyLastDownloadAttempt=now;window.__astraZSkyDownloadAttemptCount=(window.__astraZSkyDownloadAttemptCount||0)+1;window.__astraZSkyNativeDownloadSince=performance.now();b.click();clicked=true;}}"
                 + "const since=window.__astraZSkyNativeDownloadSince||Infinity;"
                 + "const urls=final?performance.getEntriesByType('resource').filter(x=>x.startTime>=since).map(x=>x.name).filter(x=>/^https:\\/\\//i.test(x)&&/\\.mp4(?:$|[?#])/i.test(x)):[];"
-                + "return JSON.stringify({tail:t.slice(-1400),videos:document.querySelectorAll('video').length,busy:document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,final,clicked,urls});})()";
+                + "return JSON.stringify({tail:t.slice(-1400),videos:document.querySelectorAll('video').length,busy:document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,final,clicked,attempts:window.__astraZSkyDownloadAttemptCount||0,urls});})()";
             webView.evaluateJavascript(js, value -> {
                 observerPolls++;
                 generationEvidence = value == null ? "" : value;
@@ -59,10 +77,12 @@ public final class ZSkyBrowserPanel extends LinearLayout {
                     if (payload.startsWith("\"")) payload = (String)new org.json.JSONTokener(payload).nextValue();
                     org.json.JSONObject e = new org.json.JSONObject(payload);
                     String tail=e.optString("tail","").toLowerCase(java.util.Locale.ROOT);
-                    if(tail.contains("generation failed")||tail.contains("ошибка генерации")) generationState="failed";
-                    else if(e.optBoolean("final",false)) generationState="final_stage";
-                    else if(e.optInt("busy",0)>0) generationState="running";
-                    else if(baselineVideoCount>=0&&e.optInt("videos",0)>baselineVideoCount) generationState="completed_unconfirmed";
+                    if(tail.contains("generation failed")||tail.contains("ошибка генерации")) setGenerationState("failed","ZSky сообщил об ошибке генерации");
+                    else if(e.optBoolean("final",false)) setGenerationState("final_stage","Финальный экран ZSky обнаружен");
+                    else if(e.optInt("busy",0)>0) setGenerationState("running","ZSky выполняет рендеринг");
+                    else if(baselineVideoCount>=0&&e.optInt("videos",0)>baselineVideoCount) setGenerationState("completed_unconfirmed","Видеоэлемент появился, проверяю выдачу MP4");
+                    int attempts=e.optInt("attempts",0);
+                    if(attempts>downloadAttempts){downloadAttempts=attempts;setGenerationState("download_retry","Запрос Download №"+attempts+" отправлен; проверяю получение файла");}
                     org.json.JSONArray urls=e.optJSONArray("urls");
                     if(urls!=null)for(int i=0;i<urls.length();i++){String u=urls.optString(i,"");if(!u.isEmpty())downloadFinalZSkyMp4(u,"embedded-final-stage-observer");}
                 } catch(Exception ex){Log.w("ASTRA-ZSKY-OBSERVER","Evidence parse failed",ex);}
@@ -135,7 +155,7 @@ public final class ZSkyBrowserPanel extends LinearLayout {
 
     public void submitPrompt(String prompt){
         if(prompt==null||prompt.trim().isEmpty()||disposed)return;
-        pendingPrompt=prompt.trim();promptInjected=false;automationAttempts=0;generationState="queued";generationStartedAt=0L;
+        pendingPrompt=prompt.trim();promptInjected=false;automationAttempts=0;downloadAttempts=0;videoSaved=false;generationStartedAt=0L;setGenerationState("queued","Запрос подготовлен");
         if(pageLoaded)main.postDelayed(this::runPendingPrompt,300L);
     }
 
@@ -156,7 +176,7 @@ public final class ZSkyBrowserPanel extends LinearLayout {
     private void runPendingPrompt() {
         if (webView == null || pendingPrompt == null || !pageLoaded || host.isFinishing() || host.isDestroyed()) return;
         if (++automationAttempts > 45) {
-            generationState = "automation_timeout";
+            setGenerationState("automation_timeout","Не удалось подготовить форму ZSky за отведённое время");
             pendingPrompt = null;
             Log.w("ASTRA-ZSKY-AUTO", "Automation timed out");
             return;
@@ -184,7 +204,7 @@ public final class ZSkyBrowserPanel extends LinearLayout {
             Log.i("ASTRA-ZSKY-AUTO", "attempt=" + automationAttempts + " result=" + result);
             if (result.contains("PROMPT_SET")) {
                 promptInjected = true;
-                generationState = "prompt_entered";
+                setGenerationState("prompt_entered","Промпт введён");
                 main.postDelayed(this::runPendingPrompt, 700L);
             } else if (result.contains("BUTTON_READY")) {
                 String click = "(function(){const b=Array.from(document.querySelectorAll('button,[role=button]'))"
@@ -200,7 +220,7 @@ public final class ZSkyBrowserPanel extends LinearLayout {
                         try { baselineVideoCount = Integer.parseInt(clickResult.replaceAll("[^0-9]", "")); }
                         catch (Exception ignored) { baselineVideoCount = -1; }
                         generationStartedAt = System.currentTimeMillis();
-                        generationState = "submitted_unconfirmed";
+                        setGenerationState("submitted_unconfirmed","Generate нажат, ожидаю подтверждение рендеринга");
                         pendingPrompt = null;
                         main.removeCallbacks(generationObserver);
                         main.postDelayed(generationObserver, 1500L);
