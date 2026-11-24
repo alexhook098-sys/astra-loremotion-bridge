@@ -47,7 +47,6 @@ public class WebViewBrowserActivity extends Activity {
     private String pendingUploadPath;
     private String pendingBingPrompt;
     private boolean bingPromptSubmitted;
-    private boolean bingPromptAttemptInFlight;
     private int bingPromptAttempts;
     private final Set<String> seenBingImages = new HashSet<>();
     private boolean bingObserverRunning;
@@ -191,6 +190,10 @@ public class WebViewBrowserActivity extends Activity {
         hideAfterPageLoad = getIntent().getBooleanExtra("background", false);
         Log.i("ASTRA-WV-DIAG", "Activity loading URL=" + initial + " background=" + hideAfterPageLoad);
         webView.loadUrl(initial);
+        if (hideAfterPageLoad) {
+            hideAfterPageLoad = false;
+            sendToBackSoon();
+        }
     }
 
     @Override protected void onNewIntent(android.content.Intent intent) {
@@ -342,19 +345,17 @@ public class WebViewBrowserActivity extends Activity {
         if (prompt == null || prompt.trim().isEmpty()) return;
         pendingBingPrompt = prompt.trim();
         bingPromptSubmitted = false;
-        bingPromptAttemptInFlight = false;
         bingPromptAttempts = 0;
-        Log.i("ASTRA-BING", "Prompt queued; waiting for Bing navigation/page-finished handshake");
+        if (webView != null && webView.getUrl() != null && webView.getUrl().contains("bing.com")) {
+            main.postDelayed(() -> trySubmitBingPrompt(), 500L);
+        }
     }
 
     private void trySubmitBingPrompt() {
-        if (webView == null || pendingBingPrompt == null || bingPromptSubmitted || bingPromptAttemptInFlight) return;
+        if (webView == null || pendingBingPrompt == null || bingPromptSubmitted) return;
         final String prompt = pendingBingPrompt;
         if (++bingPromptAttempts > 12) {
-            pendingBingPrompt = null;
-            setStatus("Bing controls not ready; prompt was not submitted");
-            Log.w("ASTRA-BING", "Prompt submission timed out after " + (bingPromptAttempts - 1) + " attempts");
-            ChatActivity.onBingPromptFailed("поле ввода или кнопка Create не появились; проверь вход в Bing");
+            setStatus("Bing controls not ready; sign in or open the creator page and retry");
             return;
         }
         final String js = "(function(){try{"
@@ -371,13 +372,8 @@ public class WebViewBrowserActivity extends Activity {
                 + "var baseline=Array.from(document.images).filter(function(i){return i.complete&&i.naturalWidth>=256&&i.naturalHeight>=256;}).map(function(i){return i.currentSrc||i.src;});"
                 + "buttons[0].click();return JSON.stringify({ok:true,stage:'submitted',baseline:baseline});"
                 + "}catch(e){return JSON.stringify({ok:false,stage:'exception',error:String(e)});}})()";
-        bingPromptAttemptInFlight = true;
         webView.evaluateJavascript(js, raw -> {
-            bingPromptAttemptInFlight = false;
-            if (raw == null) {
-                main.postDelayed(() -> trySubmitBingPrompt(), 2000L);
-                return;
-            }
+            if (raw == null) return;
             try {
                 Object decoded = new org.json.JSONTokener(raw).nextValue();
                 if (!(decoded instanceof String)) return;
@@ -394,23 +390,19 @@ public class WebViewBrowserActivity extends Activity {
                     pendingBingPrompt = null;
                     setStatus("Bing prompt submitted; watching for new images");
                     Log.i("ASTRA-BING", "Prompt submitted through verified visible controls");
-                    ChatActivity.onBingPromptSubmitted(prompt);
                     startBingObserver();
-                    if (hideAfterPageLoad) {
-                        hideAfterPageLoad = false;
-                        sendToBackSoon();
-                    }
                 } else {
                     String stage = result.optString("stage", "unknown");
                     int count = result.optInt("count", -1);
                     setStatus("Bing waiting for unambiguous " + stage + " control (count=" + count + ")");
                     Log.w("ASTRA-BING", "Prompt not submitted: " + result);
-                    main.postDelayed(() -> trySubmitBingPrompt(), 2000L);
+                    if ("field".equals(stage) || "button".equals(stage)) {
+                        main.postDelayed(() -> trySubmitBingPrompt(), 2000L);
+                    }
                 }
             } catch (Exception e) {
                 setStatus("Bing prompt automation could not verify page controls");
                 Log.w("ASTRA-BING", "Prompt submission response invalid", e);
-                main.postDelayed(() -> trySubmitBingPrompt(), 2000L);
             }
         });
     }
@@ -465,7 +457,7 @@ public class WebViewBrowserActivity extends Activity {
                 if (url != null && url.contains("bing.com") && pendingBingPrompt != null) {
                     main.postDelayed(() -> trySubmitBingPrompt(), 900L);
                 }
-                if (hideAfterPageLoad && pendingBingPrompt == null) {
+                if (hideAfterPageLoad) {
                     hideAfterPageLoad = false;
                     sendToBackSoon();
                 }
@@ -730,8 +722,9 @@ public class WebViewBrowserActivity extends Activity {
     public void openUrlInBackground(final String url) {
         main.post(() -> {
             if (webView != null) {
-                hideAfterPageLoad = true;
+                hideAfterPageLoad = false;
                 webView.loadUrl(url);
+                sendToBackSoon();
             }
         });
     }
