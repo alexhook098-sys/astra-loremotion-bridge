@@ -42,13 +42,16 @@ public final class ZSkyBrowserPanel extends LinearLayout {
 
     public interface StatusListener { void onZSkyStatus(String state, String detail); }
     public void setStatusListener(StatusListener listener) { statusListener = listener; }
-    private void setGenerationState(String state, String detail) {
-        if (state == null || state.equals(generationState)) return;
-        generationState = state;
+    private void notifyStatus(String state, String detail) {
         Log.i("ASTRA-ZSKY-STATE", state + " · " + detail);
         if (statusListener != null) host.runOnUiThread(() -> {
             if (!disposed && statusListener != null) statusListener.onZSkyStatus(state, detail);
         });
+    }
+    private void setGenerationState(String state, String detail) {
+        if (state == null || state.equals(generationState)) return;
+        generationState = state;
+        notifyStatus(state, detail);
     }
     public void onVideoSaved() {
         videoSaved = true;
@@ -82,7 +85,7 @@ public final class ZSkyBrowserPanel extends LinearLayout {
                     else if(e.optInt("busy",0)>0) setGenerationState("running","ZSky выполняет рендеринг");
                     else if(baselineVideoCount>=0&&e.optInt("videos",0)>baselineVideoCount) setGenerationState("completed_unconfirmed","Видеоэлемент появился, проверяю выдачу MP4");
                     int attempts=e.optInt("attempts",0);
-                    if(attempts>downloadAttempts){downloadAttempts=attempts;setGenerationState("download_retry","Запрос Download №"+attempts+" отправлен; проверяю получение файла");}
+                    if(attempts>downloadAttempts){downloadAttempts=attempts;notifyStatus("download_retry","Запрос Download №"+attempts+" отправлен; проверяю получение файла");}
                     org.json.JSONArray urls=e.optJSONArray("urls");
                     if(urls!=null)for(int i=0;i<urls.length();i++){String u=urls.optString(i,"");if(!u.isEmpty())downloadFinalZSkyMp4(u,"embedded-final-stage-observer");}
                 } catch(Exception ex){Log.w("ASTRA-ZSKY-OBSERVER","Evidence parse failed",ex);}
