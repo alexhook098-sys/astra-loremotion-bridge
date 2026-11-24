@@ -347,8 +347,8 @@ public final class WebViewBrowserController {
         if (s == null)
             return "";
 
-        return s.replace("\", "\\\")
-                .replace("\"", "\\"")
+        return s.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
                 .replace("\n", "\\n")
                 .replace("\r", "\\r");
     }
