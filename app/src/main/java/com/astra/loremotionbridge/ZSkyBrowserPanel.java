@@ -204,9 +204,6 @@ public final class ZSkyBrowserPanel extends LinearLayout {
                         pendingPrompt = null;
                         main.removeCallbacks(generationObserver);
                         main.postDelayed(generationObserver, 1500L);
-                        if (backgroundRequested) main.postDelayed(() -> {
-                            if (!host.isFinishing() && !host.isDestroyed()) moveTaskToBack(true);
-                        }, 250L);
                     } else {
                         main.postDelayed(this::runPendingPrompt, 1000L);
                     }
