@@ -69,13 +69,13 @@ public final class WebViewBrowserController {
 
     public static String startBingGeneration(Context context, String prompt) {
         if (prompt == null || prompt.trim().isEmpty())
-            return "{\\"ok\\":false,\\"error\\":\\"bing_prompt_empty\\"}";
+            return "{\"ok\":false,\"error\":\"bing_prompt_empty\"}";
         final String url = "https://www.bing.com/images/create";
         WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
         if (a != null) {
             a.openUrlInBackground(url);
             a.queueBingPrompt(prompt);
-            return "{\\"ok\\":true,\\"action\\":\\"bing-generation-requested\\"}";
+            return "{\"ok\":true,\"action\":\"bing-generation-requested\"}";
         }
         try {
             Intent i = new Intent(context, WebViewBrowserActivity.class);
@@ -84,9 +84,9 @@ public final class WebViewBrowserController {
             i.putExtra("background", true);
             i.putExtra("bing_prompt", prompt);
             context.startActivity(i);
-            return "{\\"ok\\":true,\\"action\\":\\"bing-generation-start-requested\\"}";
+            return "{\"ok\":true,\"action\":\"bing-generation-start-requested\"}";
         } catch (Exception e) {
-            return "{\\"ok\\":false,\\"error\\":\\"" + esc(String.valueOf(e)) + "\\"}";
+            return "{\"ok\":false,\"error\":\"" + esc(String.valueOf(e)) + "\"}";
         }
     }
 
@@ -347,8 +347,8 @@ public final class WebViewBrowserController {
         if (s == null)
             return "";
 
-        return s.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
+        return s.replace("\", "\\\")
+                .replace("\"", "\\"")
                 .replace("\n", "\\n")
                 .replace("\r", "\\r");
     }
