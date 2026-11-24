@@ -47,6 +47,7 @@ public class WebViewBrowserActivity extends Activity {
     private String pendingUploadPath;
     private String pendingBingPrompt;
     private boolean bingPromptSubmitted;
+    private int bingPromptAttempts;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService perchanceDownloads = Executors.newSingleThreadExecutor();
     private final Set<String> seenPerchanceImages = new HashSet<>();
@@ -87,6 +88,7 @@ public class WebViewBrowserActivity extends Activity {
 
         String initial = getIntent().getStringExtra("url");
         if (initial == null || initial.isEmpty()) initial = "about:blank";
+        pendingBingPrompt = getIntent().getStringExtra("bing_prompt");
         hideAfterPageLoad = getIntent().getBooleanExtra("background", false);
         Log.i("ASTRA-WV-DIAG", "Activity loading URL=" + initial + " background=" + hideAfterPageLoad);
         webView.loadUrl(initial);
@@ -245,6 +247,7 @@ public class WebViewBrowserActivity extends Activity {
         if (prompt == null || prompt.trim().isEmpty()) return;
         pendingBingPrompt = prompt.trim();
         bingPromptSubmitted = false;
+        bingPromptAttempts = 0;
         if (webView != null && webView.getUrl() != null && webView.getUrl().contains("bing.com")) {
             main.postDelayed(() -> trySubmitBingPrompt(), 500L);
         }
@@ -253,6 +256,10 @@ public class WebViewBrowserActivity extends Activity {
     private void trySubmitBingPrompt() {
         if (webView == null || pendingBingPrompt == null || bingPromptSubmitted) return;
         final String prompt = pendingBingPrompt;
+        if (++bingPromptAttempts > 12) {
+            setStatus("Bing controls not ready; sign in or open the creator page and retry");
+            return;
+        }
         final String js = "(function(){try{"
                 + "var vis=function(e){var r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';};"
                 + "var fields=[...document.querySelectorAll('textarea,input,[contenteditable=true],[role=textbox]')].filter(vis).filter(function(e){"
@@ -282,6 +289,9 @@ public class WebViewBrowserActivity extends Activity {
                     int count = result.optInt("count", -1);
                     setStatus("Bing waiting for unambiguous " + stage + " control (count=" + count + ")");
                     Log.w("ASTRA-BING", "Prompt not submitted: " + result);
+                    if ("field".equals(stage) || "button".equals(stage)) {
+                        main.postDelayed(() -> trySubmitBingPrompt(), 2000L);
+                    }
                 }
             } catch (Exception e) {
                 setStatus("Bing prompt automation could not verify page controls");
