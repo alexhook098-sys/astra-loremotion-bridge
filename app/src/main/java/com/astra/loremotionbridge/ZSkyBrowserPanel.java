@@ -63,7 +63,8 @@ public final class ZSkyBrowserPanel extends LinearLayout {
             if (disposed || webView == null || generationStartedAt == 0L
                     || host.isFinishing() || host.isDestroyed()) return;
             String js = "(function(){const t=(document.body&&document.body.innerText)||'';"
-                + "const final=/rendered on the free lane/i.test(t)&&/\\bdownload\\b/i.test(t);"
+                + "const hasDownload=/\\bdownload\\b/i.test(t);"
+                + "const final=(/rendered on the free lane/i.test(t)||( /re-animate/i.test(t)&&/video editor/i.test(t)&&/\\bdelete\\b/i.test(t)))&&hasDownload;"
                 + "let clicked=false;const now=Date.now();if(final&&(!window.__astraZSkyLastDownloadAttempt||now-window.__astraZSkyLastDownloadAttempt>8000)){"
                 + "const b=[...document.querySelectorAll('button,[role=button],a')].find(x=>{"
                 + "const q=((x.innerText||x.textContent||'')+' '+(x.getAttribute('aria-label')||'')).replace(/\\s+/g,' ').trim().toLowerCase();"
@@ -75,6 +76,10 @@ public final class ZSkyBrowserPanel extends LinearLayout {
             webView.evaluateJavascript(js, value -> {
                 observerPolls++;
                 generationEvidence = value == null ? "" : value;
+                if (observerPolls % 12 == 0 && "running".equals(generationState)) {
+                    long elapsed = Math.max(0L, (System.currentTimeMillis() - generationStartedAt) / 1000L);
+                    notifyStatus("render_heartbeat", "Наблюдение активно · " + elapsed + " сек · проверок страницы: " + observerPolls);
+                }
                 try {
                     String payload = generationEvidence;
                     if (payload.startsWith("\"")) payload = (String)new org.json.JSONTokener(payload).nextValue();
