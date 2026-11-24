@@ -175,7 +175,7 @@ public final class BingBrowserPanel extends LinearLayout {
                 pendingPrompt = null;
                 baselineImages = -1;
                 generationActive = true;
-                setStatus("BING · генерация отправлена, ожидаю результат");
+                setStatus("BING · кнопка Create нажата, проверяю появление нового результата");
                 ChatActivity.onBingPromptSubmitted(submittedPrompt);
                 main.postDelayed(observer, 1500L);
             } else {
