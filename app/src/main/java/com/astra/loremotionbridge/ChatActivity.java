@@ -670,8 +670,8 @@ public class ChatActivity extends Activity {
         if (bingPrompt != null && !bingPrompt.isEmpty()) {
             addMessage(value, true, true);
             input.setText("");
-            addMessage("✦ ASTRA · открываю Bing Image Creator в фоновой сессии. Подготовка автоматической отправки и возврата изображения — следующий этап.", false, true);
-            String launch = WebViewBrowserController.start(this, "https://www.bing.com/images/create");
+            addMessage("✦ ASTRA · передаю описание в Bing Image Creator в фоновой сессии…", false, true);
+            String launch = WebViewBrowserController.startBingGeneration(this, bingPrompt);
             try {
                 JSONObject result = new JSONObject(launch);
                 if (!result.optBoolean("ok", false)) {
@@ -684,7 +684,7 @@ public class ChatActivity extends Activity {
                 modelStatus.setText("● ASTRA · ОШИБКА ЗАПУСКА BING");
                 return;
             }
-            modelStatus.setText("● ASTRA · BING ОТКРЫТ В ФОНЕ");
+            modelStatus.setText("● ASTRA · BING ЗАПРОС ПЕРЕДАН");
             return;
         }
         String perchancePrompt = extractPerchancePrompt(value);
