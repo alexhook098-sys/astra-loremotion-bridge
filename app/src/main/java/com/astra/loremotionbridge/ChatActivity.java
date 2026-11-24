@@ -534,7 +534,7 @@ public class ChatActivity extends Activity {
     public static void onBingPromptSubmitted(String prompt) {
         ChatActivity activity = activeInstance;
         if (activity != null) activity.runOnUiThread(() -> {
-            if (!activity.isFinishing()) activity.addMessage("✦ Bing подтвердил отправку промпта. Ожидаю новое изображение…", false, true);
+            if (!activity.isFinishing()) activity.addMessage("✦ Кнопка Create нажата. Проверяю, появился ли новый результат…", false, true);
         });
     }
 
