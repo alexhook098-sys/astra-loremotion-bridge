@@ -257,7 +257,18 @@ public final class ZSkyWebViewActivity extends Activity {
         if (initialPrompt != null && !initialPrompt.trim().isEmpty()) pendingPrompt = initialPrompt.trim();
         String url = getIntent().getStringExtra("url");
         webView.loadUrl(url == null || url.trim().isEmpty() ? ZSKY_URL : url);
-        // Do not minimize before the SPA has hydrated; Android may throttle hidden WebViews.
+
+        // Match Google Flow's headless launch: keep the dedicated WebView alive,
+        // but return to ASTRA immediately instead of showing the ZSky tab.
+        // The page continues loading and automation/observers run in this Activity.
+        if (backgroundRequested) {
+            main.postDelayed(() -> {
+                if (!isFinishing() && !isDestroyed()) {
+                    moveTaskToBack(true);
+                    Log.i("ASTRA-ZSKY", "Headless background task started; WebView retained");
+                }
+            }, 120L);
+        }
 
     }
 
@@ -277,7 +288,16 @@ public final class ZSkyWebViewActivity extends Activity {
         if (url != null && !url.trim().isEmpty() && webView != null
                 && !url.equals(webView.getUrl())) {
             webView.loadUrl(url);
-        } // Minimize only after the Generate click is confirmed.
+        }
+        // A new automated request must also stay invisible, just like Flow.
+        if (backgroundRequested) {
+            main.postDelayed(() -> {
+                if (!isFinishing() && !isDestroyed()) {
+                    moveTaskToBack(true);
+                    Log.i("ASTRA-ZSKY", "Background task reaffirmed after new intent");
+                }
+            }, 120L);
+        }
     }
 
     private void runPendingPrompt() {
