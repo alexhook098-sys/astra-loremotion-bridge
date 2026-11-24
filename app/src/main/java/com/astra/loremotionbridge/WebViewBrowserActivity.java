@@ -241,6 +241,15 @@ public class WebViewBrowserActivity extends Activity {
     }
 
     // Submit only when a visible prompt field and an enabled Create button are unambiguous.
+    public void queueBingPrompt(String prompt) {
+        if (prompt == null || prompt.trim().isEmpty()) return;
+        pendingBingPrompt = prompt.trim();
+        bingPromptSubmitted = false;
+        if (webView != null && webView.getUrl() != null && webView.getUrl().contains("bing.com")) {
+            main.postDelayed(() -> trySubmitBingPrompt(), 500L);
+        }
+    }
+
     private void trySubmitBingPrompt() {
         if (webView == null || pendingBingPrompt == null || bingPromptSubmitted) return;
         final String prompt = pendingBingPrompt;
