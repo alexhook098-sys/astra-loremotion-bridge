@@ -67,6 +67,29 @@ public final class WebViewBrowserController {
         }
     }
 
+    public static String startBingGeneration(Context context, String prompt) {
+        if (prompt == null || prompt.trim().isEmpty())
+            return "{\\"ok\\":false,\\"error\\":\\"bing_prompt_empty\\"}";
+        final String url = "https://www.bing.com/images/create";
+        WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
+        if (a != null) {
+            a.queueBingPrompt(prompt);
+            a.openUrlInBackground(url);
+            return "{\\"ok\\":true,\\"action\\":\\"bing-generation-requested\\"}";
+        }
+        try {
+            Intent i = new Intent(context, WebViewBrowserActivity.class);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            i.putExtra("url", url);
+            i.putExtra("background", true);
+            i.putExtra("bing_prompt", prompt);
+            context.startActivity(i);
+            return "{\\"ok\\":true,\\"action\\":\\"bing-generation-start-requested\\"}";
+        } catch (Exception e) {
+            return "{\\"ok\\":false,\\"error\\":\\"" + esc(String.valueOf(e)) + "\\"}";
+        }
+    }
+
     public static String bringToFront(Context context) {
         WebViewBrowserActivity a = WebViewBrowserActivity.getInstance();
 
