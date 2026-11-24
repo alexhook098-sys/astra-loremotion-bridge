@@ -60,6 +60,7 @@ public class ChatActivity extends Activity {
     private LinearLayout chatPanel;
     private FrameLayout workerHost;
     private PerchanceBrowserPanel perchanceBrowserPanel;
+    private BingBrowserPanel bingBrowserPanel;
     private FlowBrowserPanel flowBrowserPanel;
     private ZSkyBrowserPanel zskyBrowserPanel;
     private Button installButton;
@@ -114,6 +115,7 @@ public class ChatActivity extends Activity {
         if (perchanceBrowserPanel != null) perchanceBrowserPanel.onHostResume();
         if (flowBrowserPanel != null) flowBrowserPanel.onHostResume();
         if (zskyBrowserPanel != null) zskyBrowserPanel.onHostResume();
+        if (bingBrowserPanel != null) bingBrowserPanel.onHostResume();
     }
 
     @Override protected void onPause() {
@@ -121,6 +123,7 @@ public class ChatActivity extends Activity {
         if (perchanceBrowserPanel != null) perchanceBrowserPanel.onHostPause();
         if (flowBrowserPanel != null) flowBrowserPanel.onHostPause();
         if (zskyBrowserPanel != null) zskyBrowserPanel.onHostPause();
+        if (bingBrowserPanel != null) bingBrowserPanel.onHostPause();
         super.onPause();
     }
 
@@ -648,7 +651,7 @@ public class ChatActivity extends Activity {
         card.setPadding(dp(10), dp(9), dp(10), dp(10));
         card.setBackground(round(Color.rgb(30, 42, 65), Color.rgb(57, 91, 119), 17));
 
-        TextView caption = label("✦ PERCHANCE · изображение сохранено в Pictures/ASTRA/Perchance", 13, WHITE, false);
+        TextView caption = label("✦ ASTRA · изображение сохранено в галерею", 13, WHITE, false);
         caption.setPadding(dp(3), dp(2), dp(3), dp(8));
         card.addView(caption, new LinearLayout.LayoutParams(-1, -2));
 
@@ -686,7 +689,7 @@ public class ChatActivity extends Activity {
             try {
                 history.put(new JSONObject()
                         .put("type", "perchance_image")
-                        .put("text", "PERCHANCE · изображение сохранено")
+                        .put("text", "ASTRA · изображение сохранено")
                         .put("uri", image.toString())
                         .put("user", false));
                 getSharedPreferences("astra_chat", MODE_PRIVATE).edit()
@@ -765,6 +768,19 @@ public class ChatActivity extends Activity {
             addMessage("✦ ASTRA · передаю запрос в Google Flow в фоне…", false, true);
             startFlowGeneration(flowPrompt);
             modelStatus.setText("● ASTRA · GOOGLE FLOW РАБОТАЕТ В ФОНЕ");
+            return;
+        }
+        if (isBingRequest(value)) {
+            String bingPrompt = extractBingPrompt(value);
+            addMessage(value, true, true);
+            input.setText("");
+            if (bingPrompt == null || bingPrompt.trim().isEmpty()) {
+                addMessage("Укажи описание изображения после Bing Image Creator, например: «Создай изображение через Bing Image Creator: фантастический город ночью». Perchance не будет запускаться вместо Bing.", false, true);
+                return;
+            }
+            addMessage("✦ ASTRA · передаю запрос в Bing Image Creator в скрытом слое чата…", false, true);
+            startBingGeneration(bingPrompt);
+            modelStatus.setText("● ASTRA · BING IMAGE CREATOR РАБОТАЕТ В ФОНЕ");
             return;
         }
         String perchancePrompt = extractPerchancePrompt(value);
@@ -874,11 +890,67 @@ public class ChatActivity extends Activity {
     private void showImageProviderMenu() {
         new AlertDialog.Builder(this)
                 .setTitle("Выбери генератор изображений")
-                .setItems(new String[]{"Perchance"}, (dialog, which) -> {
-                    if (which == 0) showPerchancePromptDialog();
+                .setItems(new String[]{"Bing Image Creator", "Perchance"}, (dialog, which) -> {
+                    if (which == 0) showBingPromptDialog();
+                    else if (which == 1) showPerchancePromptDialog();
                 })
                 .setNegativeButton("ОТМЕНА", null)
                 .show();
+    }
+
+    private void showBingPromptDialog() {
+        EditText promptInput = new EditText(this);
+        promptInput.setHint("Опиши изображение для Bing Image Creator");
+        promptInput.setTextColor(WHITE);
+        promptInput.setHintTextColor(Color.GRAY);
+        LinearLayout box = new LinearLayout(this);
+        box.setPadding(dp(18), dp(8), dp(18), 0);
+        box.addView(promptInput, new LinearLayout.LayoutParams(-1, dp(76)));
+        new AlertDialog.Builder(this)
+                .setTitle("ASTRA · Bing Image Creator")
+                .setView(box)
+                .setPositiveButton("СОЗДАТЬ", (dialog, which) ->
+                        startBingGeneration(promptInput.getText().toString().trim()))
+                .setNegativeButton("ОТМЕНА", null)
+                .show();
+    }
+
+    private void startBingGeneration(String prompt) {
+        if (prompt == null || prompt.trim().isEmpty() || isFinishing()) return;
+        addMessage("✦ ASTRA · Bing Image Creator: " + prompt.trim(), false, true);
+        if (bingBrowserPanel == null) {
+            bingBrowserPanel = new BingBrowserPanel(this, prompt.trim());
+            if (workerHost != null) workerHost.addView(bingBrowserPanel,
+                    new FrameLayout.LayoutParams(-1, -1));
+        } else {
+            bingBrowserPanel.submitPrompt(prompt.trim());
+        }
+        bingBrowserPanel.onHostResume();
+        modelStatus.setText("● ASTRA · BING IMAGE CREATOR РАБОТАЕТ В ФОНЕ");
+    }
+
+    private boolean isBingRequest(String text) {
+        if (text == null) return false;
+        String v = text.toLowerCase(java.util.Locale.ROOT);
+        boolean provider = v.contains("bing") || v.contains("image creator");
+        boolean imageAction = v.matches("(?isu).*\\b(?:создай|сгенерируй|сделай|нарисуй|generate|create|make)\\b.*")
+                || v.startsWith("bing:") || v.startsWith("bing image:");
+        return provider && imageAction;
+    }
+
+    private String extractBingPrompt(String text) {
+        if (text == null) return null;
+        String value = text.trim();
+        Pattern[] patterns = new Pattern[] {
+                Pattern.compile("(?iu)^\\s*(?:астра[,!]?\\s*)?(?:создай|сгенерируй|сделай|нарисуй)\\s+(?:мне\\s+)?(?:изображение|картинку|картину|иллюстрацию)\\s+(?:через|в|с\\s+помощью)\\s+(?:bing(?:\\s+image\\s+creator)?|image\\s+creator)\\s*[:—-]?\\s*(.*)$"),
+                Pattern.compile("(?iu)^\\s*(?:bing\\s+image\\s+creator|image\\s+creator|bing\\s+image|bing)\\s*:\\s*(.*)$"),
+                Pattern.compile("(?iu)^\\s*(?:создай|сгенерируй|сделай|нарисуй)\\s+(?:мне\\s+)?(?:изображение|картинку|картину|иллюстрацию)\\s*[:—-]?\\s*(.*?)\\s+(?:через|в\\s+)?bing(?:\\s+image\\s+creator)?\\s*$")
+        };
+        for (Pattern pattern : patterns) {
+            Matcher matcher = pattern.matcher(value);
+            if (matcher.matches()) return matcher.group(1).trim();
+        }
+        return null;
     }
 
     private void openPerchanceStudio() {
@@ -1052,6 +1124,7 @@ public class ChatActivity extends Activity {
         if (perchanceBrowserPanel != null) { perchanceBrowserPanel.dispose(); perchanceBrowserPanel = null; }
         if (flowBrowserPanel != null) { flowBrowserPanel.dispose(); flowBrowserPanel = null; }
         if (zskyBrowserPanel != null) { zskyBrowserPanel.dispose(); zskyBrowserPanel = null; }
+        if (bingBrowserPanel != null) { bingBrowserPanel.dispose(); bingBrowserPanel = null; }
         // Keep the native model alive for the process; do not unload on screen close.
         super.onDestroy();
     }
