@@ -48,6 +48,8 @@ public class ChatActivity extends Activity {
     private static final int PICK_MODEL = 18767;
     private static final int PICK_MOTION_REFERENCE = 18769;
     private static final int PICK_STORY_MOTION_REFERENCE = 18770;
+    private static final int PICK_ALICE_MOTION_REFERENCE = 18771;
+    private String pendingAlicePrompt = "";
 
     private final ExecutorService modelExecutor = Executors.newSingleThreadExecutor();
     // Story Motion runs independently and cannot block One Click Motion or chat requests.
@@ -289,10 +291,12 @@ public class ChatActivity extends Activity {
                 .setTitle("ASTRA STUDIO")
                 .setItems(new String[]{
                         "✦  One Click Motion · изображение в видео",
-                        "✧  ASTRA Story Motion · RIFE × 4 сцены"
+                        "✧  ASTRA Story Motion · RIFE × 4 сцены",
+                        "◈  Alice Motion · видео по промпту"
                 }, (dialog, which) -> {
                     if (which == 0) chooseMotionReference();
                     else if (which == 1) chooseStoryMotionReference();
+                    else if (which == 2) promptAliceMotion();
                 })
                 .setNegativeButton("ЗАКРЫТЬ", null)
                 .show();
@@ -342,6 +346,10 @@ public class ChatActivity extends Activity {
             processStoryMotionReference(data.getData());
             return;
         }
+        if (requestCode == PICK_ALICE_MOTION_REFERENCE && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            prepareAliceMotionUpload(data.getData());
+            return;
+        }
         if (requestCode == PICK_WALLPAPER && resultCode == RESULT_OK && data != null && data.getData() != null) {
             try (InputStream in = getContentResolver().openInputStream(data.getData());
                  FileOutputStream out = new FileOutputStream(new File(getFilesDir(), "astra_chat_wallpaper.jpg"))) {
@@ -353,6 +361,40 @@ public class ChatActivity extends Activity {
                 new AlertDialog.Builder(this).setMessage("Не удалось установить обои: " + e.getMessage()).setPositiveButton("OK", null).show();
             }
         }
+    }
+
+    private void promptAliceMotion() {
+        EditText prompt = new EditText(this);
+        prompt.setSingleLine(false);
+        prompt.setMinLines(2);
+        prompt.setHint("Например: Скачок, волосы и одежда движутся естественно");
+        new AlertDialog.Builder(this).setTitle("ALICE MOTION · ПРОМПТ").setView(prompt)
+                .setPositiveButton("ВЫБРАТЬ КАРТИНУ", (d, w) -> {
+                    pendingAlicePrompt = prompt.getText().toString().trim();
+                    if (pendingAlicePrompt.isEmpty()) { addMessage("Для Alice Motion сначала нужен промпт движения.", false, true); return; }
+                    Intent pick = new Intent(Intent.ACTION_GET_CONTENT); pick.setType("image/*"); pick.addCategory(Intent.CATEGORY_OPENABLE);
+                    startActivityForResult(Intent.createChooser(pick, "Выбери изображение для Алисы"), PICK_ALICE_MOTION_REFERENCE);
+                }).setNegativeButton("ОТМЕНА", null).show();
+    }
+
+    private void prepareAliceMotionUpload(Uri uri) {
+        addMessage("✧ ALICE MOTION · изображение принято. Подготавливаю загрузку…", true, true);
+        modelExecutor.execute(() -> {
+            File copy = null;
+            try (InputStream in = getContentResolver().openInputStream(uri)) {
+                if (in == null) throw new java.io.IOException("image_stream_unavailable");
+                File dir = new File(getCacheDir(), "alice_uploads");
+                if (!dir.exists() && !dir.mkdirs()) throw new java.io.IOException("alice_cache_dir_failed");
+                copy = new File(dir, "astra-alice-" + System.currentTimeMillis() + ".jpg");
+                try (FileOutputStream out = new FileOutputStream(copy)) {
+                    byte[] buffer = new byte[16384]; int count; long total = 0;
+                    while ((count = in.read(buffer)) != -1) { total += count; if (total > 20L * 1024L * 1024L) throw new java.io.IOException("image_too_large"); out.write(buffer, 0, count); }
+                }
+                if (copy.length() < 1) throw new java.io.IOException("image_empty");
+                final String path = copy.getAbsolutePath();
+                runOnUiThread(() -> { addMessage("✦ ALICE MOTION · открываю студию и передаю изображение с промптом.", false, true); BrowserSessionManager.submitAlice(this, path, pendingAlicePrompt); });
+            } catch (Exception e) { if (copy != null) copy.delete(); runOnUiThread(() -> addMessage("Alice Motion: не удалось подготовить изображение — " + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()), false, true)); }
+        });
     }
 
     private void chooseMotionReference() {
