@@ -36,18 +36,21 @@ public final class AliceMediaAgent {
         HttpURLConnection connection = null;
         File temp = null;
         Uri published = null;
+        String stage = "initialize";
         try {
             URL url = new URL("https://yaart-images.s3.yandex.net/webalice/" + id.toLowerCase(Locale.US));
             if (!"https".equals(url.getProtocol()) ||
                     !"yaart-images.s3.yandex.net".equalsIgnoreCase(url.getHost())) {
                 return error("untrusted_source");
             }
+            stage = "open_remote_connection";
             connection = (HttpURLConnection) url.openConnection();
             connection.setConnectTimeout(15000);
             connection.setReadTimeout(30000);
             connection.setInstanceFollowRedirects(false);
             connection.setRequestProperty("User-Agent",
                     "Mozilla/5.0 (Linux; Android) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36");
+            stage = "read_remote_response";
             int code = connection.getResponseCode();
             String mime = connection.getContentType();
             long expected = connection.getContentLengthLong();
@@ -57,8 +60,10 @@ public final class AliceMediaAgent {
             }
             if (expected <= 0 || expected > MAX_BYTES) return error("invalid_content_length");
 
+            stage = "create_cache_file";
             temp = File.createTempFile("alice_" + id + "_", ".mp4", context.getCacheDir());
             long total = 0;
+            stage = "download_remote_mp4";
             try (InputStream in = connection.getInputStream();
                  OutputStream out = new FileOutputStream(temp)) {
                 byte[] buffer = new byte[16384];
@@ -70,6 +75,7 @@ public final class AliceMediaAgent {
                 }
                 out.flush();
             }
+            stage = "verify_download";
             if (total != expected || total < 12) return error("incomplete_download");
             byte[] header = new byte[12];
             try (FileInputStream in = new FileInputStream(temp)) {
@@ -79,6 +85,7 @@ public final class AliceMediaAgent {
                 return error("invalid_mp4_signature");
             }
 
+            stage = "prepare_media_store";
             ContentValues values = new ContentValues();
             values.put(MediaStore.Video.Media.DISPLAY_NAME, "ASTRA_ALICE_" + id + ".mp4");
             values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
@@ -87,10 +94,12 @@ public final class AliceMediaAgent {
                         Environment.DIRECTORY_MOVIES + "/ASTRA/Alice");
                 values.put(MediaStore.Video.Media.IS_PENDING, 1);
             }
+            stage = "insert_media_store_record";
             published = context.getContentResolver().insert(
                     MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
             if (published == null) return error("media_store_insert_failed");
 
+            stage = "open_media_store_output";
             try (InputStream in = new FileInputStream(temp);
                  OutputStream out = context.getContentResolver().openOutputStream(published, "w")) {
                 if (out == null) throw new java.io.IOException("media_store_stream_unavailable");
@@ -99,6 +108,7 @@ public final class AliceMediaAgent {
                 while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
                 out.flush();
             }
+            stage = "publish_media_store_item";
             if (Build.VERSION.SDK_INT >= 29) {
                 ContentValues ready = new ContentValues();
                 ready.put(MediaStore.Video.Media.IS_PENDING, 0);
@@ -116,7 +126,9 @@ public final class AliceMediaAgent {
             if (published != null) {
                 try { context.getContentResolver().delete(published, null, null); } catch (Exception ignored) {}
             }
-            return error("download_failed:" + e.getClass().getSimpleName());
+            String detail = e.getMessage();
+            if (detail != null) detail = detail.replaceAll("[\\r\\n\\t]", " ");
+            return error("download_failed:" + stage + ":" + e.getClass().getSimpleName() + (detail == null ? "" : ":" + detail));
         } finally {
             if (connection != null) connection.disconnect();
             if (temp != null && temp.exists()) temp.delete();
