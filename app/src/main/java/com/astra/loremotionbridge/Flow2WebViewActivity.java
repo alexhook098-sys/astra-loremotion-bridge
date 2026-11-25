@@ -181,15 +181,27 @@ public final class Flow2WebViewActivity extends Activity {
                     + "e.dispatchEvent(new Event('change',{bubbles:true}));return 'FIELD_SET';"
                     + "}catch(e){return 'ERROR:'+e.message;}})(" + quoted + ")";
         } else {
-            // Exact submit-button logic copied from Flow 1. Never guess a nearby button:
-            // opening the image/video settings panel is not a generation action.
+            // Image mode uses the arrow submit control in the bottom prompt composer,
+            // not Flow 1's video-only "Начать генерацию" control. Resolve only inside
+            // the composer; fail closed rather than clicking model/ratio/settings controls.
             script = "(function(){try{"
-                    + "const b=Array.from(document.querySelectorAll('button,[role=button]')).find(x=>x.getAttribute('aria-label')==='Начать генерацию');"
-                    + "if(!b)return 'GENERATE_BUTTON_NOT_FOUND:'+JSON.stringify(Array.from(document.querySelectorAll('button,[role=button]')).slice(-25).map(x=>({a:x.getAttribute('aria-label'),t:x.getAttribute('title'),text:(x.innerText||x.textContent||'').trim().slice(0,60),disabled:!!x.disabled})));"
-                    + "if(b.disabled||b.getAttribute('aria-disabled')==='true')return 'GENERATE_BUTTON_DISABLED';"
-                    + "window.__astraFlow2BaselineImages=new Set(Array.from(document.images||[]).map(i=>i.currentSrc||i.src).filter(Boolean));"
-                    + "window.__astraFlow2StartedAt=Date.now();"
-                    + "b.click();return 'GENERATE_CLICKED';"
+                    + "const e=Array.from(document.querySelectorAll('[role=textbox],[contenteditable=true],textarea')).find(x=>{const a=(x.getAttribute('aria-label')||'').toLowerCase();return a.includes('что вы хотите создать')||a.includes('what do you want to create')||x.matches('.ProseMirror,[contenteditable=true],textarea');});"
+                    + "if(!e)return 'PROMPT_FIELD_NOT_FOUND_AT_SUBMIT';"
+                    + "const er=e.getBoundingClientRect(),ecx=er.left+er.width/2,ecy=er.top+er.height/2;"
+                    + "const visible=x=>{const r=x.getBoundingClientRect(),s=getComputedStyle(x);return r.width>=24&&r.height>=24&&s.visibility!=='hidden'&&s.display!=='none'&&Number(s.opacity)!==0};"
+                    + "const enabled=x=>visible(x)&&!x.disabled&&x.getAttribute('aria-disabled')!=='true';"
+                    + "const label=x=>((x.getAttribute('aria-label')||'')+' '+(x.getAttribute('title')||'')+' '+(x.getAttribute('data-tooltip')||'')+' '+(x.innerText||x.textContent||'')).trim();"
+                    + "const all=Array.from(document.querySelectorAll('button,[role=button]'));"
+                    + "let b=null,reason='';"
+                    + "const form=e.closest('form,[role=form]');"
+                    + "if(form){const fb=Array.from(form.querySelectorAll('button,[role=button]')).filter(enabled);b=fb.find(x=>x.type==='submit')||fb.find(x=>/^(send|submit|generate|create|отправить|создать|начать генерацию)\\b/i.test(label(x)));if(b)reason='composer-form';}"
+                    + "if(!b){const named=all.filter(x=>enabled(x)&&/^(send|submit|generate|create|отправить|создать|начать генерацию)(\\b|$)/i.test(label(x)));const near=named.filter(x=>{const r=x.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;return cx>=ecx-8&&Math.abs(cy-ecy)<180;});if(near.length===1){b=near[0];reason='named-composer-action';}}"
+                    + "if(!b){let n=e;for(let depth=0;n&&depth<9;depth++,n=n.parentElement){const local=Array.from(n.querySelectorAll('button,[role=button]')).filter(enabled).filter(x=>{const r=x.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;return cx>=ecx-8&&cx<=er.right+140&&Math.abs(cy-ecy)<150;});if(local.length===1){b=local[0];reason='unique-right-side-composer-control-depth-'+depth;break;}if(local.length>1){const ranked=local.map(x=>{const r=x.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;return {x,score:Math.abs(er.right-cx)+Math.abs(ecy-cy)*1.35};}).sort((a,b)=>a.score-b.score);if(ranked.length===1||ranked[1].score-ranked[0].score>42){b=ranked[0].x;reason='clear-nearest-composer-control-depth-'+depth;break;}return 'GENERATE_BUTTON_AMBIGUOUS:'+JSON.stringify(local.map(x=>({a:x.getAttribute('aria-label'),t:x.getAttribute('title'),text:(x.innerText||x.textContent||'').trim().slice(0,40),rect:(()=>{const r=x.getBoundingClientRect();return [Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height)];})()})));}}}"
+                    + "if(!b)return 'IMAGE_SUBMIT_NOT_FOUND:'+JSON.stringify(all.slice(-30).map(x=>({a:x.getAttribute('aria-label'),t:x.getAttribute('title'),text:(x.innerText||x.textContent||'').trim().slice(0,45),disabled:!!x.disabled})));"
+                    + "if(!enabled(b))return 'GENERATE_BUTTON_DISABLED:'+label(b).slice(0,80);"
+                    + "const baseline=new WeakSet();function collect(root){try{Array.from(root.querySelectorAll('img')).forEach(i=>baseline.add(i));Array.from(root.querySelectorAll('*')).forEach(n=>{if(n.shadowRoot)collect(n.shadowRoot);});}catch(e){}}collect(document);"
+                    + "window.__astraFlow2BaselineElements=baseline;window.__astraFlow2BaselineImages=new Set(Array.from(document.images||[]).map(i=>i.currentSrc||i.src).filter(Boolean));"
+                    + "window.__astraFlow2StartedAt=Date.now();b.click();return 'GENERATE_CLICKED:'+reason+':'+label(b).slice(0,60);"
                     + "}catch(e){return 'ERROR:'+e.message;}})()";
         }
         webView.evaluateJavascript(script, result -> {
@@ -235,7 +247,7 @@ public final class Flow2WebViewActivity extends Activity {
                 + "function scanRoot(root){if(!root)return;try{const base=window.__astraFlow2BaselineImages||new Set();"
                 + "const baselineElements=window.__astraFlow2BaselineElements;"
                 + "Array.from(root.querySelectorAll('img')).forEach(i=>{const u=i.currentSrc||i.src||'';const r=i.getBoundingClientRect();"
-                + "if(!u||base.has(u)||i.naturalWidth<256||i.naturalHeight<256||r.width<100||r.height<100)return;sendData(u);});"
+                + "if(!u||base.has(u)||(baselineElements&&baselineElements.has(i))||i.naturalWidth<256||i.naturalHeight<256||r.width<100||r.height<100)return;sendData(u);});"
                 + "if(!window.__astraFlow2ObservedRoots.has(root)){window.__astraFlow2ObservedRoots.add(root);"
                 + "new MutationObserver(()=>scanRoot(root)).observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['src','srcset','style']});}"
                 + "Array.from(root.querySelectorAll('*')).forEach(n=>{if(n.shadowRoot)scanRoot(n.shadowRoot);});"
