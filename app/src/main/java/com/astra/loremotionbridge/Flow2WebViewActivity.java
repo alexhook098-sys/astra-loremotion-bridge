@@ -181,29 +181,15 @@ public final class Flow2WebViewActivity extends Activity {
                     + "e.dispatchEvent(new Event('change',{bubbles:true}));return 'FIELD_SET';"
                     + "}catch(e){return 'ERROR:'+e.message;}})(" + quoted + ")";
         } else {
-            // Flow 1's submit action is a real click. In the image composer the
-            // button is often an icon-only arrow, so resolve it relative to the editor.
+            // Exact submit-button logic copied from Flow 1. Never guess a nearby button:
+            // opening the image/video settings panel is not a generation action.
             script = "(function(){try{"
-                    + "const e=Array.from(document.querySelectorAll('[role=textbox]')).find(x=>x.getAttribute('aria-label')==='Что вы хотите создать?'||/what do you want to create/i.test(x.getAttribute('aria-label')||''))||document.querySelector('.ProseMirror[contenteditable=true]');"
-                    + "if(!e)return 'PROMPT_FIELD_NOT_FOUND_AT_SUBMIT';"
-                    + "const visible=x=>{const r=x.getBoundingClientRect(),s=getComputedStyle(x);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none'};"
-                    + "const enabled=x=>visible(x)&&!x.disabled&&x.getAttribute('aria-disabled')!=='true';"
-                    + "const label=x=>((x.getAttribute('aria-label')||'')+' '+(x.getAttribute('title')||'')+' '+(x.innerText||x.textContent||'')).trim();"
-                    + "const all=Array.from(document.querySelectorAll('button,[role=button]')).filter(enabled);"
-                    + "let b=all.find(x=>(x.getAttribute('aria-label')||'')==='Начать генерацию');"
-                    + "if(!b){let n=e;for(let depth=0;n&&depth<12;depth++,n=n.parentElement){"
-                    + "const local=Array.from(n.querySelectorAll('button,[role=button]')).filter(enabled);"
-                    + "if(!local.length)continue;"
-                    + "const submit=local.find(x=>x.type==='submit'||/^(send|submit|generate|create|отправить|создать|начать генерацию)\\b/i.test(label(x)));"
-                    + "if(submit){b=submit;break;}"
-                    + "if(local.length>=2){b=local[local.length-1];break;}"
-                    + "if(!b)b=local[local.length-1];"
-                    + "}}"
-                    + "if(!b)return 'GENERATE_BUTTON_NOT_FOUND:'+JSON.stringify(all.slice(-25).map(x=>({a:x.getAttribute('aria-label'),t:x.getAttribute('title'),text:(x.innerText||x.textContent||'').trim().slice(0,60),type:x.type||'',disabled:!!x.disabled})));"
-                    + "if(!enabled(b))return 'GENERATE_BUTTON_DISABLED:'+label(b).slice(0,100);"
+                    + "const b=Array.from(document.querySelectorAll('button,[role=button]')).find(x=>x.getAttribute('aria-label')==='Начать генерацию');"
+                    + "if(!b)return 'GENERATE_BUTTON_NOT_FOUND:'+JSON.stringify(Array.from(document.querySelectorAll('button,[role=button]')).slice(-25).map(x=>({a:x.getAttribute('aria-label'),t:x.getAttribute('title'),text:(x.innerText||x.textContent||'').trim().slice(0,60),disabled:!!x.disabled})));"
+                    + "if(b.disabled||b.getAttribute('aria-disabled')==='true')return 'GENERATE_BUTTON_DISABLED';"
                     + "window.__astraFlow2BaselineImages=new Set(Array.from(document.images||[]).map(i=>i.currentSrc||i.src).filter(Boolean));"
                     + "window.__astraFlow2StartedAt=Date.now();"
-                    + "b.click();return 'GENERATE_CLICKED:'+label(b).slice(0,100);"
+                    + "b.click();return 'GENERATE_CLICKED';"
                     + "}catch(e){return 'ERROR:'+e.message;}})()";
         }
         webView.evaluateJavascript(script, result -> {
