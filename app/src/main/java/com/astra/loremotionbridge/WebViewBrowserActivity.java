@@ -43,6 +43,7 @@ public class WebViewBrowserActivity extends Activity {
     private WebView webView;
     private boolean hideAfterPageLoad;
     private TextView status;
+    private static final int FILE_CHOOSER_REQUEST_CODE = 7401;
     private ValueCallback<Uri[]> pendingFileCallback;
     private String pendingUploadPath;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -92,6 +93,32 @@ public class WebViewBrowserActivity extends Activity {
             hideAfterPageLoad = false;
             sendToBackSoon();
         }
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != FILE_CHOOSER_REQUEST_CODE) return;
+
+        if (pendingFileCallback == null) return;
+
+        Uri[] results = null;
+        if (resultCode == RESULT_OK && data != null) {
+            if (data.getClipData() != null) {
+                int count = data.getClipData().getItemCount();
+                results = new Uri[count];
+                for (int i = 0; i < count; i++) {
+                    results[i] = data.getClipData().getItemAt(i).getUri();
+                }
+            } else if (data.getData() != null) {
+                results = new Uri[] { data.getData() };
+            }
+        }
+
+        pendingFileCallback.onReceiveValue(results);
+        pendingFileCallback = null;
+        Log.i("ASTRA-WV", results == null
+                ? "File picker cancelled"
+                : "File picker returned " + results.length + " URI(s)");
     }
 
     @Override protected void onNewIntent(android.content.Intent intent) {
@@ -265,6 +292,29 @@ public class WebViewBrowserActivity extends Activity {
 
                 if (pendingUploadPath != null && !pendingUploadPath.isEmpty()) {
                     deliverPendingUpload();
+                    return true;
+                }
+
+                // Launch Android's document picker and return the selected URI to WebView.
+                try {
+                    Intent chooserIntent = fileChooserParams.createIntent();
+                    startActivityForResult(chooserIntent, FILE_CHOOSER_REQUEST_CODE);
+                } catch (Exception firstError) {
+                    try {
+                        Intent fallback = new Intent(Intent.ACTION_GET_CONTENT);
+                        fallback.addCategory(Intent.CATEGORY_OPENABLE);
+                        fallback.setType("*/*");
+                        startActivityForResult(
+                                Intent.createChooser(fallback, "Выберите файл"),
+                                FILE_CHOOSER_REQUEST_CODE);
+                    } catch (Exception secondError) {
+                        Log.e("ASTRA-WV", "Unable to open file picker", secondError);
+                        if (pendingFileCallback != null) {
+                            pendingFileCallback.onReceiveValue(null);
+                            pendingFileCallback = null;
+                        }
+                        setStatus("Не удалось открыть выбор файла");
+                    }
                 }
 
                 return true;
