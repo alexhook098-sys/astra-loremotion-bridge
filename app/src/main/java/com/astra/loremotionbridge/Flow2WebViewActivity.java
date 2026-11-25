@@ -54,6 +54,7 @@ public final class Flow2WebViewActivity extends Activity {
     private long generationStartedAt;
     private int observerPolls;
     private String generationState = "idle";
+    private boolean backgroundRequested;
     private final ImageBridge imageBridge = new ImageBridge();
 
     private final Runnable imageObserver = new Runnable() {
@@ -126,6 +127,12 @@ public final class Flow2WebViewActivity extends Activity {
                 setStatus("Google Flow 2 · проект открыт · подключаю наблюдатель изображений");
                 main.postDelayed(() -> installImageObserver(true), 900L);
                 if (pendingPrompt != null) main.postDelayed(Flow2WebViewActivity.this::attemptImageGeneration, 1200L);
+                if (backgroundRequested) main.postDelayed(() -> {
+                    if (!isFinishing() && !isDestroyed()) {
+                        moveTaskToBack(true);
+                        Log.i(TAG, "Google Flow 2 task moved behind ASTRA after page load");
+                    }
+                }, 120L);
                 Log.i(TAG, "Page finished: " + url);
             }
         });
@@ -146,6 +153,7 @@ public final class Flow2WebViewActivity extends Activity {
         attempts = 0;
         generationStartedAt = 0L;
         generationState = "queued";
+        backgroundRequested = intent.getBooleanExtra("background", true);
         seenImages.clear();
         Log.i(TAG, "Image generation queued; prompt length=" + pendingPrompt.length());
     }
@@ -178,6 +186,7 @@ public final class Flow2WebViewActivity extends Activity {
                     + "if(!b)return 'GENERATE_BUTTON_NOT_FOUND';"
                     + "if(b.disabled||b.getAttribute('aria-disabled')==='true')return 'GENERATE_BUTTON_DISABLED';"
                     + "window.__astraFlow2BaselineImages=new Set(Array.from(document.images||[]).map(i=>i.currentSrc||i.src).filter(Boolean));"
+                    + "window.__astraFlow2BaselineElements=new WeakSet(Array.from(document.images||[]));"
                     + "window.__astraFlow2StartedAt=Date.now();b.click();return 'GENERATE_CLICKED';"
                     + "}catch(e){return 'ERROR:'+e.message;}})()";
         }
@@ -198,9 +207,9 @@ public final class Flow2WebViewActivity extends Activity {
                 main.postDelayed(imageObserver, 1200L);
                 // Keep this isolated Flow task alive in its own task while returning
                 // the user to the ASTRA chat, as the working Flow 1 background path does.
-                main.postDelayed(() -> {
+                if (backgroundRequested) main.postDelayed(() -> {
                     if (!isFinishing() && !isDestroyed()) moveTaskToBack(true);
-                }, 350L);
+                }, 250L);
             } else {
                 setStatus("Google Flow 2 · ожидаю поле и кнопку генерации · " + value);
                 main.postDelayed(this::attemptImageGeneration, 1000L);
@@ -222,12 +231,9 @@ public final class Flow2WebViewActivity extends Activity {
                 + ".catch(e=>{window.__astraFlow2Captured.delete(u);console.warn('ASTRA_FLOW2_IMAGE_FETCH:'+e);"
                 + "try{window.ASTRAFlow2Image.downloadImageUrl(u);}catch(x){}});}"
                 + "function scanRoot(root){if(!root)return;try{const base=window.__astraFlow2BaselineImages||new Set();"
+                + "const baselineElements=window.__astraFlow2BaselineElements;"
                 + "Array.from(root.querySelectorAll('img')).forEach(i=>{const u=i.currentSrc||i.src||'';const r=i.getBoundingClientRect();"
-                + "if(!u||base.has(u)||i.naturalWidth<256||i.naturalHeight<256||r.width<100||r.height<100)return;sendData(u);});"
-                + "Array.from(root.querySelectorAll('[style*=background-image]')).forEach(e=>{const r=e.getBoundingClientRect();if(r.width<256||r.height<256)return;"
-                + "const bg=getComputedStyle(e).backgroundImage;const m=bg.match(/url\\([\\\"']?(.*?)[\\\"']?\\)/);if(m&&m[1]&&!base.has(m[1]))sendData(m[1]);});"
-                + "Array.from(root.querySelectorAll('canvas')).forEach(c=>{if(c.width<256||c.height<256||c.__astraFlow2Captured)return;c.__astraFlow2Captured=true;"
-                + "try{sendData(c.toDataURL('image/png'));}catch(e){}});"
+                + "if(!u||(baselineElements&&baselineElements.has(i))||i.naturalWidth<256||i.naturalHeight<256||r.width<100||r.height<100)return;sendData(u);});"
                 + "if(!window.__astraFlow2ObservedRoots.has(root)){window.__astraFlow2ObservedRoots.add(root);"
                 + "new MutationObserver(()=>scanRoot(root)).observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['src','srcset','style']});}"
                 + "Array.from(root.querySelectorAll('*')).forEach(n=>{if(n.shadowRoot)scanRoot(n.shadowRoot);});"
