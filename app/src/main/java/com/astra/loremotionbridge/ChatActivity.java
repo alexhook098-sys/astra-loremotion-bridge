@@ -87,6 +87,8 @@ public class ChatActivity extends Activity {
                 if (m != null) {
                     if ("perchance_image".equals(m.optString("type"))) {
                         addPerchanceImageMessage(Uri.parse(m.optString("uri", "")), false);
+                    } else if ("google_flow2_image".equals(m.optString("type"))) {
+                        addGoogleFlow2ImageMessage(Uri.parse(m.optString("uri", "")), false);
                     } else if ("flow_video".equals(m.optString("type"))) {
                         addVideoMessage(Uri.parse(m.optString("uri", "")), false);
                     } else if ("story_motion_video".equals(m.optString("type"))) {
@@ -101,6 +103,7 @@ public class ChatActivity extends Activity {
         }
         updateProviderStatus();
         consumePendingPerchanceImages();
+        consumePendingGoogleFlow2Images();
         consumePendingFlowVideos();
         consumePendingZSkyVideos();
     }
@@ -572,6 +575,77 @@ public class ChatActivity extends Activity {
         if (activity != null) activity.runOnUiThread(activity::consumePendingPerchanceImages);
     }
 
+
+    public static void onGoogleFlow2ImageReady(Context context, Uri image) {
+        if (context == null || image == null) return;
+        android.content.SharedPreferences prefs = context.getSharedPreferences("astra_chat", MODE_PRIVATE);
+        JSONArray pending;
+        try { pending = new JSONArray(prefs.getString("google_flow2_pending_images", "[]")); }
+        catch (Exception e) { pending = new JSONArray(); }
+        try {
+            pending.put(new JSONObject().put("uri", image.toString()));
+            prefs.edit().putString("google_flow2_pending_images", pending.toString()).apply();
+        } catch (Exception ignored) {}
+        ChatActivity activity = activeInstance;
+        if (activity != null) activity.runOnUiThread(activity::consumePendingGoogleFlow2Images);
+    }
+
+    private void consumePendingGoogleFlow2Images() {
+        if (isFinishing() || messages == null) return;
+        android.content.SharedPreferences prefs = getSharedPreferences("astra_chat", MODE_PRIVATE);
+        JSONArray pending;
+        try { pending = new JSONArray(prefs.getString("google_flow2_pending_images", "[]")); }
+        catch (Exception e) { pending = new JSONArray(); }
+        if (pending.length() == 0) return;
+        prefs.edit().remove("google_flow2_pending_images").apply();
+        for (int i = 0; i < pending.length(); i++) {
+            JSONObject item = pending.optJSONObject(i);
+            if (item == null) continue;
+            String value = item.optString("uri", "");
+            if (!value.isEmpty()) addGoogleFlow2ImageMessage(Uri.parse(value), true);
+        }
+    }
+
+    private void addGoogleFlow2ImageMessage(Uri image, boolean save) {
+        if (image == null || image.toString().isEmpty()) return;
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(10), dp(9), dp(10), dp(10));
+        card.setBackground(round(Color.rgb(30, 42, 65), Color.rgb(57, 91, 119), 17));
+        TextView caption = label("✦ GOOGLE FLOW 2 · изображение сохранено в Pictures/ASTRA/GoogleFlow2", 13, WHITE, false);
+        caption.setPadding(dp(3), dp(2), dp(3), dp(8));
+        card.addView(caption, new LinearLayout.LayoutParams(-1, -2));
+        ImageView preview = new ImageView(this);
+        preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        preview.setAdjustViewBounds(true);
+        preview.setMaxHeight(dp(320));
+        preview.setBackground(round(Color.rgb(16, 22, 38), Color.rgb(57, 91, 119), 12));
+        try { preview.setImageURI(image); } catch (Exception e) { preview.setImageDrawable(null); }
+        card.addView(preview, new LinearLayout.LayoutParams(-1, dp(300)));
+        card.setOnClickListener(v -> {
+            Intent open = new Intent(Intent.ACTION_VIEW);
+            open.setDataAndType(image, "image/*");
+            open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            try { startActivity(open); }
+            catch (Exception e) { addMessage("Не удалось открыть изображение Google Flow 2.", false, true); }
+        });
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.LEFT);
+        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1, -2);
+        cardParams.setMargins(dp(2), dp(5), dp(2), dp(7));
+        row.addView(card, cardParams);
+        messages.addView(row);
+        messageScroll.post(() -> messageScroll.fullScroll(View.FOCUS_DOWN));
+        if (save) {
+            try {
+                history.put(new JSONObject().put("type", "google_flow2_image")
+                        .put("text", "GOOGLE FLOW 2 · изображение сохранено")
+                        .put("uri", image.toString()).put("user", false));
+                getSharedPreferences("astra_chat", MODE_PRIVATE).edit()
+                        .putString("messages", history.toString()).apply();
+            } catch (Exception ignored) {}
+        }
+    }
 
     public static void onFlowDownloadProgress(Context context, String message) {
         if (context == null || message == null) return;
