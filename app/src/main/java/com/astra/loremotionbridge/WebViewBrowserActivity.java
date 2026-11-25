@@ -311,6 +311,12 @@ public class WebViewBrowserActivity extends Activity {
         s.setDisplayZoomControls(false);
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(true);
+        // Keep the Alice renderer at foreground importance while its Activity is backgrounded.
+        // This prevents renderer eviction during long generations (it does not bypass Android
+        // background timer throttling, so the native observer remains responsible for polling).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            wv.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_BOUND, true);
+        }
 
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
@@ -1553,10 +1559,57 @@ public class WebViewBrowserActivity extends Activity {
                 down.recycle();
                 up.recycle();
                 aliceUploadTriggered = true;
-                setStatus("Alice Motion: нажала кнопку загрузки касанием Android. Жду штатный выбор файла WebView…");
+                setStatus("Alice Motion: открыла меню загрузки. Автоматически выбираю «Фото»…");
+                main.postDelayed(() -> tapAlicePhotoOption(0), 450L);
                 waitForAliceFileDelivery(0);
             } catch (Exception e) {
                 setStatus("Alice Motion: ошибка касания кнопки загрузки — " + e.getMessage());
+            }
+        });
+    }
+
+    // Alice renders its own bottom sheet (Camera / Photo / Files) before it invokes
+    // the HTML input[type=file]. Select the exact visible "Фото" action ourselves.
+    private void tapAlicePhotoOption(final int attempt) {
+        if (webView == null || isFinishing() || aliceFileChooserRequested
+                || aliceFileDeliveryCompleted || !aliceUploadTriggered) return;
+        if (attempt >= 30) {
+            setStatus("Alice Motion: меню загрузки не показало пункт «Фото» автоматически.");
+            return;
+        }
+        String js = "(function(){try{"
+                + "var visible=e=>{var r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none'};"
+                + "var all=[...document.querySelectorAll('button,[role=button],[tabindex],div,span')];"
+                + "var candidates=all.filter(e=>visible(e)&&((e.innerText||e.textContent||'').trim()==='Фото'));"
+                + "var e=candidates.map(x=>{var p=x;for(var n=0;n<4&&p;n++,p=p.parentElement){if(p.matches('button,[role=button],[tabindex]'))return p;}return x;})"
+                + ".filter((x,i,a)=>a.indexOf(x)===i).sort((a,b)=>{var ra=a.getBoundingClientRect(),rb=b.getBoundingClientRect();return (rb.width*rb.height)-(ra.width*ra.height);})[0];"
+                + "if(!e)return JSON.stringify({ok:false});var r=e.getBoundingClientRect();"
+                + "return JSON.stringify({ok:true,x:r.left+r.width/2,y:r.top+r.height/2});"
+                + "}catch(e){return JSON.stringify({ok:false,error:String(e)});}})()";
+        webView.evaluateJavascript(js, raw -> {
+            try {
+                Object decoded = new org.json.JSONTokener(raw).nextValue();
+                if (!(decoded instanceof String)) throw new IllegalStateException("invalid_photo_option");
+                org.json.JSONObject target = new org.json.JSONObject((String) decoded);
+                if (!target.optBoolean("ok", false)) {
+                    main.postDelayed(() -> tapAlicePhotoOption(attempt + 1), 300L);
+                    return;
+                }
+                float scale = webView.getScale();
+                float x = (float) target.getDouble("x") * scale;
+                float y = (float) target.getDouble("y") * scale;
+                long downTime = android.os.SystemClock.uptimeMillis();
+                android.view.MotionEvent down = android.view.MotionEvent.obtain(
+                        downTime, downTime, android.view.MotionEvent.ACTION_DOWN, x, y, 0);
+                android.view.MotionEvent up = android.view.MotionEvent.obtain(
+                        downTime, downTime + 90L, android.view.MotionEvent.ACTION_UP, x, y, 0);
+                webView.dispatchTouchEvent(down);
+                webView.dispatchTouchEvent(up);
+                down.recycle();
+                up.recycle();
+                setStatus("Alice Motion: выбрала «Фото» автоматически. Передаю исходный файл ASTRA…");
+            } catch (Exception e) {
+                setStatus("Alice Motion: ошибка автоматического выбора «Фото» — " + e.getMessage());
             }
         });
     }
