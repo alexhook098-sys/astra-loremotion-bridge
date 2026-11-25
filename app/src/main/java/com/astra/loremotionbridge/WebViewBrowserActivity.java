@@ -1522,18 +1522,41 @@ public class WebViewBrowserActivity extends Activity {
         // Use WebView's native file chooser callback. Alice's upload sheet is a custom UI;
         // assigning input.files from JavaScript does not reliably trigger its upload pipeline.
         setPendingUpload(source.getAbsolutePath());
+        // A synthetic DOM .click() is not a trusted user gesture in Android WebView.
+        // Alice opens its upload sheet only after a real pointer event; dispatch a native tap
+        // at the visible upload control so WebChromeClient.onShowFileChooser is invoked.
         String script = "(function(){var es=[...document.querySelectorAll('button,[role=button],label')];"
                 + "var e=es.find(x=>x.getClientRects().length&&!x.disabled&&/загрузить фото|добавить фото|выбрать фото/i.test((x.innerText||x.textContent||'').trim()));"
-                + "if(!e)return 'UPLOAD_BUTTON_NOT_FOUND';"
+                + "if(!e)return JSON.stringify({ok:false,error:'UPLOAD_BUTTON_NOT_FOUND'});"
+                + "var r=e.getBoundingClientRect();"
                 + "window.__astraAliceBaselineImages=[...document.images].map(i=>i.currentSrc||i.src||'');"
-                + "e.click();return 'UPLOAD_BUTTON_CLICKED';})()";
-        webView.evaluateJavascript(script, result -> {
-            if (result != null && result.contains("UPLOAD_BUTTON_CLICKED")) {
+                + "return JSON.stringify({ok:true,x:r.left+r.width/2,y:r.top+r.height/2});})()";
+        webView.evaluateJavascript(script, raw -> {
+            try {
+                Object decoded = new org.json.JSONTokener(raw).nextValue();
+                if (!(decoded instanceof String)) throw new IllegalStateException("invalid_tap_target");
+                org.json.JSONObject target = new org.json.JSONObject((String) decoded);
+                if (!target.optBoolean("ok", false)) {
+                    setStatus("Alice Motion: не найдена кнопка загрузки (" + target.optString("error") + ").");
+                    return;
+                }
+                float scale = webView.getScale();
+                float x = (float) target.getDouble("x") * scale;
+                float y = (float) target.getDouble("y") * scale;
+                long downTime = android.os.SystemClock.uptimeMillis();
+                android.view.MotionEvent down = android.view.MotionEvent.obtain(
+                        downTime, downTime, android.view.MotionEvent.ACTION_DOWN, x, y, 0);
+                android.view.MotionEvent up = android.view.MotionEvent.obtain(
+                        downTime, downTime + 90L, android.view.MotionEvent.ACTION_UP, x, y, 0);
+                webView.dispatchTouchEvent(down);
+                webView.dispatchTouchEvent(up);
+                down.recycle();
+                up.recycle();
                 aliceUploadTriggered = true;
-                setStatus("Alice Motion: нажала «Загрузить фото», передаю картину через системный механизм WebView…");
+                setStatus("Alice Motion: нажала кнопку загрузки касанием Android. Жду штатный выбор файла WebView…");
                 waitForAliceFileDelivery(0);
-            } else {
-                setStatus("Alice Motion: не удалось нажать «Загрузить фото» (" + result + ").");
+            } catch (Exception e) {
+                setStatus("Alice Motion: ошибка касания кнопки загрузки — " + e.getMessage());
             }
         });
     }
