@@ -105,6 +105,7 @@ public class ChatActivity extends Activity {
         consumePendingPerchanceImages();
         consumePendingFlowVideos();
         consumePendingZSkyVideos();
+        consumePendingAliceVideos();
     }
 
     @Override protected void onResume() {
@@ -113,6 +114,7 @@ public class ChatActivity extends Activity {
         consumePendingPerchanceImages();
         consumePendingFlowVideos();
         consumePendingZSkyVideos();
+        consumePendingAliceVideos();
         if (perchanceBrowserPanel != null) perchanceBrowserPanel.onHostResume();
         if (flowBrowserPanel != null) flowBrowserPanel.onHostResume();
         if (zskyBrowserPanel != null) zskyBrowserPanel.onHostResume();
@@ -545,6 +547,55 @@ public class ChatActivity extends Activity {
         } catch (Exception ignored) {}
         ChatActivity activity = activeInstance;
         if (activity != null && activity.chatResumed) activity.runOnUiThread(activity::consumePendingZSkyVideos);
+    }
+
+    public static void onAliceVideoReady(Context context, Uri video) {
+        if (context == null || video == null) return;
+        android.content.SharedPreferences prefs = context.getSharedPreferences("astra_chat", MODE_PRIVATE);
+        JSONArray pending;
+        try { pending = new JSONArray(prefs.getString("alice_pending_videos", "[]")); }
+        catch (Exception e) { pending = new JSONArray(); }
+        try {
+            pending.put(new JSONObject().put("uri", video.toString()));
+            prefs.edit().putString("alice_pending_videos", pending.toString()).apply();
+        } catch (Exception ignored) {}
+        ChatActivity activity = activeInstance;
+        if (activity != null && activity.chatResumed) activity.runOnUiThread(activity::consumePendingAliceVideos);
+    }
+
+    private void consumePendingAliceVideos() {
+        if (isFinishing() || messages == null) return;
+        android.content.SharedPreferences prefs = getSharedPreferences("astra_chat", MODE_PRIVATE);
+        JSONArray pending;
+        try { pending = new JSONArray(prefs.getString("alice_pending_videos", "[]")); }
+        catch (Exception e) { pending = new JSONArray(); }
+        if (pending.length() == 0) return;
+        prefs.edit().remove("alice_pending_videos").apply();
+        for (int i = 0; i < pending.length(); i++) {
+            JSONObject item = pending.optJSONObject(i);
+            if (item == null) continue;
+            String value = item.optString("uri", "");
+            if (value.isEmpty()) continue;
+            Uri video = Uri.parse(value);
+            String message = "✦ ASTRA ALICE: видео сохранено · Movies/ASTRA/Alice\\nНажми здесь, чтобы открыть MP4.";
+            addMessage(message, false, false);
+            int last = messages.getChildCount() - 1;
+            if (last >= 0) {
+                View row = messages.getChildAt(last);
+                if (row instanceof ViewGroup && ((ViewGroup) row).getChildCount() > 0) {
+                    ((ViewGroup) row).getChildAt(0).setOnClickListener(v -> {
+                        Intent open = new Intent(Intent.ACTION_VIEW);
+                        open.setDataAndType(video, "video/mp4");
+                        open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        try { startActivity(open); } catch (Exception e) { addMessage("Не найдено приложение для просмотра MP4.", false, true); }
+                    });
+                }
+            }
+            try {
+                history.put(new JSONObject().put("type", "alice_video").put("text", message).put("uri", value).put("user", false));
+                prefs.edit().putString("messages", history.toString()).apply();
+            } catch (Exception ignored) {}
+        }
     }
 
     private void consumePendingZSkyVideos() {
