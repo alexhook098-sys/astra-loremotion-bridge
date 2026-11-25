@@ -54,6 +54,9 @@ public class WebViewBrowserActivity extends Activity {
     private boolean aliceWarmupDelayScheduled;
     private boolean aliceResultObserverRunning;
     private boolean aliceDownloadStarted;
+    private boolean aliceFileChooserRequested;
+    private boolean aliceFileDeliveryCompleted;
+    private String aliceUploadError = "";
     private final ExecutorService aliceDownloads = Executors.newSingleThreadExecutor();
     private String aliceAutomationImagePath;
     private String aliceAutomationPrompt;
@@ -137,8 +140,31 @@ public class WebViewBrowserActivity extends Activity {
     @Override protected void onNewIntent(android.content.Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        if (intent.getBooleanExtra("alice_automate", false)) {
+            // singleTask activities receive subsequent requests here, not in onCreate().
+            aliceAutomationImagePath = intent.getStringExtra("alice_image_path");
+            aliceAutomationPrompt = intent.getStringExtra("alice_prompt");
+            aliceAutomationStarted = false;
+            aliceUploadTriggered = false;
+            aliceWarmupDelayScheduled = false;
+            aliceResultObserverRunning = false;
+            aliceDownloadStarted = false;
+            aliceFileChooserRequested = false;
+            aliceFileDeliveryCompleted = false;
+            aliceUploadError = "";
+            pendingUploadPath = null;
+            if (pendingFileCallback != null) {
+                try { pendingFileCallback.onReceiveValue(null); } catch (Exception ignored) {}
+                pendingFileCallback = null;
+            }
+            hideAfterPageLoad = false;
+            setStatus("Alice Motion: новое задание принято, перезапускаю последовательность…");
+        }
         String url = intent.getStringExtra("url");
-        if (url != null && !url.isEmpty() && webView != null && !"about:blank".equals(url)) openUrl(url);
+        if (url != null && !url.isEmpty() && webView != null && !"about:blank".equals(url)) {
+            webView.stopLoading();
+            webView.loadUrl(url);
+        }
     }
 
     private void sendToBackSoon() {
@@ -302,6 +328,10 @@ public class WebViewBrowserActivity extends Activity {
                 }
 
                 pendingFileCallback = filePathCallback;
+                if (getIntent().getBooleanExtra("alice_automate", false)) {
+                    aliceFileChooserRequested = true;
+                    setStatus("Alice Motion: Алиса открыла системный выбор файла WebView.");
+                }
 
                 if (pendingUploadPath != null && !pendingUploadPath.isEmpty()) {
                     deliverPendingUpload();
@@ -731,20 +761,36 @@ public class WebViewBrowserActivity extends Activity {
                         target);
 
                 callback.onReceiveValue(new Uri[]{uri});
-                setStatus("Upload prepared: " + target.getName());
+                if (getIntent().getBooleanExtra("alice_automate", false)) {
+                    aliceFileDeliveryCompleted = true;
+                    aliceUploadError = "";
+                    setStatus("Alice Motion: файл передан WebView (" + target.getName() + "). Проверяю превью…");
+                } else {
+                    setStatus("Upload prepared: " + target.getName());
+                }
 
             } catch (Exception e) {
-                setStatus("Upload error: " + e.getMessage());
+                if (getIntent().getBooleanExtra("alice_automate", false)) {
+                    aliceUploadError = e.getClass().getSimpleName() + ":" + String.valueOf(e.getMessage());
+                    setStatus("Alice Motion: ошибка передачи файла — " + aliceUploadError);
+                } else {
+                    setStatus("Upload error: " + e.getMessage());
+                }
                 callback.onReceiveValue(null);
             }
         });
     }
 
     public void setPendingUpload(final String path) {
-        main.post(() -> {
+        Runnable set = () -> {
             pendingUploadPath = path;
+            aliceFileChooserRequested = false;
+            aliceFileDeliveryCompleted = false;
+            aliceUploadError = "";
             setStatus("Upload waiting for file chooser");
-        });
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) set.run();
+        else main.post(set);
     }
 
     public void injectUploadFile(final String path) {
@@ -1474,15 +1520,67 @@ public class WebViewBrowserActivity extends Activity {
         setPendingUpload(source.getAbsolutePath());
         String script = "(function(){var es=[...document.querySelectorAll('button,[role=button],label')];"
                 + "var e=es.find(x=>x.getClientRects().length&&!x.disabled&&/загрузить фото|добавить фото|выбрать фото/i.test((x.innerText||x.textContent||'').trim()));"
-                + "if(!e)return 'UPLOAD_BUTTON_NOT_FOUND';e.click();return 'UPLOAD_BUTTON_CLICKED';})()";
+                + "if(!e)return 'UPLOAD_BUTTON_NOT_FOUND';"
+                + "window.__astraAliceBaselineImages=[...document.images].map(i=>i.currentSrc||i.src||'');"
+                + "e.click();return 'UPLOAD_BUTTON_CLICKED';})()";
         webView.evaluateJavascript(script, result -> {
             if (result != null && result.contains("UPLOAD_BUTTON_CLICKED")) {
                 aliceUploadTriggered = true;
                 setStatus("Alice Motion: нажала «Загрузить фото», передаю картину через системный механизм WebView…");
-                main.postDelayed(() -> submitAlicePromptAndClick(
-                        org.json.JSONObject.quote(aliceAutomationPrompt), 0), 2500L);
+                waitForAliceFileDelivery(0);
             } else {
                 setStatus("Alice Motion: не удалось нажать «Загрузить фото» (" + result + ").");
+            }
+        });
+    }
+
+    private void waitForAliceFileDelivery(final int attempt) {
+        if (webView == null || isFinishing()) return;
+        if (aliceFileDeliveryCompleted) {
+            setStatus("Alice Motion: файл передан WebView. Проверяю появление загруженной картины…");
+            waitForAliceImageReady(0);
+            return;
+        }
+        if (!aliceUploadError.isEmpty()) {
+            setStatus("Alice Motion: передача изображения не удалась — " + aliceUploadError);
+            return;
+        }
+        if (attempt >= 100) {
+            setStatus("Alice Motion: сайт не вызвал штатный выбор файла WebView. Промпт не отправляю.");
+            return;
+        }
+        main.postDelayed(() -> waitForAliceFileDelivery(attempt + 1), 300L);
+    }
+
+    private void waitForAliceImageReady(final int attempt) {
+        if (webView == null || isFinishing() || aliceAutomationStarted) return;
+        if (attempt >= 90) {
+            setStatus("Alice Motion: файл передан, но превью картины не появилось. Генерацию не запускаю.");
+            return;
+        }
+        String js = "(function(){try{"
+                + "var files=[...document.querySelectorAll('input[type=file]')].reduce((n,e)=>n+((e.files&&e.files.length)||0),0);"
+                + "var base=window.__astraAliceBaselineImages||[];var known=new Set(base);"
+                + "var added=[...document.images].filter(i=>i.getClientRects().length&&(i.naturalWidth||0)>96&&(i.naturalHeight||0)>96&&!known.has(i.currentSrc||i.src||''));"
+                + "var body=(document.body&&document.body.innerText||'').toLowerCase();"
+                + "var cue=/изменить фото|заменить фото|удалить фото|сбросить фото/.test(body);"
+                + "return JSON.stringify({files:files,previews:added.length,cue:cue});"
+                + "}catch(e){return '{}';}})()";
+        webView.evaluateJavascript(js, raw -> {
+            boolean ready = false;
+            try {
+                Object decoded = new org.json.JSONTokener(raw).nextValue();
+                if (decoded instanceof String) {
+                    org.json.JSONObject info = new org.json.JSONObject((String) decoded);
+                    ready = info.optInt("files", 0) > 0 || info.optInt("previews", 0) > 0 || info.optBoolean("cue", false);
+                }
+            } catch (Exception ignored) {}
+            if (ready) {
+                setStatus("Alice Motion: загруженная картина обнаружена. Ввожу промпт…");
+                main.postDelayed(() -> submitAlicePromptAndClick(
+                        org.json.JSONObject.quote(aliceAutomationPrompt), 0), 1200L);
+            } else {
+                main.postDelayed(() -> waitForAliceImageReady(attempt + 1), 1000L);
             }
         });
     }
@@ -1505,6 +1603,16 @@ public class WebViewBrowserActivity extends Activity {
                 aliceAutomationStarted = true;
                 setStatus("Alice Motion: промпт отправлен фиолетовой кнопкой-стрелкой. Отслеживаю готовое видео…");
                 startAliceResultObserver(0);
+                main.postDelayed(() -> {
+                    if (!isFinishing()) {
+                        try {
+                            moveTaskToBack(true);
+                            setStatus("Alice Motion: генерация продолжается в фоне. ASTRA ждёт MP4…");
+                        } catch (Exception e) {
+                            setStatus("Alice Motion: не удалось свернуть WebView — " + e.getMessage());
+                        }
+                    }
+                }, 1600L);
             } else if (result != null && (result.contains("WAIT_FIELD") || result.contains("WAIT_ARROW"))) {
                 main.postDelayed(() -> submitAlicePromptAndClick(safePrompt, attempt + 1), 1200L);
             } else {
@@ -1531,23 +1639,26 @@ public class WebViewBrowserActivity extends Activity {
         }
         String js = "(function(){try{var urls=[];"
                 + "document.querySelectorAll('video,video source,a[href]').forEach(function(e){var u=e.currentSrc||e.src||e.href||'';if(u)urls.push(u);});"
-                + "var text=(document.body&&document.body.innerText||'').slice(0,1600);"
-                + "return JSON.stringify({urls:urls.slice(0,40),text:text,url:location.href});"
+                + "performance.getEntriesByType('resource').forEach(function(e){if(/webalice|yaart-images|video/i.test(e.name))urls.push(e.name);});"
+                + "var ids=new Set();urls.forEach(function(u){var m=String(u).match(/(?:[?&]video=|\\/webalice\\/)([0-9a-f]{32})/i);if(m)ids.add(m[1].toLowerCase());});"
+                + "var m=location.href.match(/[?&]video=([0-9a-f]{32})/i);if(m)ids.add(m[1].toLowerCase());"
+                + "return JSON.stringify({ids:[...ids],baseline:window.__astraAliceBaselineIds||[],urls:urls.slice(-60),url:location.href});"
                 + "}catch(e){return '{}';}})()";
         webView.evaluateJavascript(js, raw -> {
             String found = null;
             try {
                 Object decoded = new org.json.JSONTokener(raw).nextValue();
                 org.json.JSONObject data = new org.json.JSONObject(String.valueOf(decoded));
-                org.json.JSONArray urls = data.optJSONArray("urls");
-                if (urls != null) for (int i=0;i<urls.length();i++) {
-                    String u = urls.optString(i, "");
-                    java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?:[?&]video=|/webalice/)([0-9a-fA-F]{32})").matcher(u);
-                    if (m.find()) { found = m.group(1); break; }
-                }
-                if (found == null) {
-                    java.util.regex.Matcher m = java.util.regex.Pattern.compile("[?&]video=([0-9a-fA-F]{32})").matcher(data.optString("url", ""));
-                    if (m.find()) found = m.group(1);
+                org.json.JSONArray ids = data.optJSONArray("ids");
+                java.util.HashSet<String> baseline = new java.util.HashSet<>();
+                org.json.JSONArray oldIds = data.optJSONArray("baseline");
+                if (oldIds != null) for (int i=0;i<oldIds.length();i++) baseline.add(oldIds.optString(i, "").toLowerCase(Locale.US));
+                if (ids != null) for (int i=0;i<ids.length();i++) {
+                    String candidate = ids.optString(i, "").toLowerCase(Locale.US);
+                    if (candidate.matches("[0-9a-f]{32}") && !baseline.contains(candidate)) {
+                        found = candidate;
+                        break;
+                    }
                 }
             } catch (Exception ignored) {}
             if (found != null) {
