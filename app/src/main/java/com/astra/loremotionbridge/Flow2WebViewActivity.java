@@ -125,7 +125,8 @@ public final class Flow2WebViewActivity extends Activity {
                 super.onPageFinished(view, url);
                 pageLoaded = true;
                 setStatus("Google Flow 2 · проект открыт · подключаю наблюдатель изображений");
-                main.postDelayed(() -> installImageObserver(true), 900L);
+                // Do not scan the project gallery on page load: it contains old images.
+                // The baseline is captured immediately before the submit click instead.
                 if (pendingPrompt != null) main.postDelayed(Flow2WebViewActivity.this::attemptImageGeneration, 1200L);
                 if (backgroundRequested) main.postDelayed(() -> {
                     if (!isFinishing() && !isDestroyed()) {
@@ -180,25 +181,29 @@ public final class Flow2WebViewActivity extends Activity {
                     + "e.dispatchEvent(new Event('change',{bubbles:true}));return 'FIELD_SET';"
                     + "}catch(e){return 'ERROR:'+e.message;}})(" + quoted + ")";
         } else {
-            // Match Flow 1's actual submit control; do not guess by generic button text.
+            // Flow 1's submit action is a real click. In the image composer the
+            // button is often an icon-only arrow, so resolve it relative to the editor.
             script = "(function(){try{"
-                    + "const all=Array.from(document.querySelectorAll('button,[role=button]'));"
-                    + "let b=all.find(x=>x.getAttribute('aria-label')==='Начать генерацию');"
-                    + "if(!b){const e=Array.from(document.querySelectorAll('[role=textbox]')).find(x=>x.getAttribute('aria-label')==='Что вы хотите создать?')||document.querySelector('.ProseMirror[contenteditable=true]');"
+                    + "const e=Array.from(document.querySelectorAll('[role=textbox]')).find(x=>x.getAttribute('aria-label')==='Что вы хотите создать?'||/what do you want to create/i.test(x.getAttribute('aria-label')||''))||document.querySelector('.ProseMirror[contenteditable=true]');"
+                    + "if(!e)return 'PROMPT_FIELD_NOT_FOUND_AT_SUBMIT';"
                     + "const visible=x=>{const r=x.getBoundingClientRect(),s=getComputedStyle(x);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none'};"
-                    + "const label=x=>((x.getAttribute('aria-label')||'')+' '+(x.getAttribute('title')||'')+' '+(x.innerText||x.textContent||'')).trim().toLowerCase();"
-                    + "const candidates=[];let n=e;for(let depth=0;n&&depth<8;depth++,n=n.parentElement){"
-                    + "for(const x of Array.from(n.querySelectorAll('button,[role=button]'))){if(!visible(x)||x.disabled||x.getAttribute('aria-disabled')==='true')continue;"
-                    + "const t=label(x);if(!/(создать|сгенерировать|generate|create|run)/i.test(t))continue;"
-                    + "if(/(проект|project|видео|video|закрыть|close|отмена|cancel)/i.test(t))continue;"
-                    + "candidates.push({x,depth,t});}if(candidates.length)break;}"
-                    + "candidates.sort((a,b)=>a.depth-b.depth);if(candidates.length&&(!candidates[1]||candidates[0].depth<candidates[1].depth||candidates[0].x===candidates[1].x))b=candidates[0].x;"
-                    + "}"
-                    + "if(!b)return 'GENERATE_BUTTON_NOT_FOUND:'+JSON.stringify(all.filter(x=>{const r=x.getBoundingClientRect();return r.width>0&&r.height>0;}).map(x=>({a:x.getAttribute('aria-label'),t:x.getAttribute('title'),text:(x.innerText||x.textContent||'').trim().slice(0,70),disabled:!!x.disabled})).slice(-30));"
-                    + "if(b.disabled||b.getAttribute('aria-disabled')==='true')return 'GENERATE_BUTTON_DISABLED:'+((b.getAttribute('aria-label')||b.innerText||'').slice(0,80));"
+                    + "const enabled=x=>visible(x)&&!x.disabled&&x.getAttribute('aria-disabled')!=='true';"
+                    + "const label=x=>((x.getAttribute('aria-label')||'')+' '+(x.getAttribute('title')||'')+' '+(x.innerText||x.textContent||'')).trim();"
+                    + "const all=Array.from(document.querySelectorAll('button,[role=button]')).filter(enabled);"
+                    + "let b=all.find(x=>/начать генерацию|generate|send|submit|create|отправить|создать/i.test(label(x)));"
+                    + "if(!b){let n=e;for(let depth=0;n&&depth<12;depth++,n=n.parentElement){"
+                    + "const local=Array.from(n.querySelectorAll('button,[role=button]')).filter(enabled);"
+                    + "if(!local.length)continue;"
+                    + "const submit=local.find(x=>x.type==='submit'||/send|submit|generate|create|отправить|создать/i.test(label(x)));"
+                    + "if(submit){b=submit;break;}"
+                    + "if(local.length>=2){b=local[local.length-1];break;}"
+                    + "if(!b)b=local[local.length-1];"
+                    + "}}"
+                    + "if(!b)return 'GENERATE_BUTTON_NOT_FOUND:'+JSON.stringify(all.slice(-25).map(x=>({a:x.getAttribute('aria-label'),t:x.getAttribute('title'),text:(x.innerText||x.textContent||'').trim().slice(0,60),type:x.type||'',disabled:!!x.disabled})));"
+                    + "if(!enabled(b))return 'GENERATE_BUTTON_DISABLED:'+label(b).slice(0,100);"
                     + "window.__astraFlow2BaselineImages=new Set(Array.from(document.images||[]).map(i=>i.currentSrc||i.src).filter(Boolean));"
-                    + "window.__astraFlow2BaselineElements=new WeakSet(Array.from(document.images||[]));"
-                    + "window.__astraFlow2StartedAt=Date.now();b.click();return 'GENERATE_CLICKED:'+(b.getAttribute('aria-label')||b.innerText||b.textContent||'button');"
+                    + "window.__astraFlow2StartedAt=Date.now();"
+                    + "b.click();return 'GENERATE_CLICKED:'+label(b).slice(0,100);"
                     + "}catch(e){return 'ERROR:'+e.message;}})()";
         }
         webView.evaluateJavascript(script, result -> {
@@ -244,7 +249,7 @@ public final class Flow2WebViewActivity extends Activity {
                 + "function scanRoot(root){if(!root)return;try{const base=window.__astraFlow2BaselineImages||new Set();"
                 + "const baselineElements=window.__astraFlow2BaselineElements;"
                 + "Array.from(root.querySelectorAll('img')).forEach(i=>{const u=i.currentSrc||i.src||'';const r=i.getBoundingClientRect();"
-                + "if(!u||(baselineElements&&baselineElements.has(i))||i.naturalWidth<256||i.naturalHeight<256||r.width<100||r.height<100)return;sendData(u);});"
+                + "if(!u||base.has(u)||i.naturalWidth<256||i.naturalHeight<256||r.width<100||r.height<100)return;sendData(u);});"
                 + "if(!window.__astraFlow2ObservedRoots.has(root)){window.__astraFlow2ObservedRoots.add(root);"
                 + "new MutationObserver(()=>scanRoot(root)).observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['src','srcset','style']});}"
                 + "Array.from(root.querySelectorAll('*')).forEach(n=>{if(n.shadowRoot)scanRoot(n.shadowRoot);});"
