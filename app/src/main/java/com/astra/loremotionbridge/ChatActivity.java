@@ -64,6 +64,7 @@ public class ChatActivity extends Activity {
     private PerchanceBrowserPanel perchanceBrowserPanel;
     private FlowBrowserPanel flowBrowserPanel;
     private ZSkyBrowserPanel zskyBrowserPanel;
+    private AliceBrowserPanel aliceBrowserPanel;
     private Button installButton;
     private JSONArray history;
     private volatile boolean busy = false;
@@ -132,6 +133,7 @@ public class ChatActivity extends Activity {
         if (perchanceBrowserPanel != null) perchanceBrowserPanel.onHostResume();
         if (flowBrowserPanel != null) flowBrowserPanel.onHostResume();
         if (zskyBrowserPanel != null) zskyBrowserPanel.onHostResume();
+        if (aliceBrowserPanel != null) aliceBrowserPanel.onHostResume();
     }
 
     @Override protected void onPause() {
@@ -139,6 +141,7 @@ public class ChatActivity extends Activity {
         if (perchanceBrowserPanel != null) perchanceBrowserPanel.onHostPause();
         if (flowBrowserPanel != null) flowBrowserPanel.onHostPause();
         if (zskyBrowserPanel != null) zskyBrowserPanel.onHostPause();
+        if (aliceBrowserPanel != null) aliceBrowserPanel.onHostPause();
         super.onPause();
     }
 
@@ -412,9 +415,33 @@ public class ChatActivity extends Activity {
                 }
                 if (copy.length() < 1) throw new java.io.IOException("image_empty");
                 final String path = copy.getAbsolutePath();
-                runOnUiThread(() -> { addMessage("✦ ALICE MOTION · открываю студию и передаю изображение с промптом.", false, true); BrowserSessionManager.submitAlice(this, path, pendingAlicePrompt); });
+                runOnUiThread(() -> { addMessage("✦ ALICE MOTION · запускаю встроенную вкладку в фоне чата.", false, true); startAliceGeneration(path, pendingAlicePrompt); });
             } catch (Exception e) { if (copy != null) copy.delete(); runOnUiThread(() -> addMessage("Alice Motion: не удалось подготовить изображение — " + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()), false, true)); }
         });
+    }
+
+    private void startAliceGeneration(String imagePath, String prompt) {
+        if (imagePath == null || prompt == null || prompt.trim().isEmpty()) {
+            addMessage("Alice Motion: отсутствует фотография или промпт.", false, true);
+            return;
+        }
+        try {
+            Intent service = new Intent(this, BrowserBridgeService.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(service);
+            else startService(service);
+        } catch (Exception e) {
+            addMessage("Alice Motion: не удалось запустить фоновый сервис — " + e.getMessage(), false, true);
+            return;
+        }
+        if (aliceBrowserPanel == null) {
+            aliceBrowserPanel = new AliceBrowserPanel(this, imagePath, prompt);
+            if (workerHost != null) workerHost.addView(aliceBrowserPanel,
+                    new FrameLayout.LayoutParams(1, 1));
+        } else {
+            aliceBrowserPanel.submitTask(imagePath, prompt);
+        }
+        aliceBrowserPanel.onHostResume();
+        addMessage("✦ ALICE MOTION · задание передано встроенному worker. Чат остаётся на экране.", false, true);
     }
 
     private void chooseMotionReference() {
@@ -1167,6 +1194,7 @@ public class ChatActivity extends Activity {
         if (perchanceBrowserPanel != null) { perchanceBrowserPanel.dispose(); perchanceBrowserPanel = null; }
         if (flowBrowserPanel != null) { flowBrowserPanel.dispose(); flowBrowserPanel = null; }
         if (zskyBrowserPanel != null) { zskyBrowserPanel.dispose(); zskyBrowserPanel = null; }
+        if (aliceBrowserPanel != null) { aliceBrowserPanel.dispose(); aliceBrowserPanel = null; }
         // Keep the native model alive for the process; do not unload on screen close.
         super.onDestroy();
     }
