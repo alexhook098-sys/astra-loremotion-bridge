@@ -44,6 +44,17 @@ public final class BrowserSessionManager {
         host.startActivity(intent);
     }
 
+    public static void submitAlice(Activity host, String imagePath, String prompt) {
+        if (host == null || host.isFinishing() || imagePath == null || imagePath.isEmpty()
+                || prompt == null || prompt.trim().isEmpty()) return;
+        Intent intent = new Intent(host, WebViewBrowserActivity.class);
+        intent.putExtra("url", "https://alice.yandex.ru/media");
+        intent.putExtra("alice_automate", true);
+        intent.putExtra("alice_image_path", imagePath);
+        intent.putExtra("alice_prompt", prompt.trim());
+        host.startActivity(intent);
+    }
+
     public static void submitFlow(Activity host, String prompt) {
         if (host == null || host.isFinishing() || TextUtils.isEmpty(prompt)) return;
 
