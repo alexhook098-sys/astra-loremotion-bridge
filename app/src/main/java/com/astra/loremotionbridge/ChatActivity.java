@@ -436,7 +436,7 @@ public class ChatActivity extends Activity {
         if (aliceBrowserPanel == null) {
             aliceBrowserPanel = new AliceBrowserPanel(this, imagePath, prompt);
             if (workerHost != null) workerHost.addView(aliceBrowserPanel,
-                    new FrameLayout.LayoutParams(1, 1));
+                    new FrameLayout.LayoutParams(-1, -1));
         } else {
             aliceBrowserPanel.submitTask(imagePath, prompt);
         }
