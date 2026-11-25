@@ -16,6 +16,7 @@ on:
       - feature/story-motion-diagnostics-on-stable-400
       - feature/astra-browser-core-in-chat
       - fix/zsky-embedded-worker-462
+      - feature/alice-media-service-472
 
 jobs:
   build:
