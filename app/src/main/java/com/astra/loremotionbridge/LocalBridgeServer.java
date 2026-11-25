@@ -430,6 +430,8 @@ public class LocalBridgeServer {
                     m.getOrDefault("length", "32768"));
             if ("/webview/bing-inspect".equals(p)) return WebViewBrowserController.inspectBing();
             if ("/webview/alice-inspect".equals(p)) return WebViewBrowserController.inspectAlice();
+            if ("/webview/alice-download".equals(p)) return AliceMediaAgent.download(
+                    MainApplication.context(), m.getOrDefault("id", ""));
             if ("/webview/bing-eval".equals(p)) return WebViewBrowserController.evaluateBing(
                     m.getOrDefault("script", "document.title"));
             if ("/webview/eval".equals(p)) return WebViewBrowserController.evaluate(
