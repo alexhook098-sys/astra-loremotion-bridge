@@ -247,6 +247,7 @@ public class ChatActivity extends Activity {
                 "＋  Подключить OpenRouter · API KEY",
                 "✦  Perchance  ·  вход и настройки",
                 "▶  Google Flow  ·  вход и настройки",
+                "▣  Google Flow 2  ·  отдельный аккаунт · изображения",
                 "✦  ZSky  ·  вход в аккаунт",
                 "◉  ASTRA Browser  ·  браузер и Browser Bridge",
                 "⌁  Bridge Monitor  ·  состояние локального моста"
@@ -265,13 +266,16 @@ public class ChatActivity extends Activity {
                             BrowserSessionManager.openFlow(this);
                             break;
                         case 3:
+                            BrowserSessionManager.openFlow2(this);
+                            break;
+                        case 4:
                             // Open the authenticated studio for manual sign-in; never submit a prompt here.
                             ZSkyWebViewActivity.start(this, ZSkyWebViewActivity.ZSKY_URL, false);
                             break;
-                        case 4:
+                        case 5:
                             launchBrowser();
                             break;
-                        case 5:
+                        case 6:
                             startActivity(new Intent(this, MainActivity.class));
                             break;
                     }
