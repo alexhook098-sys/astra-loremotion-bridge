@@ -69,6 +69,17 @@
 
         </activity>
         <activity
+            android:name=".Flow2WebViewActivity"
+            android:process=":flow2"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.astra.loremotionbridge.flow2"
+            android:excludeFromRecents="false"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".FlowWebViewActivity"
             android:exported="false"
             android:launchMode="singleTask"
