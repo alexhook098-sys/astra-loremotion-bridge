@@ -50,6 +50,8 @@ public final class BrowserSessionManager {
         intent.putExtra("url", Flow2WebViewActivity.FLOW2_PROJECT_URL);
         intent.putExtra(Flow2WebViewActivity.EXTRA_AUTOMATE, true);
         intent.putExtra(Flow2WebViewActivity.EXTRA_PROMPT, prompt);
+        // Match Google Flow 1: keep its dedicated task alive behind ASTRA.
+        intent.putExtra("background", true);
         host.startActivity(intent);
     }
 
