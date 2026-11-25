@@ -1605,6 +1605,7 @@ public class WebViewBrowserActivity extends Activity {
         webView.evaluateJavascript(script, result -> {
             if (result != null && result.contains("PROMPT_SENT_ARROW_CLICKED")) {
                 aliceAutomationStarted = true;
+                BrowserBridgeService.setAliceTaskActive(true);
                 setStatus("Alice Motion: промпт отправлен фиолетовой кнопкой-стрелкой. Отслеживаю готовое видео…");
                 startAliceResultObserver(0);
                 main.postDelayed(() -> {
@@ -1638,6 +1639,7 @@ public class WebViewBrowserActivity extends Activity {
         }
         if (attempt > 360) {
             aliceResultObserverRunning = false;
+            BrowserBridgeService.setAliceTaskActive(false);
             setStatus("Alice Motion: время ожидания результата истекло. Генерация могла продолжиться на странице Алисы.");
             return;
         }
@@ -1677,11 +1679,14 @@ public class WebViewBrowserActivity extends Activity {
                         if (json.optBoolean("ok")) {
                             Uri video = Uri.parse(json.getString("uri"));
                             ChatActivity.onAliceVideoReady(getApplicationContext(), video);
+                            BrowserBridgeService.setAliceTaskActive(false);
                             setStatus("Alice Motion: MP4 скачан и передан в чат ASTRA.");
                         } else {
+                            BrowserBridgeService.setAliceTaskActive(false);
                             setStatus("Alice Motion: ошибка скачивания — " + json.optString("error", "unknown"));
                         }
                     } catch (Exception e) {
+                        BrowserBridgeService.setAliceTaskActive(false);
                         setStatus("Alice Motion: ошибка обработки результата — " + e.getMessage());
                     }
                 });
