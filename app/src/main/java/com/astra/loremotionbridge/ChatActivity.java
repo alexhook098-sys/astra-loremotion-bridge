@@ -878,8 +878,34 @@ public class ChatActivity extends Activity {
     private void showImageProviderMenu() {
         new AlertDialog.Builder(this)
                 .setTitle("Выбери генератор изображений")
-                .setItems(new String[]{"Perchance"}, (dialog, which) -> {
+                .setItems(new String[]{"Perchance", "Google Flow 2 · отдельный аккаунт"}, (dialog, which) -> {
                     if (which == 0) showPerchancePromptDialog();
+                    else if (which == 1) showFlow2PromptDialog();
+                })
+                .setNegativeButton("ОТМЕНА", null)
+                .show();
+    }
+
+    private void showFlow2PromptDialog() {
+        EditText promptInput = new EditText(this);
+        promptInput.setHint("Опиши картину для Google Flow 2");
+        promptInput.setTextColor(WHITE);
+        promptInput.setHintTextColor(Color.GRAY);
+        LinearLayout box = new LinearLayout(this);
+        box.setPadding(dp(18), dp(8), dp(18), 0);
+        box.addView(promptInput, new LinearLayout.LayoutParams(-1, dp(76)));
+        new AlertDialog.Builder(this)
+                .setTitle("ASTRA · Новая картина · Google Flow 2")
+                .setView(box)
+                .setPositiveButton("СОЗДАТЬ", (dialog, which) -> {
+                    String prompt = promptInput.getText().toString().trim();
+                    if (prompt.isEmpty()) {
+                        addMessage("Опиши картину перед запуском Google Flow 2.", false, true);
+                        return;
+                    }
+                    addMessage("✦ ASTRA · отправляю запрос в Google Flow 2: " + prompt, false, true);
+                    BrowserSessionManager.submitFlow2(this, prompt);
+                    modelStatus.setText("● ASTRA · GOOGLE FLOW 2 · ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЯ");
                 })
                 .setNegativeButton("ОТМЕНА", null)
                 .show();
