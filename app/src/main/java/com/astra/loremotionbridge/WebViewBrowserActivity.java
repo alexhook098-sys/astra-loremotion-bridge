@@ -1363,7 +1363,8 @@ public class WebViewBrowserActivity extends Activity {
                 "url:clean(e.name),initiator:e.initiatorType||'',size:e.transferSize||0,duration:Math.round(e.duration||0)}));" +
                 "return JSON.stringify({kind:'ASTRA_ALICE_INSPECTOR_V1',time:new Date().toISOString()," +
                 "title:document.title,url:location.origin+location.pathname,readyState:document.readyState," +
-                "text:(document.body?.innerText||'').slice(0,1800),files,fields,buttons,media,resources});})()";
+                "headings:[...document.querySelectorAll('h1,h2,h3')].filter(visible).slice(0,12).map(e=>(e.innerText||'').trim().slice(0,100))," +
+                "status:[...document.querySelectorAll('[role=status],[aria-live]')].filter(visible).slice(0,12).map(e=>(e.innerText||'').trim().slice(0,140)),files,fields,buttons,media,resources});})()";
             webView.evaluateJavascript(js, value -> {
                 if (value == null || "null".equals(value)) callback.onResult(null, "empty_inspection_result");
                 else callback.onResult(value, null);
