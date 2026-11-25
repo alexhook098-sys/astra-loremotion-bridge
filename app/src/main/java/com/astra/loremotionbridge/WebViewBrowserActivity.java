@@ -340,6 +340,20 @@ public class WebViewBrowserActivity extends Activity {
             @Override public void onDownloadStart(
                     String url, String userAgent, String contentDisposition,
                     String mimeType, long contentLength) {
+                // Alice Media's no-watermark download action exposes a page-owned blob URL.
+                // Fetch it inside the same WebView origin; Android DownloadManager cannot fetch blob: URLs.
+                if (url != null && url.startsWith("blob:https://alice.yandex.ru/")) {
+                    setStatus("Сохраняю оригинальное видео Алисы...");
+                    saveAliceVideoBlob(url, (savedName, error) -> {
+                        if (error != null) {
+                            setStatus("Ошибка сохранения видео Алисы: " + error);
+                        } else {
+                            setStatus("Видео без водяного знака сохранено: " + savedName);
+                        }
+                    });
+                    return;
+                }
+
                 // ASTRA_BING_DOWNLOAD_LISTENER_V1: handle Bing blob and HTTPS image URLs.
                 if (url != null && (url.startsWith("blob:https://www.bing.com/") || url.startsWith("https://th.bing.com/th/id/"))) {
                     setStatus("Saving Bing image...");
@@ -394,6 +408,201 @@ public class WebViewBrowserActivity extends Activity {
                 }
             }
         });
+    }
+
+    // Saves Alice Media's own video blob without routing it through the watermarked UI download URL.
+    public void saveAliceVideoBlob(final String url, final EvalCallback callback) {
+        main.post(() -> {
+            if (webView == null) {
+                callback.onResult(null, "webview_not_ready");
+                return;
+            }
+            if (url == null || !url.startsWith("blob:https://alice.yandex.ru/")) {
+                callback.onResult(null, "untrusted_alice_blob_url");
+                return;
+            }
+            new AliceVideoBlobSaveJob(url, callback).start();
+        });
+    }
+
+    private String publishAliceVideoToDownloads(File source, String mime) throws IOException {
+        if (source == null || !source.isFile() || source.length() < 1) {
+            throw new IOException("alice_video_file_missing");
+        }
+        if (!"video/mp4".equals(mime)) throw new IOException("unsupported_alice_video_type:" + mime);
+        String displayName = "alice-motion-" + System.currentTimeMillis() + ".mp4";
+        if (Build.VERSION.SDK_INT >= 29) {
+            ContentValues values = new ContentValues();
+            values.put(android.provider.MediaStore.Downloads.DISPLAY_NAME, displayName);
+            values.put(android.provider.MediaStore.Downloads.MIME_TYPE, mime);
+            values.put(android.provider.MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+            values.put(android.provider.MediaStore.Downloads.IS_PENDING, 1);
+            Uri destination = getContentResolver().insert(
+                    android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            if (destination == null) throw new IOException("downloads_insert_failed");
+            try (FileInputStream in = new FileInputStream(source);
+                 OutputStream out = getContentResolver().openOutputStream(destination)) {
+                if (out == null) throw new IOException("downloads_output_stream_unavailable");
+                byte[] buffer = new byte[32768];
+                int count;
+                while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+            } catch (IOException e) {
+                getContentResolver().delete(destination, null, null);
+                throw e;
+            }
+            ContentValues ready = new ContentValues();
+            ready.put(android.provider.MediaStore.Downloads.IS_PENDING, 0);
+            if (getContentResolver().update(destination, ready, null, null) <= 0) {
+                getContentResolver().delete(destination, null, null);
+                throw new IOException("downloads_publish_failed");
+            }
+            return displayName;
+        }
+        File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        if (!dir.exists() && !dir.mkdirs()) throw new IOException("downloads_dir_failed");
+        File target = new File(dir, displayName);
+        try (FileInputStream in = new FileInputStream(source); FileOutputStream out = new FileOutputStream(target)) {
+            byte[] buffer = new byte[32768];
+            int count;
+            while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+        } catch (IOException e) {
+            target.delete();
+            throw e;
+        }
+        return target.getAbsolutePath();
+    }
+
+    private final class AliceVideoBlobSaveJob {
+        private static final long MAX_SIZE = 157286400L; // 150 MiB
+        private final String url;
+        private final EvalCallback callback;
+        private final String id = java.util.UUID.randomUUID().toString().replace("-", "");
+        private final String blobKey = "__astraAliceBlob_" + id;
+        private final String metaKey = "__astraAliceMeta_" + id;
+        private final String chunkKey = "__astraAliceChunk_" + id;
+        private File file;
+        private long size;
+        private boolean finished;
+
+        AliceVideoBlobSaveJob(String url, EvalCallback callback) {
+            this.url = url;
+            this.callback = callback;
+        }
+
+        void start() {
+            String js = "(function(){var u=" + org.json.JSONObject.quote(url)
+                    + ",b=" + org.json.JSONObject.quote(blobKey)
+                    + ",m=" + org.json.JSONObject.quote(metaKey)
+                    + ";try{fetch(u).then(function(r){if(!r.ok)throw Error('fetch_'+r.status);return r.blob();})"
+                    + ".then(function(x){if(x.type!=='video/mp4')throw Error('unexpected_mime:'+x.type);"
+                    + "if(x.size<1||x.size>" + MAX_SIZE + ")throw Error('invalid_size:'+x.size);"
+                    + "window[b]=x;window[m]=JSON.stringify({size:x.size,type:x.type});})"
+                    + ".catch(function(e){window[m]='!'+String(e);});}"
+                    + "catch(e){window[m]='!'+String(e);}return true;})()";
+            webView.evaluateJavascript(js, ignored -> pollMeta(0));
+        }
+
+        private Object decode(String raw) {
+            try { return raw == null ? null : new org.json.JSONTokener(raw).nextValue(); }
+            catch (Exception e) { return null; }
+        }
+
+        private void pollMeta(int tries) {
+            if (finished) return;
+            if (webView == null) { fail("webview_not_ready"); return; }
+            String check = "(function(){var v=window[" + org.json.JSONObject.quote(metaKey)
+                    + "];return v===undefined?null:v;})()";
+            webView.evaluateJavascript(check, raw -> {
+                Object decoded = decode(raw);
+                if (decoded instanceof String) {
+                    String value = (String) decoded;
+                    if (value.startsWith("!")) { fail(value.substring(1)); return; }
+                    try {
+                        org.json.JSONObject meta = new org.json.JSONObject(value);
+                        size = meta.getLong("size");
+                        if (!"video/mp4".equals(meta.getString("type")) || size < 1 || size > MAX_SIZE) {
+                            fail("invalid_video_blob_metadata"); return;
+                        }
+                        File dir = new File(getCacheDir(), "alice_media");
+                        if (!dir.exists() && !dir.mkdirs()) { fail("cache_dir_failed"); return; }
+                        file = new File(dir, id + ".mp4");
+                        writeNext(0L);
+                    } catch (Exception e) { fail("invalid_blob_metadata"); }
+                    return;
+                }
+                if (tries >= 600) { fail("blob_fetch_timeout"); return; }
+                main.postDelayed(() -> pollMeta(tries + 1), 50L);
+            });
+        }
+
+        private void writeNext(long offset) {
+            if (finished) return;
+            if (webView == null) { fail("webview_not_ready"); return; }
+            if (offset >= size) { finishSuccess(); return; }
+            String js = "(function(){var b=window[" + org.json.JSONObject.quote(blobKey)
+                    + "],k=" + org.json.JSONObject.quote(chunkKey) + ";delete window[k];"
+                    + "if(!b){window[k]='!blob_missing';return true;}"
+                    + "b.slice(" + offset + "," + Math.min(offset + 32768L, size)
+                    + ").arrayBuffer().then(function(buf){var a=new Uint8Array(buf),s='';"
+                    + "for(var i=0;i<a.length;i++)s+=String.fromCharCode(a[i]);window[k]=btoa(s);"
+                    + "}).catch(function(e){window[k]='!'+String(e);});return true;})()";
+            webView.evaluateJavascript(js, ignored -> pollChunk(offset, 0));
+        }
+
+        private void pollChunk(long offset, int tries) {
+            if (finished) return;
+            if (webView == null) { fail("webview_not_ready"); return; }
+            String check = "(function(){var v=window[" + org.json.JSONObject.quote(chunkKey)
+                    + "];if(v!==undefined){delete window[" + org.json.JSONObject.quote(chunkKey)
+                    + "];return v;}return null;})()";
+            webView.evaluateJavascript(check, raw -> {
+                Object decoded = decode(raw);
+                if (decoded instanceof String) {
+                    String encoded = (String) decoded;
+                    if (encoded.startsWith("!")) { fail(encoded.substring(1)); return; }
+                    try {
+                        byte[] bytes = android.util.Base64.decode(encoded, android.util.Base64.DEFAULT);
+                        if (bytes.length == 0 || offset + bytes.length > size) { fail("invalid_chunk_length"); return; }
+                        try (FileOutputStream out = new FileOutputStream(file, offset > 0)) { out.write(bytes); }
+                        writeNext(offset + bytes.length);
+                    } catch (Exception e) { fail("chunk_write_failed"); }
+                    return;
+                }
+                if (tries >= 120) { fail("blob_chunk_timeout"); return; }
+                main.postDelayed(() -> pollChunk(offset, tries + 1), 50L);
+            });
+        }
+
+        private void clearJs() {
+            if (webView == null) return;
+            webView.evaluateJavascript("(function(){delete window[" + org.json.JSONObject.quote(blobKey)
+                    + "];delete window[" + org.json.JSONObject.quote(metaKey)
+                    + "];delete window[" + org.json.JSONObject.quote(chunkKey) + "];return true;})()", null);
+        }
+
+        private void finishSuccess() {
+            if (finished) return;
+            finished = true;
+            clearJs();
+            try {
+                String saved = publishAliceVideoToDownloads(file, "video/mp4");
+                if (file != null && file.exists()) file.delete();
+                callback.onResult(saved, null);
+            } catch (Exception e) { failAfterFinish(e.getMessage()); }
+        }
+
+        private void failAfterFinish(String error) {
+            if (file != null && file.exists()) file.delete();
+            callback.onResult(null, error == null ? "alice_video_publish_failed" : error);
+        }
+
+        private void fail(String error) {
+            if (finished) return;
+            finished = true;
+            clearJs();
+            if (file != null && file.exists()) file.delete();
+            callback.onResult(null, error == null ? "alice_blob_save_failed" : error);
+        }
     }
 
     // Publishes a validated Bing image from the private cache into public Downloads.
