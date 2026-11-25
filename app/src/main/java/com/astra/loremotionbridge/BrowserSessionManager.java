@@ -36,6 +36,14 @@ public final class BrowserSessionManager {
         host.startActivity(intent);
     }
 
+    public static void openAliceMedia(Activity host) {
+        if (host == null || host.isFinishing()) return;
+
+        Intent intent = new Intent(host, WebViewBrowserActivity.class);
+        intent.putExtra("url", "https://alice.yandex.ru/media");
+        host.startActivity(intent);
+    }
+
     public static void submitFlow(Activity host, String prompt) {
         if (host == null || host.isFinishing() || TextUtils.isEmpty(prompt)) return;
 
