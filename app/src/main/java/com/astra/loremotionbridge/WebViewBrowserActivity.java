@@ -49,6 +49,9 @@ public class WebViewBrowserActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService perchanceDownloads = Executors.newSingleThreadExecutor();
     private final Set<String> seenPerchanceImages = new HashSet<>();
+    private boolean aliceAutomationStarted;
+    private String aliceAutomationImagePath;
+    private String aliceAutomationPrompt;
     private boolean perchanceObserverRunning;
     private final Runnable perchanceObserver = new Runnable() {
         @Override public void run() {
@@ -87,6 +90,11 @@ public class WebViewBrowserActivity extends Activity {
         String initial = getIntent().getStringExtra("url");
         if (initial == null || initial.isEmpty()) initial = "about:blank";
         hideAfterPageLoad = getIntent().getBooleanExtra("background", false);
+        if (getIntent().getBooleanExtra("alice_automate", false)) {
+            aliceAutomationImagePath = getIntent().getStringExtra("alice_image_path");
+            aliceAutomationPrompt = getIntent().getStringExtra("alice_prompt");
+            setStatus("Alice Motion: открываю студию…");
+        }
         Log.i("ASTRA-WV-DIAG", "Activity loading URL=" + initial + " background=" + hideAfterPageLoad);
         webView.loadUrl(initial);
         if (hideAfterPageLoad) {
@@ -329,6 +337,7 @@ public class WebViewBrowserActivity extends Activity {
             @Override public void onPageFinished(WebView view, String url) {
                 Log.i("ASTRA-WV-DIAG", "onPageFinished url=" + url);
                 updateStatus();
+                if (getIntent().getBooleanExtra("alice_automate", false)) scheduleAliceAutomation(0);
                 if (hideAfterPageLoad) {
                     hideAfterPageLoad = false;
                     sendToBackSoon();
@@ -1407,6 +1416,95 @@ public class WebViewBrowserActivity extends Activity {
         return result[0] != null
                 ? result[0]
                 : "{\"ok\":false,\"error\":\"status_timeout\"}";
+    }
+
+    private void scheduleAliceAutomation(final int attempt) {
+        if (aliceAutomationStarted || isFinishing() || webView == null) return;
+        if (attempt > 90) { setStatus("Alice Motion: не удалось дождаться формы загрузки. Откройте инспектор Алисы."); return; }
+        String js = "(function(){return JSON.stringify({url:location.href,files:document.querySelectorAll('input[type=file]').length,"
+                + "fields:document.querySelectorAll('textarea,input:not([type=hidden]),[contenteditable=true]').length,"
+                + "body:(document.body&&document.body.innerText||'').slice(0,500)});})()";
+        webView.evaluateJavascript(js, raw -> {
+            boolean ready = false;
+            try {
+                Object decoded = new org.json.JSONTokener(raw).nextValue();
+                if (decoded instanceof String) {
+                    org.json.JSONObject info = new org.json.JSONObject((String) decoded);
+                    String url = info.optString("url", "");
+                    ready = url.startsWith("https://alice.yandex.ru/")
+                            && info.optInt("files", 0) > 0;
+                }
+            } catch (Exception ignored) {}
+            if (!ready) { main.postDelayed(() -> scheduleAliceAutomation(attempt + 1), 2000L); return; }
+            runAliceAutomation();
+        });
+    }
+
+    private void runAliceAutomation() {
+        if (aliceAutomationStarted || webView == null) return;
+        if (aliceAutomationImagePath == null || aliceAutomationPrompt == null
+                || !new File(aliceAutomationImagePath).isFile()) {
+            setStatus("Alice Motion: отсутствует изображение или промпт.");
+            return;
+        }
+        try {
+            File source = new File(aliceAutomationImagePath);
+            if (source.length() < 1 || source.length() > 20L * 1024L * 1024L) {
+                setStatus("Alice Motion: размер изображения недопустим.");
+                return;
+            }
+            byte[] bytes = new byte[(int) source.length()];
+            try (FileInputStream in = new FileInputStream(source)) {
+                int offset = 0, count;
+                while (offset < bytes.length && (count = in.read(bytes, offset, bytes.length - offset)) > 0) offset += count;
+                if (offset != bytes.length) throw new IOException("image_read_incomplete");
+            }
+            String base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP);
+            String safeBase64 = org.json.JSONObject.quote(base64);
+            String safePrompt = org.json.JSONObject.quote(aliceAutomationPrompt);
+            String safeName = org.json.JSONObject.quote(source.getName());
+            String script = "(function(){try{"
+                    + "var input=document.querySelector('input[type=file]');if(!input)return 'NO_FILE_INPUT';"
+                    + "var bin=atob(" + safeBase64 + "),arr=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);"
+                    + "var file=new File([arr]," + safeName + ",{type:'image/jpeg'}),dt=new DataTransfer();dt.items.add(file);input.files=dt.files;"
+                    + "input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));"
+                    + "return 'IMAGE_SELECTED';}catch(e){return 'UPLOAD_ERROR:'+String(e);}})()";
+            webView.evaluateJavascript(script, result -> {
+                if (result == null || !result.contains("IMAGE_SELECTED")) {
+                    setStatus("Alice Motion: загрузка изображения не подтверждена (" + result + ")");
+                    return;
+                }
+                setStatus("Alice Motion: изображение передано. Заполняю промпт…");
+                main.postDelayed(() -> submitAlicePromptAndClick(safePrompt, 0), 1800L);
+            });
+        } catch (Exception e) {
+            setStatus("Alice Motion: ошибка подготовки изображения — " + e.getMessage());
+        }
+    }
+
+    private void submitAlicePromptAndClick(final String safePrompt, final int attempt) {
+        if (webView == null || isFinishing()) return;
+        if (attempt > 30) { setStatus("Alice Motion: поле промпта или кнопка отправки не найдены. Нужна DOM-диагностика."); return; }
+        String script = "(function(){try{"
+                + "var fields=[...document.querySelectorAll('textarea,input:not([type=hidden]),[contenteditable=true]')].filter(e=>e.getClientRects().length&&!e.disabled);"
+                + "var field=fields.find(e=>/напиш|опиш|промпт|движен|message/i.test((e.getAttribute('placeholder')||'')+' '+(e.getAttribute('aria-label')||'')))||fields.find(e=>e.tagName==='TEXTAREA'||e.isContentEditable);"
+                + "if(!field)return 'WAIT_FIELD';var value=" + safePrompt + ";"
+                + "field.focus();if(field.isContentEditable){field.textContent=value;}else{var proto=field.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;var setter=Object.getOwnPropertyDescriptor(proto,'value').set;setter.call(field,value);}"
+                + "field.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:value}));field.dispatchEvent(new Event('change',{bubbles:true}));"
+                + "var scope=field.parentElement;for(var n=0;n<5&&scope;n++,scope=scope.parentElement){var bs=[...scope.querySelectorAll('button,[role=button]')].filter(b=>b.getClientRects().length&&!b.disabled);"
+                + "var send=bs.filter(b=>{var t=((b.innerText||'')+' '+(b.getAttribute('aria-label')||'')+' '+(b.getAttribute('title')||'')).toLowerCase();return !/оживить|что сделать|режим/.test(t)&&!!b.querySelector('svg')&&(t.trim()===''||/отправ|созда|send|submit|arrow|стрел/.test(t));});"
+                + "if(send.length===1){send[0].click();return 'PROMPT_SENT_ARROW_CLICKED';}}"
+                + "return 'WAIT_ARROW';}catch(e){return 'AUTOMATION_ERROR:'+String(e);}})()";
+        webView.evaluateJavascript(script, result -> {
+            if (result != null && result.contains("PROMPT_SENT_ARROW_CLICKED")) {
+                aliceAutomationStarted = true;
+                setStatus("Alice Motion: промпт отправлен фиолетовой кнопкой-стрелкой. Ожидаю генерацию…");
+            } else if (result != null && (result.contains("WAIT_FIELD") || result.contains("WAIT_ARROW"))) {
+                main.postDelayed(() -> submitAlicePromptAndClick(safePrompt, attempt + 1), 1200L);
+            } else {
+                setStatus("Alice Motion: не удалось безопасно определить кнопку отправки (" + result + ").");
+            }
+        });
     }
 
     private void updateStatus() {
