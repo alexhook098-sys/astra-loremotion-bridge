@@ -1596,7 +1596,7 @@ public class WebViewBrowserActivity extends Activity {
                 + "field.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:value}));field.dispatchEvent(new Event('change',{bubbles:true}));"
                 + "var scope=field.parentElement;for(var n=0;n<5&&scope;n++,scope=scope.parentElement){var bs=[...scope.querySelectorAll('button,[role=button]')].filter(b=>b.getClientRects().length&&!b.disabled);"
                 + "var send=bs.filter(b=>{var t=((b.innerText||'')+' '+(b.getAttribute('aria-label')||'')+' '+(b.getAttribute('title')||'')).toLowerCase();return !/оживить|что сделать|режим/.test(t)&&!!b.querySelector('svg')&&(t.trim()===''||/отправ|созда|send|submit|arrow|стрел/.test(t));});"
-                + "if(send.length===1){send[0].click();return 'PROMPT_SENT_ARROW_CLICKED';}}"
+                + "if(send.length===1){var ids=new Set();function scan(u){var m=String(u||'').match(/(?:[?&]video=|\\/webalice\\/)([0-9a-f]{32})/i);if(m)ids.add(m[1].toLowerCase());}[...document.querySelectorAll('video,video source,a[href]')].forEach(e=>scan(e.currentSrc||e.src||e.href||''));performance.getEntriesByType('resource').forEach(e=>scan(e.name));scan(location.href);window.__astraAliceBaselineIds=[...ids];send[0].click();return 'PROMPT_SENT_ARROW_CLICKED';}}"
                 + "return 'WAIT_ARROW';}catch(e){return 'AUTOMATION_ERROR:'+String(e);}})()";
         webView.evaluateJavascript(script, result -> {
             if (result != null && result.contains("PROMPT_SENT_ARROW_CLICKED")) {
