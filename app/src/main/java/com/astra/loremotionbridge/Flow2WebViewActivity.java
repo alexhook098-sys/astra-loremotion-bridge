@@ -194,7 +194,7 @@ public final class Flow2WebViewActivity extends Activity {
                     + "if(!b){let n=e;for(let depth=0;n&&depth<12;depth++,n=n.parentElement){"
                     + "const local=Array.from(n.querySelectorAll('button,[role=button]')).filter(enabled);"
                     + "if(!local.length)continue;"
-                    + "const submit=local.find(x=>x.type==='submit'||/^(send|submit|generate|create|отправить|создать|начать генерацию)\b/i.test(label(x)));"
+                    + "const submit=local.find(x=>x.type==='submit'||/^(send|submit|generate|create|отправить|создать|начать генерацию)\\b/i.test(label(x)));"
                     + "if(submit){b=submit;break;}"
                     + "if(local.length>=2){b=local[local.length-1];break;}"
                     + "if(!b)b=local[local.length-1];"
