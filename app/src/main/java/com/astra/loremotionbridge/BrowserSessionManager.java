@@ -47,11 +47,23 @@ public final class BrowserSessionManager {
     public static void submitAlice(Activity host, String imagePath, String prompt) {
         if (host == null || host.isFinishing() || imagePath == null || imagePath.isEmpty()
                 || prompt == null || prompt.trim().isEmpty()) return;
+        // Keep the browser bridge process at foreground-service priority while Alice renders
+        // and the WebView Activity is moved behind the chat.
+        try {
+            Intent service = new Intent(host, BrowserBridgeService.class);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                host.startForegroundService(service);
+            } else {
+                host.startService(service);
+            }
+        } catch (Exception ignored) { }
+
         Intent intent = new Intent(host, WebViewBrowserActivity.class);
         intent.putExtra("url", "https://alice.yandex.ru/media");
         intent.putExtra("alice_automate", true);
         intent.putExtra("alice_image_path", imagePath);
         intent.putExtra("alice_prompt", prompt.trim());
+        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
         host.startActivity(intent);
     }
 
