@@ -741,7 +741,9 @@ public class WebViewBrowserActivity extends Activity {
                     return;
                 }
 
-                String ext = source.getName().toLowerCase(Locale.US).replaceAll("^.*\\\\.", "");
+                String sourceName = source.getName().toLowerCase(Locale.US);
+                int dot = sourceName.lastIndexOf('.');
+                String ext = dot >= 0 ? sourceName.substring(dot + 1) : "jpg";
                 if (!ext.matches("jpg|jpeg|png|webp|heic")) ext = "jpg";
                 File target = new File(
                         uploadDir,
