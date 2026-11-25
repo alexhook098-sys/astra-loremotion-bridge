@@ -95,6 +95,20 @@ public class ChatActivity extends Activity {
                         addStoryMotionVideoMessage(Uri.parse(m.optString("uri", "")), false);
                     } else if ("zsky_video".equals(m.optString("type"))) {
                         addZSkyVideoMessage(Uri.parse(m.optString("uri", "")), false);
+                    } else if ("alice_video".equals(m.optString("type"))) {
+                        Uri video = Uri.parse(m.optString("uri", ""));
+                        String message = m.optString("text", "✦ ASTRA ALICE: видео сохранено · Movies/ASTRA/Alice");
+                        addMessage(message, false, false);
+                        int last = messages.getChildCount() - 1;
+                        if (last >= 0 && messages.getChildAt(last) instanceof ViewGroup
+                                && ((ViewGroup) messages.getChildAt(last)).getChildCount() > 0) {
+                            ((ViewGroup) messages.getChildAt(last)).getChildAt(0).setOnClickListener(v -> {
+                                Intent open = new Intent(Intent.ACTION_VIEW);
+                                open.setDataAndType(video, "video/mp4");
+                                open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                try { startActivity(open); } catch (Exception e) { addMessage("Не найдено приложение для просмотра MP4.", false, true); }
+                            });
+                        }
                     } else {
                         addMessage(m.optString("text"), m.optBoolean("user"), false);
                     }
