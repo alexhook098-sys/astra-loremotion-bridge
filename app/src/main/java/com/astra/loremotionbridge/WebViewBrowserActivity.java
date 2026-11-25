@@ -1326,6 +1326,51 @@ public class WebViewBrowserActivity extends Activity {
         });
     }
 
+    // Read-only Alice Media diagnostics. Never collects cookies, form values, or account data.
+    public void inspectAlice(final EvalCallback callback) {
+        main.post(() -> {
+            if (webView == null) {
+                callback.onResult(null, "webview_not_ready");
+                return;
+            }
+            String currentUrl = webView.getUrl();
+            boolean trusted = false;
+            try {
+                String host = Uri.parse(currentUrl == null ? "" : currentUrl).getHost();
+                trusted = host != null && (host.equalsIgnoreCase("alice.yandex.ru")
+                        || host.toLowerCase(Locale.US).endsWith(".alice.yandex.ru"));
+            } catch (Exception ignored) {}
+            if (!trusted) {
+                callback.onResult(null, "not_alice_media_origin");
+                return;
+            }
+            final String js =
+                "(()=>{const visible=e=>!!(e&&e.getClientRects().length);" +
+                "const clean=u=>{try{const x=new URL(u,location.href);return x.protocol==='blob:'?'blob:'+x.origin+'/[opaque]':x.origin+x.pathname}catch(_){return String(u||'').slice(0,180)}};" +
+                "const media=[...document.querySelectorAll('video,audio,source')].slice(0,30).map(e=>({" +
+                "tag:e.tagName,src:clean(e.currentSrc||e.src||e.getAttribute('src')||'')," +
+                "type:e.getAttribute('type')||'',readyState:e.readyState||0,networkState:e.networkState||0," +
+                "duration:Number.isFinite(e.duration)?e.duration:null,videoWidth:e.videoWidth||0,videoHeight:e.videoHeight||0," +
+                "paused:typeof e.paused==='boolean'?e.paused:null,visible:visible(e)}));" +
+                "const files=[...document.querySelectorAll('input[type=file]')].slice(0,10).map(e=>({" +
+                "accept:e.accept||'',multiple:!!e.multiple,visible:visible(e),disabled:!!e.disabled}));" +
+                "const fields=[...document.querySelectorAll('textarea,input:not([type=hidden]),[contenteditable=true]')].filter(visible).slice(0,15).map(e=>({" +
+                "tag:e.tagName,type:e.getAttribute('type')||'',placeholder:e.getAttribute('placeholder')||'',"+
+                "ariaLabel:e.getAttribute('aria-label')||'',role:e.getAttribute('role')||''}));" +
+                "const buttons=[...document.querySelectorAll('button,[role=button]')].filter(visible).slice(0,40).map(e=>({" +
+                "text:(e.innerText||e.getAttribute('aria-label')||'').trim().slice(0,90),disabled:!!e.disabled}));" +
+                "const resources=performance.getEntriesByType('resource').filter(e=>/alice\\.yandex\\.ru|yandex\\.net|video|media|blob/i.test(e.name)).slice(-60).map(e=>({" +
+                "url:clean(e.name),initiator:e.initiatorType||'',size:e.transferSize||0,duration:Math.round(e.duration||0)}));" +
+                "return JSON.stringify({kind:'ASTRA_ALICE_INSPECTOR_V1',time:new Date().toISOString()," +
+                "title:document.title,url:location.origin+location.pathname,readyState:document.readyState," +
+                "text:(document.body?.innerText||'').slice(0,1800),files,fields,buttons,media,resources});})()";
+            webView.evaluateJavascript(js, value -> {
+                if (value == null || "null".equals(value)) callback.onResult(null, "empty_inspection_result");
+                else callback.onResult(value, null);
+            });
+        });
+    }
+
     public String statusJson() {
         if (webView == null)
             return "{\"ok\":false,\"ready\":false,\"state\":\"stopped\"}";
