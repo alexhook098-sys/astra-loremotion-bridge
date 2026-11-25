@@ -132,7 +132,7 @@ public final class AliceBrowserPanel extends LinearLayout {
                 scheduleReadinessCheck(0);
             }
         });
-        addView(webView, new LinearLayout.LayoutParams(1, 1));
+        addView(webView, new LinearLayout.LayoutParams(-1, -1));
         webView.loadUrl(HOME);
         setStatus("ALICE · открываю встроенную вкладку чата");
     }
