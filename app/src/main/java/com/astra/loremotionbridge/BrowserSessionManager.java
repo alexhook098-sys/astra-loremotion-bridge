@@ -40,7 +40,16 @@ public final class BrowserSessionManager {
     public static void openFlow2(Activity host) {
         if (host == null || host.isFinishing()) return;
         Intent intent = new Intent(host, Flow2WebViewActivity.class);
-        intent.putExtra("url", Flow2WebViewActivity.FLOW2_URL);
+        intent.putExtra("url", Flow2WebViewActivity.FLOW2_PROJECT_URL);
+        host.startActivity(intent);
+    }
+
+    public static void submitFlow2(Activity host, String prompt) {
+        if (host == null || host.isFinishing() || TextUtils.isEmpty(prompt)) return;
+        Intent intent = new Intent(host, Flow2WebViewActivity.class);
+        intent.putExtra("url", Flow2WebViewActivity.FLOW2_PROJECT_URL);
+        intent.putExtra(Flow2WebViewActivity.EXTRA_AUTOMATE, true);
+        intent.putExtra(Flow2WebViewActivity.EXTRA_PROMPT, prompt);
         host.startActivity(intent);
     }
 
