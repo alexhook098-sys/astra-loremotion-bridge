@@ -182,12 +182,23 @@ public final class Flow2WebViewActivity extends Activity {
         } else {
             // Match Flow 1's actual submit control; do not guess by generic button text.
             script = "(function(){try{"
-                    + "const b=Array.from(document.querySelectorAll('button,[role=button]')).find(x=>x.getAttribute('aria-label')==='Начать генерацию');"
-                    + "if(!b)return 'GENERATE_BUTTON_NOT_FOUND';"
-                    + "if(b.disabled||b.getAttribute('aria-disabled')==='true')return 'GENERATE_BUTTON_DISABLED';"
+                    + "const all=Array.from(document.querySelectorAll('button,[role=button]'));"
+                    + "let b=all.find(x=>x.getAttribute('aria-label')==='Начать генерацию');"
+                    + "if(!b){const e=Array.from(document.querySelectorAll('[role=textbox]')).find(x=>x.getAttribute('aria-label')==='Что вы хотите создать?')||document.querySelector('.ProseMirror[contenteditable=true]');"
+                    + "const visible=x=>{const r=x.getBoundingClientRect(),s=getComputedStyle(x);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none'};"
+                    + "const label=x=>((x.getAttribute('aria-label')||'')+' '+(x.getAttribute('title')||'')+' '+(x.innerText||x.textContent||'')).trim().toLowerCase();"
+                    + "const candidates=[];let n=e;for(let depth=0;n&&depth<8;depth++,n=n.parentElement){"
+                    + "for(const x of Array.from(n.querySelectorAll('button,[role=button]'))){if(!visible(x)||x.disabled||x.getAttribute('aria-disabled')==='true')continue;"
+                    + "const t=label(x);if(!/(создать|сгенерировать|generate|create|run)/i.test(t))continue;"
+                    + "if(/(проект|project|видео|video|закрыть|close|отмена|cancel)/i.test(t))continue;"
+                    + "candidates.push({x,depth,t});}if(candidates.length)break;}"
+                    + "candidates.sort((a,b)=>a.depth-b.depth);if(candidates.length&&(!candidates[1]||candidates[0].depth<candidates[1].depth||candidates[0].x===candidates[1].x))b=candidates[0].x;"
+                    + "}"
+                    + "if(!b)return 'GENERATE_BUTTON_NOT_FOUND:'+JSON.stringify(all.filter(x=>{const r=x.getBoundingClientRect();return r.width>0&&r.height>0;}).map(x=>({a:x.getAttribute('aria-label'),t:x.getAttribute('title'),text:(x.innerText||x.textContent||'').trim().slice(0,70),disabled:!!x.disabled})).slice(-30));"
+                    + "if(b.disabled||b.getAttribute('aria-disabled')==='true')return 'GENERATE_BUTTON_DISABLED:'+((b.getAttribute('aria-label')||b.innerText||'').slice(0,80));"
                     + "window.__astraFlow2BaselineImages=new Set(Array.from(document.images||[]).map(i=>i.currentSrc||i.src).filter(Boolean));"
                     + "window.__astraFlow2BaselineElements=new WeakSet(Array.from(document.images||[]));"
-                    + "window.__astraFlow2StartedAt=Date.now();b.click();return 'GENERATE_CLICKED';"
+                    + "window.__astraFlow2StartedAt=Date.now();b.click();return 'GENERATE_CLICKED:'+(b.getAttribute('aria-label')||b.innerText||b.textContent||'button');"
                     + "}catch(e){return 'ERROR:'+e.message;}})()";
         }
         webView.evaluateJavascript(script, result -> {
