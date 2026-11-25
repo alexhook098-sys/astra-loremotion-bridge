@@ -12,6 +12,7 @@ on:
       - fix/flow-download-auth-response
       - fix/zsky-372-restore-https-download
       - fix/zsky-372-restore-371-stream-downloader
+      - fix/flow2-image-submit-button
       - feature/zsky-chat-background-from-362
       - feature/story-motion-diagnostics-on-stable-400
       - feature/astra-browser-core-in-chat
