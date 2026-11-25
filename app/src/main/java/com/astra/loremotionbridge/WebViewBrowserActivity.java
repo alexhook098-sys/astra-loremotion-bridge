@@ -51,6 +51,7 @@ public class WebViewBrowserActivity extends Activity {
     private final Set<String> seenPerchanceImages = new HashSet<>();
     private boolean aliceAutomationStarted;
     private boolean aliceUploadTriggered;
+    private boolean aliceWarmupDelayScheduled;
     private String aliceAutomationImagePath;
     private String aliceAutomationPrompt;
     private boolean perchanceObserverRunning;
@@ -1440,6 +1441,12 @@ public class WebViewBrowserActivity extends Activity {
             } catch (Exception ignored) {}
             if (!ready) {
                 main.postDelayed(() -> scheduleAliceAutomation(attempt + 1), 1800L);
+                return;
+            }
+            if (!aliceWarmupDelayScheduled) {
+                aliceWarmupDelayScheduled = true;
+                setStatus("Alice Motion: студия загрузилась. Жду 10 секунд, пока интерфейс станет готов к загрузке фото…");
+                main.postDelayed(() -> scheduleAliceAutomation(attempt), 10000L);
                 return;
             }
             runAliceAutomation();
