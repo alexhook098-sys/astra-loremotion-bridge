@@ -401,7 +401,11 @@ public class ChatActivity extends Activity {
                 if (in == null) throw new java.io.IOException("image_stream_unavailable");
                 File dir = new File(getCacheDir(), "alice_uploads");
                 if (!dir.exists() && !dir.mkdirs()) throw new java.io.IOException("alice_cache_dir_failed");
-                copy = new File(dir, "astra-alice-" + System.currentTimeMillis() + ".jpg");
+                String mime = getContentResolver().getType(uri);
+                String ext = "image/png".equalsIgnoreCase(mime) ? ".png"
+                        : "image/webp".equalsIgnoreCase(mime) ? ".webp"
+                        : "image/heic".equalsIgnoreCase(mime) ? ".heic" : ".jpg";
+                copy = new File(dir, "astra-alice-" + System.currentTimeMillis() + ext);
                 try (FileOutputStream out = new FileOutputStream(copy)) {
                     byte[] buffer = new byte[16384]; int count; long total = 0;
                     while ((count = in.read(buffer)) != -1) { total += count; if (total > 20L * 1024L * 1024L) throw new java.io.IOException("image_too_large"); out.write(buffer, 0, count); }
