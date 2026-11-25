@@ -50,6 +50,7 @@ public class WebViewBrowserActivity extends Activity {
     private final ExecutorService perchanceDownloads = Executors.newSingleThreadExecutor();
     private final Set<String> seenPerchanceImages = new HashSet<>();
     private boolean aliceAutomationStarted;
+    private boolean aliceUploadTriggered;
     private String aliceAutomationImagePath;
     private String aliceAutomationPrompt;
     private boolean perchanceObserverRunning;
@@ -1419,67 +1420,61 @@ public class WebViewBrowserActivity extends Activity {
     }
 
     private void scheduleAliceAutomation(final int attempt) {
-        if (aliceAutomationStarted || isFinishing() || webView == null) return;
-        if (attempt > 90) { setStatus("Alice Motion: не удалось дождаться формы загрузки. Откройте инспектор Алисы."); return; }
-        String js = "(function(){return JSON.stringify({url:location.href,files:document.querySelectorAll('input[type=file]').length,"
-                + "fields:document.querySelectorAll('textarea,input:not([type=hidden]),[contenteditable=true]').length,"
-                + "body:(document.body&&document.body.innerText||'').slice(0,500)});})()";
+        if (aliceAutomationStarted || aliceUploadTriggered || isFinishing() || webView == null) return;
+        if (attempt > 90) {
+            setStatus("Alice Motion: не найдена кнопка «Загрузить фото».");
+            return;
+        }
+        String js = "(function(){var es=[...document.querySelectorAll('button,[role=button],label')];"
+                + "var e=es.find(x=>x.getClientRects().length&&!x.disabled&&/загрузить фото|добавить фото|выбрать фото/i.test((x.innerText||x.textContent||'').trim()));"
+                + "return JSON.stringify({url:location.href,upload:!!e,text:e?(e.innerText||e.textContent||'').trim():''});})()";
         webView.evaluateJavascript(js, raw -> {
             boolean ready = false;
             try {
                 Object decoded = new org.json.JSONTokener(raw).nextValue();
                 if (decoded instanceof String) {
                     org.json.JSONObject info = new org.json.JSONObject((String) decoded);
-                    String url = info.optString("url", "");
-                    ready = url.startsWith("https://alice.yandex.ru/")
-                            && info.optInt("files", 0) > 0;
+                    ready = info.optString("url", "").startsWith("https://alice.yandex.ru/")
+                            && info.optBoolean("upload", false);
                 }
             } catch (Exception ignored) {}
-            if (!ready) { main.postDelayed(() -> scheduleAliceAutomation(attempt + 1), 2000L); return; }
+            if (!ready) {
+                main.postDelayed(() -> scheduleAliceAutomation(attempt + 1), 1800L);
+                return;
+            }
             runAliceAutomation();
         });
     }
 
     private void runAliceAutomation() {
-        if (aliceAutomationStarted || webView == null) return;
+        if (aliceAutomationStarted || aliceUploadTriggered || webView == null) return;
         if (aliceAutomationImagePath == null || aliceAutomationPrompt == null
                 || !new File(aliceAutomationImagePath).isFile()) {
             setStatus("Alice Motion: отсутствует изображение или промпт.");
             return;
         }
-        try {
-            File source = new File(aliceAutomationImagePath);
-            if (source.length() < 1 || source.length() > 20L * 1024L * 1024L) {
-                setStatus("Alice Motion: размер изображения недопустим.");
-                return;
-            }
-            byte[] bytes = new byte[(int) source.length()];
-            try (FileInputStream in = new FileInputStream(source)) {
-                int offset = 0, count;
-                while (offset < bytes.length && (count = in.read(bytes, offset, bytes.length - offset)) > 0) offset += count;
-                if (offset != bytes.length) throw new IOException("image_read_incomplete");
-            }
-            String base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP);
-            String safeBase64 = org.json.JSONObject.quote(base64);
-            String safePrompt = org.json.JSONObject.quote(aliceAutomationPrompt);
-            String safeName = org.json.JSONObject.quote(source.getName());
-            String script = "(function(){try{"
-                    + "var input=document.querySelector('input[type=file]');if(!input)return 'NO_FILE_INPUT';"
-                    + "var bin=atob(" + safeBase64 + "),arr=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);"
-                    + "var file=new File([arr]," + safeName + ",{type:'image/jpeg'}),dt=new DataTransfer();dt.items.add(file);input.files=dt.files;"
-                    + "input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));"
-                    + "return 'IMAGE_SELECTED';}catch(e){return 'UPLOAD_ERROR:'+String(e);}})()";
-            webView.evaluateJavascript(script, result -> {
-                if (result == null || !result.contains("IMAGE_SELECTED")) {
-                    setStatus("Alice Motion: загрузка изображения не подтверждена (" + result + ")");
-                    return;
-                }
-                setStatus("Alice Motion: изображение передано. Заполняю промпт…");
-                main.postDelayed(() -> submitAlicePromptAndClick(safePrompt, 0), 1800L);
-            });
-        } catch (Exception e) {
-            setStatus("Alice Motion: ошибка подготовки изображения — " + e.getMessage());
+        File source = new File(aliceAutomationImagePath);
+        if (source.length() < 1 || source.length() > 20L * 1024L * 1024L) {
+            setStatus("Alice Motion: размер изображения недопустим.");
+            return;
         }
+
+        // Use WebView's native file chooser callback. Alice's upload sheet is a custom UI;
+        // assigning input.files from JavaScript does not reliably trigger its upload pipeline.
+        setPendingUpload(source.getAbsolutePath());
+        String script = "(function(){var es=[...document.querySelectorAll('button,[role=button],label')];"
+                + "var e=es.find(x=>x.getClientRects().length&&!x.disabled&&/загрузить фото|добавить фото|выбрать фото/i.test((x.innerText||x.textContent||'').trim()));"
+                + "if(!e)return 'UPLOAD_BUTTON_NOT_FOUND';e.click();return 'UPLOAD_BUTTON_CLICKED';})()";
+        webView.evaluateJavascript(script, result -> {
+            if (result != null && result.contains("UPLOAD_BUTTON_CLICKED")) {
+                aliceUploadTriggered = true;
+                setStatus("Alice Motion: нажала «Загрузить фото», передаю картину через системный механизм WebView…");
+                main.postDelayed(() -> submitAlicePromptAndClick(
+                        org.json.JSONObject.quote(aliceAutomationPrompt), 0), 2500L);
+            } else {
+                setStatus("Alice Motion: не удалось нажать «Загрузить фото» (" + result + ").");
+            }
+        });
     }
 
     private void submitAlicePromptAndClick(final String safePrompt, final int attempt) {
