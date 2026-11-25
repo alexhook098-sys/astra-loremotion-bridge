@@ -212,6 +212,7 @@ public final class Flow2WebViewActivity extends Activity {
         if (webView == null || isFinishing() || isDestroyed()) return;
         String js = "(function(){try{"
                 + "if(!window.__astraFlow2Captured)window.__astraFlow2Captured=new Set();"
+                + "if(!window.__astraFlow2ObservedRoots)window.__astraFlow2ObservedRoots=new WeakSet();"
                 + "if(" + (establishBaseline ? "true" : "false") + "&&!window.__astraFlow2BaselineImages)"
                 + "window.__astraFlow2BaselineImages=new Set(Array.from(document.images||[]).map(i=>i.currentSrc||i.src).filter(Boolean));"
                 + "function sendData(u){if(!u||window.__astraFlow2Captured.has(u))return;window.__astraFlow2Captured.add(u);"
@@ -220,16 +221,21 @@ public final class Flow2WebViewActivity extends Activity {
                 + "const fr=new FileReader();fr.onload=()=>{try{window.ASTRAFlow2Image.saveDataUri(String(fr.result));}catch(e){}};fr.readAsDataURL(b);})"
                 + ".catch(e=>{window.__astraFlow2Captured.delete(u);console.warn('ASTRA_FLOW2_IMAGE_FETCH:'+e);"
                 + "try{window.ASTRAFlow2Image.downloadImageUrl(u);}catch(x){}});}"
-                + "function scan(){try{const base=window.__astraFlow2BaselineImages||new Set();"
-                + "Array.from(document.images||[]).forEach(i=>{const u=i.currentSrc||i.src||'';const r=i.getBoundingClientRect();"
+                + "function scanRoot(root){if(!root)return;try{const base=window.__astraFlow2BaselineImages||new Set();"
+                + "Array.from(root.querySelectorAll('img')).forEach(i=>{const u=i.currentSrc||i.src||'';const r=i.getBoundingClientRect();"
                 + "if(!u||base.has(u)||i.naturalWidth<256||i.naturalHeight<256||r.width<100||r.height<100)return;sendData(u);});"
-                + "Array.from(document.querySelectorAll('[style*=background-image]')).forEach(e=>{const r=e.getBoundingClientRect();if(r.width<256||r.height<256)return;"
-                + "const bg=getComputedStyle(e).backgroundImage;const m=bg.match(/url\\([\"']?(.*?)[\"']?\\)/);if(m&&m[1]&&!base.has(m[1]))sendData(m[1]);});"
-                + "}catch(e){console.warn('ASTRA_FLOW2_SCAN:'+e);}}"
-                + "window.__astraFlow2Scan=scan;if(!window.__astraFlow2Observer){window.__astraFlow2Observer=new MutationObserver(scan);"
-                + "window.__astraFlow2Observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['src','srcset','style']});}"
-                + "scan();if(!window.__astraFlow2Timer)window.__astraFlow2Timer=setInterval(scan,1800);return 'image-observer-installed';"
-                + "}catch(e){return 'observer-error:'+e;}})()";
+                + "Array.from(root.querySelectorAll('[style*=background-image]')).forEach(e=>{const r=e.getBoundingClientRect();if(r.width<256||r.height<256)return;"
+                + "const bg=getComputedStyle(e).backgroundImage;const m=bg.match(/url\\([\\\"']?(.*?)[\\\"']?\\)/);if(m&&m[1]&&!base.has(m[1]))sendData(m[1]);});"
+                + "Array.from(root.querySelectorAll('canvas')).forEach(c=>{if(c.width<256||c.height<256||c.__astraFlow2Captured)return;c.__astraFlow2Captured=true;"
+                + "try{sendData(c.toDataURL('image/png'));}catch(e){}});"
+                + "if(!window.__astraFlow2ObservedRoots.has(root)){window.__astraFlow2ObservedRoots.add(root);"
+                + "new MutationObserver(()=>scanRoot(root)).observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['src','srcset','style']});}"
+                + "Array.from(root.querySelectorAll('*')).forEach(n=>{if(n.shadowRoot)scanRoot(n.shadowRoot);});"
+                + "Array.from(root.querySelectorAll('iframe')).forEach(f=>{try{if(f.contentDocument)scanRoot(f.contentDocument);}catch(e){}});"
+                + "}catch(e){console.warn('ASTRA_FLOW2_SCAN_ROOT:'+e);}}"
+                + "window.__astraFlow2Scan=function(){scanRoot(document);};window.__astraFlow2Scan();"
+                + "if(!window.__astraFlow2Timer)window.__astraFlow2Timer=setInterval(window.__astraFlow2Scan,1800);"
+                + "return 'image-observer-installed-shadow-aware';}catch(e){return 'observer-error:'+e;}})()";
         webView.evaluateJavascript(js, value -> Log.i(TAG, "image observer install=" + value));
     }
 
