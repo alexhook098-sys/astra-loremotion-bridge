@@ -52,6 +52,9 @@ public class WebViewBrowserActivity extends Activity {
     private boolean aliceAutomationStarted;
     private boolean aliceUploadTriggered;
     private boolean aliceWarmupDelayScheduled;
+    private boolean aliceResultObserverRunning;
+    private boolean aliceDownloadStarted;
+    private final ExecutorService aliceDownloads = Executors.newSingleThreadExecutor();
     private String aliceAutomationImagePath;
     private String aliceAutomationPrompt;
     private boolean perchanceObserverRunning;
@@ -1500,12 +1503,76 @@ public class WebViewBrowserActivity extends Activity {
         webView.evaluateJavascript(script, result -> {
             if (result != null && result.contains("PROMPT_SENT_ARROW_CLICKED")) {
                 aliceAutomationStarted = true;
-                setStatus("Alice Motion: промпт отправлен фиолетовой кнопкой-стрелкой. Ожидаю генерацию…");
+                setStatus("Alice Motion: промпт отправлен фиолетовой кнопкой-стрелкой. Отслеживаю готовое видео…");
+                startAliceResultObserver(0);
             } else if (result != null && (result.contains("WAIT_FIELD") || result.contains("WAIT_ARROW"))) {
                 main.postDelayed(() -> submitAlicePromptAndClick(safePrompt, attempt + 1), 1200L);
             } else {
                 setStatus("Alice Motion: не удалось безопасно определить кнопку отправки (" + result + ").");
             }
+        });
+    }
+
+    private void startAliceResultObserver(final int attempt) {
+        if (aliceResultObserverRunning || aliceDownloadStarted || webView == null) return;
+        aliceResultObserverRunning = true;
+        pollAliceResult(attempt);
+    }
+
+    private void pollAliceResult(final int attempt) {
+        if (webView == null || isFinishing() || aliceDownloadStarted) {
+            aliceResultObserverRunning = false;
+            return;
+        }
+        if (attempt > 360) {
+            aliceResultObserverRunning = false;
+            setStatus("Alice Motion: время ожидания результата истекло. Генерация могла продолжиться на странице Алисы.");
+            return;
+        }
+        String js = "(function(){try{var urls=[];"
+                + "document.querySelectorAll('video,video source,a[href]').forEach(function(e){var u=e.currentSrc||e.src||e.href||'';if(u)urls.push(u);});"
+                + "var text=(document.body&&document.body.innerText||'').slice(0,1600);"
+                + "return JSON.stringify({urls:urls.slice(0,40),text:text,url:location.href});"
+                + "}catch(e){return '{}';}})()";
+        webView.evaluateJavascript(js, raw -> {
+            String found = null;
+            try {
+                Object decoded = new org.json.JSONTokener(raw).nextValue();
+                org.json.JSONObject data = new org.json.JSONObject(String.valueOf(decoded));
+                org.json.JSONArray urls = data.optJSONArray("urls");
+                if (urls != null) for (int i=0;i<urls.length();i++) {
+                    String u = urls.optString(i, "");
+                    java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?:[?&]video=|/webalice/)([0-9a-fA-F]{32})").matcher(u);
+                    if (m.find()) { found = m.group(1); break; }
+                }
+                if (found == null) {
+                    java.util.regex.Matcher m = java.util.regex.Pattern.compile("[?&]video=([0-9a-fA-F]{32})").matcher(data.optString("url", ""));
+                    if (m.find()) found = m.group(1);
+                }
+            } catch (Exception ignored) {}
+            if (found != null) {
+                final String id = found;
+                aliceDownloadStarted = true;
+                aliceResultObserverRunning = false;
+                setStatus("Alice Motion: найден результат " + id + ". Скачиваю MP4…");
+                aliceDownloads.execute(() -> {
+                    String result = AliceMediaAgent.download(getApplicationContext(), id);
+                    try {
+                        org.json.JSONObject json = new org.json.JSONObject(result);
+                        if (json.optBoolean("ok")) {
+                            Uri video = Uri.parse(json.getString("uri"));
+                            ChatActivity.onAliceVideoReady(getApplicationContext(), video);
+                            setStatus("Alice Motion: MP4 скачан и передан в чат ASTRA.");
+                        } else {
+                            setStatus("Alice Motion: ошибка скачивания — " + json.optString("error", "unknown"));
+                        }
+                    } catch (Exception e) {
+                        setStatus("Alice Motion: ошибка обработки результата — " + e.getMessage());
+                    }
+                });
+                return;
+            }
+            main.postDelayed(() -> pollAliceResult(attempt + 1), 5000L);
         });
     }
 
@@ -1523,6 +1590,7 @@ public class WebViewBrowserActivity extends Activity {
 
     @Override protected void onDestroy() {
         stopPerchanceObserver();
+        aliceDownloads.shutdown();
         Log.i("ASTRA-WV-DIAG", "Activity onDestroy entered");
         if (webView != null) {
             webView.stopLoading();
