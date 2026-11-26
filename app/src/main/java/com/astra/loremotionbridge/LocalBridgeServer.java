@@ -172,6 +172,8 @@ public class LocalBridgeServer {
                     "/webview/start".equals(routeOnlyPath) ||
                     "/webview/open".equals(routeOnlyPath) ||
                     "/webview/eval".equals(routeOnlyPath) ||
+                    "/alice/eval".equals(routeOnlyPath) ||
+                    "/alice/dom".equals(routeOnlyPath) ||
                     "/webview/bing-eval".equals(routeOnlyPath) ||
                 "/webview/bing-save-image".equals(routeOnlyPath) ||
                     "/webview/bing-image-chunk".equals(routeOnlyPath) ||
@@ -284,13 +286,16 @@ public class LocalBridgeServer {
             }
 
             boolean binary =
-                    "/control/screen.png".equals(target.split("\\?", 2)[0]);
+                    "/control/screen.png".equals(target.split("\\?", 2)[0]) ||
+                    "/alice/screenshot".equals(target.split("\\?", 2)[0]);
 
             byte[] body;
             String contentType;
 
             if (binary) {
-                body = AstraControl.screenPng();
+                body = "/alice/screenshot".equals(target.split("\\?", 2)[0])
+                        ? AliceBrowserController.screenshotPng()
+                        : AstraControl.screenPng();
                 contentType = "image/png";
 
                 if (body == null) {
@@ -417,6 +422,10 @@ public class LocalBridgeServer {
             if ("/leonardo/minimize".equals(p)) return LeonardoWebViewController.minimize();
             if ("/leonardo/close".equals(p)) return LeonardoWebViewController.close();
 
+            if ("/alice/status".equals(p)) return AliceBrowserController.status();
+            if ("/alice/eval".equals(p)) return AliceBrowserController.evaluate(
+                    m.getOrDefault("script", "document.title"));
+            if ("/alice/dom".equals(p)) return AliceBrowserController.dom();
             if ("/webview/status".equals(p)) return WebViewBrowserController.status();
             if ("/webview/start".equals(p)) return WebViewBrowserController.start(
                     MainApplication.context(),
