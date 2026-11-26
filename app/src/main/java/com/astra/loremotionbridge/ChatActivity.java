@@ -93,6 +93,8 @@ public class ChatActivity extends Activity {
                         addStoryMotionVideoMessage(Uri.parse(m.optString("uri", "")), false);
                     } else if ("zsky_video".equals(m.optString("type"))) {
                         addZSkyVideoMessage(Uri.parse(m.optString("uri", "")), false);
+                    } else if ("alice_video".equals(m.optString("type"))) {
+                        addAliceVideoMessage(Uri.parse(m.optString("uri", "")), false);
                     } else {
                         addMessage(m.optString("text"), m.optBoolean("user"), false);
                     }
@@ -103,6 +105,7 @@ public class ChatActivity extends Activity {
         consumePendingPerchanceImages();
         consumePendingFlowVideos();
         consumePendingZSkyVideos();
+        consumePendingAliceVideos();
     }
 
     @Override protected void onResume() {
@@ -111,6 +114,7 @@ public class ChatActivity extends Activity {
         consumePendingPerchanceImages();
         consumePendingFlowVideos();
         consumePendingZSkyVideos();
+        consumePendingAliceVideos();
         if (perchanceBrowserPanel != null) perchanceBrowserPanel.onHostResume();
         if (flowBrowserPanel != null) flowBrowserPanel.onHostResume();
         if (zskyBrowserPanel != null) zskyBrowserPanel.onHostResume();
@@ -173,6 +177,12 @@ public class ChatActivity extends Activity {
         LinearLayout.LayoutParams radioParams = new LinearLayout.LayoutParams(-1, dp(40));
         radioParams.bottomMargin = dp(10);
         root.addView(radioButton, radioParams);
+
+        Button aliceButton = smallButton("✦  ALICE MEDIA", LILAC);
+        aliceButton.setOnClickListener(v -> startActivity(new Intent(this, AliceMediaActivity.class)));
+        LinearLayout.LayoutParams aliceParams = new LinearLayout.LayoutParams(-1, dp(40));
+        aliceParams.bottomMargin = dp(10);
+        root.addView(aliceButton, aliceParams);
 
         chatPanel = new LinearLayout(this);
         chatPanel.setOrientation(LinearLayout.VERTICAL);
@@ -542,6 +552,70 @@ public class ChatActivity extends Activity {
                 getSharedPreferences("astra_chat", MODE_PRIVATE).edit()
                         .putString("messages", history.toString()).apply();
             } catch (Exception e) { android.util.Log.e("ASTRA-ZSKY-CHAT", "Could not persist video message", e); }
+        }
+    }
+
+    public static void onAliceVideoReady(Context context, Uri video) {
+        if (context == null || video == null) return;
+        android.content.SharedPreferences prefs = context.getSharedPreferences("astra_chat", MODE_PRIVATE);
+        JSONArray pending;
+        try { pending = new JSONArray(prefs.getString("alice_pending_videos", "[]")); }
+        catch (Exception e) { pending = new JSONArray(); }
+        try {
+            pending.put(new JSONObject().put("uri", video.toString()));
+            prefs.edit().putString("alice_pending_videos", pending.toString()).apply();
+        } catch (Exception ignored) {}
+        ChatActivity activity = activeInstance;
+        if (activity != null && activity.chatResumed) {
+            activity.runOnUiThread(() -> {
+                if (activity.chatResumed) activity.consumePendingAliceVideos();
+            });
+        }
+    }
+
+    private void consumePendingAliceVideos() {
+        if (isFinishing() || messages == null) return;
+        android.content.SharedPreferences prefs = getSharedPreferences("astra_chat", MODE_PRIVATE);
+        JSONArray pending;
+        try { pending = new JSONArray(prefs.getString("alice_pending_videos", "[]")); }
+        catch (Exception e) { pending = new JSONArray(); }
+        if (pending.length() == 0) return;
+        prefs.edit().remove("alice_pending_videos").apply();
+        for (int i=0;i<pending.length();i++) {
+            JSONObject item = pending.optJSONObject(i);
+            if (item == null) continue;
+            String value = item.optString("uri", "");
+            if (!value.isEmpty()) addAliceVideoMessage(Uri.parse(value), true);
+        }
+    }
+
+    private void addAliceVideoMessage(Uri video, boolean save) {
+        if (video == null || video.toString().isEmpty() || messages == null) return;
+        String message = "✦ ALICE: видео сохранено · Movies/ASTRA/Alice\\nНажми здесь, чтобы открыть MP4.";
+        addMessage(message, false, false);
+        int last = messages.getChildCount() - 1;
+        if (last >= 0) {
+            View row = messages.getChildAt(last);
+            if (row instanceof ViewGroup && ((ViewGroup) row).getChildCount() > 0) {
+                View bubble = ((ViewGroup) row).getChildAt(0);
+                bubble.setOnClickListener(v -> {
+                    Intent open = new Intent(Intent.ACTION_VIEW);
+                    open.setDataAndType(video, "video/mp4");
+                    open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    try { startActivity(open); }
+                    catch (Exception e) { addMessage("Не найдено приложение для просмотра MP4.", false, true); }
+                });
+            }
+        }
+        if (save) {
+            try {
+                history.put(new JSONObject().put("type", "alice_video").put("text", message)
+                        .put("uri", video.toString()).put("user", false));
+                getSharedPreferences("astra_chat", MODE_PRIVATE).edit()
+                        .putString("messages", history.toString()).apply();
+            } catch (Exception e) {
+                android.util.Log.e("ASTRA-ALICE-CHAT", "Could not persist Alice video message", e);
+            }
         }
     }
 
