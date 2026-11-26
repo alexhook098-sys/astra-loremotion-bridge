@@ -51,6 +51,7 @@ public class WebViewBrowserActivity extends Activity {
     private final Set<String> seenPerchanceImages = new HashSet<>();
     private final Set<String> seenAliceVideoBlobs = new HashSet<>();
     private boolean aliceObserverRunning;
+    private boolean aliceBaselineCaptured;
     private boolean perchanceObserverRunning;
     private final Runnable perchanceObserver = new Runnable() {
         @Override public void run() {
@@ -68,23 +69,34 @@ public class WebViewBrowserActivity extends Activity {
                 main.postDelayed(this, 4000L);
                 return;
             }
-            String js = "(()=>{try{return [...document.querySelectorAll('video')].filter(v=>"
-                    + "v.getClientRects().length&&v.readyState>=2&&v.videoWidth>0)"
-                    + ".map(v=>v.currentSrc||v.src).find(u=>u&&u.startsWith('blob:https://alice.yandex.ru/'))||null;"
-                    + "}catch(e){return null;}})()";
+            String js = "(()=>{try{return JSON.stringify([...new Set([...document.querySelectorAll('video')]"
+                    + ".filter(v=>v.getClientRects().length&&v.readyState>=2&&v.videoWidth>0)"
+                    + ".map(v=>v.currentSrc||v.src).filter(u=>u&&u.startsWith('blob:https://alice.yandex.ru/')))]);"
+                    + "}catch(e){return '[]';}})()";
             webView.evaluateJavascript(js, raw -> {
-                String source = null;
                 try {
-                    Object value = raw == null ? null : new org.json.JSONTokener(raw).nextValue();
-                    if (value instanceof String) source = (String) value;
-                } catch (Exception ignored) {}
-                if (source != null && !source.isEmpty() && !seenAliceVideoBlobs.contains(source)) {
-                    Log.i("ASTRA-ALICE", "Completed Alice video detected; capturing automatically");
-                    saveAliceVideoBlob(source, (saved, error) -> {
-                        if (error != null) setStatus("Ошибка получения видео Алисы: " + error);
-                        else setStatus("Видео Алисы доставлено в чат ASTRA: " + saved);
-                    });
+                    Object decoded = raw == null ? null : new org.json.JSONTokener(raw).nextValue();
+                    if (decoded instanceof String) {
+                        org.json.JSONArray urls = new org.json.JSONArray((String) decoded);
+                        for (int i = 0; i < urls.length(); i++) {
+                            String source = urls.optString(i, "");
+                            if (source.isEmpty()) continue;
+                            if (!aliceBaselineCaptured) {
+                                seenAliceVideoBlobs.add(source);
+                            } else if (!seenAliceVideoBlobs.contains(source)) {
+                                Log.i("ASTRA-ALICE", "New completed Alice video detected; capturing automatically");
+                                saveAliceVideoBlob(source, (saved, error) -> {
+                                    if (error != null) setStatus("Ошибка получения видео Алисы: " + error);
+                                    else setStatus("Видео Алисы доставлено в чат ASTRA: " + saved);
+                                });
+                                break;
+                            }
+                        }
+                    }
+                } catch (Exception parseError) {
+                    Log.w("ASTRA-ALICE", "Could not parse video observer result", parseError);
                 }
+                aliceBaselineCaptured = true;
                 if (webView != null && !isFinishing()) main.postDelayed(this, 3000L);
             });
         }
