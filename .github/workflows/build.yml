@@ -18,6 +18,7 @@ on:
       - fix/zsky-embedded-worker-462
       - feature/alice-persistent-webview-minimal
       - feature/alice-embedded-webview-v2
+      - feature/alice-webview-bridge-inspector
 
 jobs:
   build:
