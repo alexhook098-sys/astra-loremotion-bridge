@@ -11,6 +11,7 @@ on:
       - fix/flow-download-auth-response
       - fix/one-click-motion-isolation
       - feature/astra-story-motion
+      - feature/astra-story-motion-alice-fix
 
 jobs:
   build:
