@@ -40,6 +40,7 @@ import java.util.concurrent.Executors;
  * the panel only changes its visibility; its WebView remains attached and alive.
  */
 public final class AliceBrowserPanel extends LinearLayout {
+    // Persistent in-chat browser: minimized means GONE, never detached or destroyed.
     private static final String TAG = "ASTRA-ALICE";
     private static final String HOME = "https://alice.yandex.ru/media";
     public static final int FILE_CHOOSER_REQUEST = 4817;
