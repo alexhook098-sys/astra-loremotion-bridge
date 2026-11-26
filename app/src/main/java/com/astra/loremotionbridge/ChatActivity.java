@@ -48,6 +48,7 @@ public class ChatActivity extends Activity {
     private static final int PICK_MODEL = 18767;
     private static final int PICK_MOTION_REFERENCE = 18769;
     private static final int PICK_STORY_MOTION_REFERENCE = 18770;
+    private static final int PICK_ALICE_IMAGE = 18771;
 
     private final ExecutorService modelExecutor = Executors.newSingleThreadExecutor();
     // Story Motion runs independently and cannot block One Click Motion or chat requests.
@@ -347,6 +348,10 @@ public class ChatActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == AliceBrowserPanel.FILE_CHOOSER_REQUEST && aliceBrowserPanel != null) {
             aliceBrowserPanel.handleActivityResult(requestCode, resultCode, data);
+            return;
+        }
+        if (requestCode == PICK_ALICE_IMAGE && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            promptAliceImage(data.getData());
             return;
         }
         if (requestCode == PICK_MOTION_REFERENCE && resultCode == RESULT_OK && data != null && data.getData() != null) {
@@ -911,10 +916,11 @@ public class ChatActivity extends Activity {
 
     private void showComposerPlusMenu() {
         new AlertDialog.Builder(this)
-                .setItems(new String[]{"✦  Сгенерировать картину", "▶  Сгенерировать видео", "▧  Сгенерировать гиф"}, (dialog, which) -> {
+                .setItems(new String[]{"✦  Сгенерировать картину", "▶  Сгенерировать видео", "▧  Сгенерировать гиф", "✦  Оживить картину в Alice"}, (dialog, which) -> {
                     if (which == 0) showImageProviderMenu();
                     else if (which == 1) showVideoProviderMenu();
                     else if (which == 2) startActivity(new Intent(this, GifStudioActivity.class));
+                    else if (which == 3) chooseAliceImage();
                 })
                 .show();
     }
@@ -964,6 +970,44 @@ public class ChatActivity extends Activity {
                 .show();
     }
 
+    private void chooseAliceImage() {
+        Intent pick;
+        if (Build.VERSION.SDK_INT >= 33) {
+            pick = new Intent(android.provider.MediaStore.ACTION_PICK_IMAGES);
+            pick.setType("image/*");
+            pick.putExtra(android.provider.MediaStore.EXTRA_PICK_IMAGES_MAX, 1);
+        } else {
+            pick = new Intent(Intent.ACTION_GET_CONTENT);
+            pick.setType("image/*");
+            pick.addCategory(Intent.CATEGORY_OPENABLE);
+        }
+        startActivityForResult(pick, PICK_ALICE_IMAGE);
+    }
+
+    private void promptAliceImage(Uri image) {
+        EditText promptInput = new EditText(this);
+        promptInput.setHint("Опиши движение для Alice");
+        promptInput.setTextColor(WHITE);
+        promptInput.setHintTextColor(Color.GRAY);
+        LinearLayout box = new LinearLayout(this);
+        box.setPadding(dp(18), dp(8), dp(18), 0);
+        box.addView(promptInput, new LinearLayout.LayoutParams(-1, dp(76)));
+        new AlertDialog.Builder(this)
+                .setTitle("ASTRA · Оживить картину")
+                .setView(box)
+                .setPositiveButton("ЗАПУСТИТЬ", (dialog, which) -> {
+                    String prompt = promptInput.getText().toString().trim();
+                    if (prompt.isEmpty()) {
+                        addMessage("Напиши описание движения для Alice.", false, true);
+                        return;
+                    }
+                    addMessage("✦ ASTRA · передаю картину и промпт в Alice…", false, true);
+                    openAliceMediaPanel();
+                    if (aliceBrowserPanel != null) aliceBrowserPanel.submitImageAndPrompt(image, prompt);
+                })
+                .setNegativeButton("ОТМЕНА", null)
+                .show();
+    }
     private void openAliceMediaPanel() {
         if (overlayHost == null || isFinishing()) return;
         if (aliceBrowserPanel == null) {
