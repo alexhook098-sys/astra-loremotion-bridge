@@ -61,6 +61,7 @@ public final class AliceBrowserPanel extends LinearLayout {
     private boolean destroyed;
     private Uri queuedAutomationImage;
     private String queuedAutomationPrompt;
+    private boolean automationUploadStarted;
 
     private final Runnable monitor = new Runnable() {
         @Override public void run() {
@@ -216,7 +217,7 @@ public final class AliceBrowserPanel extends LinearLayout {
                 if (status != null) status.setText("Alice: страница загружена · наблюдатель активен");
                 Log.i(TAG, "Page finished: " + safeUrl(url));
                 if (!monitorStarted) captureBaselineAndStartMonitor(view);
-                if (queuedAutomationImage != null) main.postDelayed(() -> clickUploadControl(), 700L);
+                if (queuedAutomationImage != null && !automationUploadStarted) main.postDelayed(() -> clickUploadControl(), 700L);
             }
         });
 
@@ -252,8 +253,13 @@ public final class AliceBrowserPanel extends LinearLayout {
             progress("Не удалось начать: нет изображения или промпта");
             return;
         }
+        if (automationUploadStarted) {
+            progress("Предыдущее задание Alice ещё выполняется; повторный запуск не отправлен.");
+            return;
+        }
         queuedAutomationImage = image;
         queuedAutomationPrompt = prompt.trim();
+        automationUploadStarted = true;
         progress("Подготавливаю загрузку изображения…");
         if (!pageLoaded || webView == null) {
             progress("Жду загрузки Alice…");
@@ -264,47 +270,35 @@ public final class AliceBrowserPanel extends LinearLayout {
 
     private void clickUploadControl() {
         if (destroyed || webView == null || queuedAutomationImage == null) return;
-        progress("Нажимаю «Загрузить фото»…");
-        String js = "(function(){var vis=e=>!!(e&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden');"
-                + "var b=[...document.querySelectorAll('button,[role=button]')].find(e=>vis(e)&&/загрузить\\s+фото/i.test((e.innerText||e.getAttribute('aria-label')||'').trim()));"
-                + "if(b){b.click();return 'upload-button-clicked'}"
-                + "return 'upload-control-not-found'})()";
-        webView.evaluateJavascript(js, raw -> {
-            Log.i(TAG, "Alice upload control: " + raw);
-            if (raw == null || raw.contains("not-found")) {
-                progress("Не нашла кнопку загрузки фото — остановилась");
-                return;
-            }
-            progress("Меню загрузки открыто. Ищу пункт «Фото»…");
-            main.postDelayed(() -> clickPhotoMenuOption(), 500L);
-        });
-    }
-
-    /**
-     * Alice first opens its own Camera / Photo / Files sheet. Select only the exact
-     * visible "Фото" action; the ensuing WebChromeClient callback receives the image
-     * already selected in ASTRA, so Android's picker does not need to be opened.
-     */
-    private void clickPhotoMenuOption() {
-        if (destroyed || webView == null || queuedAutomationImage == null) return;
+        progress("Ищу прямой загрузчик изображения Alice…");
+        // Bypass Alice's Camera / Photo / Files sheet. Trigger the page's file input
+        // directly so WebChromeClient.onShowFileChooser can supply ASTRA's existing URI.
         String js = "(function(){"
-                + "var vis=e=>!!(e&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden'&&getComputedStyle(e).display!=='none');"
-                + "var norm=s=>(s||'').replace(/\\s+/g,' ').trim().toLowerCase();"
-                + "var nodes=[...document.querySelectorAll('button,[role=button],[role=menuitem],a,div,span')].filter(e=>vis(e)&&norm(e.innerText||e.textContent)==='фото');"
-                + "nodes.sort((a,b)=>{var x=a.getBoundingClientRect(),y=b.getBoundingClientRect();return (x.width*x.height)-(y.width*y.height)});"
-                + "if(!nodes.length){var labels=[...document.querySelectorAll('button,[role=button],[role=menuitem]')].filter(vis).map(e=>norm(e.innerText||e.getAttribute('aria-label'))).filter(Boolean).slice(0,20);"
-                + "return JSON.stringify({ok:false,stage:'photo-option-not-found',visible:labels});}"
-                + "var target=nodes[0].closest('button,[role=button],[role=menuitem]')||nodes[0];"
-                + "target.click();return JSON.stringify({ok:true,stage:'photo-option-clicked',tag:target.tagName,role:target.getAttribute('role')||''});"
-                + "})()";
+                + "var inputs=[...document.querySelectorAll('input[type=file]')].filter(e=>!e.disabled);"
+                + "if(inputs.length){var f=inputs.find(e=>!e.accept||/image|\\*/i.test(e.accept))||inputs[0];"
+                + "try{f.click();return 'file-input-clicked:'+f.accept;}catch(e){return 'file-input-error:'+String(e)}}"
+                + "var b=[...document.querySelectorAll('button,[role=button]')].find(e=>e.getClientRects().length&&/загрузить\\s+фото/i.test((e.innerText||e.getAttribute('aria-label')||'').trim()));"
+                + "if(b){b.click();return 'upload-button-only'}return 'no-upload-control'})()";
         webView.evaluateJavascript(js, raw -> {
-            Log.i(TAG, "Alice Photo menu selection: " + raw);
-            if (raw == null || raw.contains("photo-option-not-found")) {
-                progress("Не нашла пункт «Фото» в меню Alice. Остановилась; картину не потеряла.");
-                return;
+            Log.i(TAG, "Alice direct file input trigger: " + raw);
+            if (raw != null && raw.contains("file-input-clicked")) {
+                progress("Запросила файл напрямую. Передаю выбранную в ASTRA картину…");
+                main.postDelayed(() -> {
+                    if (queuedAutomationImage != null) {
+                        progress("Alice не запросила файл напрямую. Остановилась без повторных нажатий.");
+                        queuedAutomationImage = null;
+                        queuedAutomationPrompt = null;
+                    }
+                }, 3500L);
+            } else if (raw != null && raw.contains("upload-button-only")) {
+                progress("Alice показывает собственное меню выбора. Автоматический выбор через WebView недоступен; остановилась, картина сохранена.");
+                queuedAutomationImage = null;
+                queuedAutomationPrompt = null;
+            } else {
+                progress("Не найден прямой загрузчик файла Alice. Остановилась; картину не потеряла.");
+                queuedAutomationImage = null;
+                queuedAutomationPrompt = null;
             }
-            progress("Нажала «Фото». Передаю выбранную в ASTRA картину…");
-            // onShowFileChooser supplies queuedAutomationImage directly and then verifies the preview.
         });
     }
 
