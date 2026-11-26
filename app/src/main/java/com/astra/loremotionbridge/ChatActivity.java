@@ -779,11 +779,6 @@ public class ChatActivity extends Activity {
         if (activity != null && activity.chatResumed) activity.runOnUiThread(activity::consumePendingAliceVideos);
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-    }
-
     private void consumePendingPerchanceImages() {
         if (isFinishing() || messages == null) return;
         android.content.SharedPreferences prefs = getSharedPreferences("astra_chat", MODE_PRIVATE);
