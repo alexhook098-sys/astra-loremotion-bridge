@@ -95,8 +95,20 @@ public final class AliceMediaActivity extends Activity {
                 @Override public void onPageFinished(WebView view,String url) {
                     super.onPageFinished(view,url);
                     if (!monitorStarted) {
-                        monitorStarted = true;
-                        MAIN.post(MONITOR);
+                        // Snapshot IDs already present before the user starts a new animation.
+                        String baselineScript = "(function(){var u=[];document.querySelectorAll('video,video source,a[href]').forEach(e=>{var x=e.currentSrc||e.src||e.href||'';if(x)u.push(x)});"
+                                + "performance.getEntriesByType('resource').forEach(e=>{if(/webalice|yaart-images|video/i.test(e.name))u.push(e.name)});"
+                                + "var ids=new Set();u.forEach(x=>{var m=String(x).match(/(?:[?&]video=|\\\\/webalice\\\\/)([0-9a-f]{32})/i);if(m)ids.add(m[1].toLowerCase())});"
+                                + "var m=location.href.match(/[?&]video=([0-9a-f]{32})/i);if(m)ids.add(m[1].toLowerCase());return JSON.stringify([...ids])})()";
+                        view.evaluateJavascript(baselineScript, raw -> {
+                            try {
+                                Object parsed = new org.json.JSONTokener(raw).nextValue();
+                                JSONArray ids = parsed instanceof String ? new JSONArray((String) parsed) : new JSONArray();
+                                for (int i=0;i<ids.length();i++) BASELINE_IDS.add(ids.optString(i).toLowerCase(Locale.US));
+                            } catch (Exception e) { Log.w(TAG, "Alice baseline scan failed", e); }
+                            monitorStarted = true;
+                            MAIN.post(MONITOR);
+                        });
                     }
                 }
             });
