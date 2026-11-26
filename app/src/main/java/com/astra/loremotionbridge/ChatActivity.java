@@ -62,7 +62,7 @@ public class ChatActivity extends Activity {
     private PerchanceBrowserPanel perchanceBrowserPanel;
     private FlowBrowserPanel flowBrowserPanel;
     private ZSkyBrowserPanel zskyBrowserPanel;
-    private AliceBrowserPanel aliceBrowserPanel;
+    private volatile AliceBrowserPanel aliceBrowserPanel;
     private FrameLayout overlayHost;
     private Button installButton;
     private JSONArray history;
@@ -962,6 +962,13 @@ public class ChatActivity extends Activity {
                 })
                 .setNegativeButton("ОТМЕНА", null)
                 .show();
+    }
+
+    /** Returns the existing embedded Alice panel to the local bridge; never creates a WebView. */
+    static AliceBrowserPanel alicePanelForBridge() {
+        ChatActivity activity = activeInstance;
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return null;
+        return activity.aliceBrowserPanel;
     }
 
     private void openAliceMediaPanel() {
