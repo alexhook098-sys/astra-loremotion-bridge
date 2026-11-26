@@ -48,6 +48,8 @@ public class ChatActivity extends Activity {
     private static final int PICK_MODEL = 18767;
     private static final int PICK_MOTION_REFERENCE = 18769;
     private static final int PICK_STORY_MOTION_REFERENCE = 18770;
+    private static final int PICK_ALICE_CHAT_IMAGE = 18771;
+    private Uri pendingAliceChatImage;
 
     private final ExecutorService modelExecutor = Executors.newSingleThreadExecutor();
     // Story Motion runs independently and cannot block One Click Motion or chat requests.
@@ -347,6 +349,13 @@ public class ChatActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == AliceBrowserPanel.FILE_CHOOSER_REQUEST && aliceBrowserPanel != null) {
             aliceBrowserPanel.handleActivityResult(requestCode, resultCode, data);
+            return;
+        }
+        if (requestCode == PICK_ALICE_CHAT_IMAGE) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+                pendingAliceChatImage = data.getData();
+                addMessage("📎 Изображение прикреплено к следующему сообщению для Alice.", false, true);
+            }
             return;
         }
         if (requestCode == PICK_MOTION_REFERENCE && resultCode == RESULT_OK && data != null && data.getData() != null) {
@@ -825,7 +834,21 @@ public class ChatActivity extends Activity {
 
     private void sendMessage() {
         String value = input.getText().toString().trim();
-        if (value.isEmpty() || busy) return;
+        if ((value.isEmpty() && pendingAliceChatImage == null) || busy) return;
+        if (pendingAliceChatImage != null) {
+            if (value.isEmpty()) {
+                addMessage("Добавь текст промпта к изображению перед отправкой в Alice.", false, true);
+                return;
+            }
+            Uri image = pendingAliceChatImage;
+            pendingAliceChatImage = null;
+            addMessage("✦ ALICE · " + value + "\\n📎 Изображение передано на подготовку.", true, true);
+            input.setText("");
+            addMessage("✦ ASTRA · открываю Alice и подготавливаю изображение и промпт…", false, true);
+            openAliceMediaPanel();
+            if (aliceBrowserPanel != null) aliceBrowserPanel.prepareChatAutomation(image, value);
+            return;
+        }
         String zskyPrompt = extractZSkyPrompt(value);
         if (isZSkyRequest(value) && (zskyPrompt == null || zskyPrompt.isEmpty())) {
             addMessage(value, true, true);
@@ -911,12 +934,20 @@ public class ChatActivity extends Activity {
 
     private void showComposerPlusMenu() {
         new AlertDialog.Builder(this)
-                .setItems(new String[]{"✦  Сгенерировать картину", "▶  Сгенерировать видео", "▧  Сгенерировать гиф"}, (dialog, which) -> {
-                    if (which == 0) showImageProviderMenu();
-                    else if (which == 1) showVideoProviderMenu();
-                    else if (which == 2) startActivity(new Intent(this, GifStudioActivity.class));
+                .setItems(new String[]{"📎  Прикрепить картину для Alice", "✦  Сгенерировать картину", "▶  Сгенерировать видео", "▧  Сгенерировать гиф"}, (dialog, which) -> {
+                    if (which == 0) chooseAliceChatImage();
+                    else if (which == 1) showImageProviderMenu();
+                    else if (which == 2) showVideoProviderMenu();
+                    else if (which == 3) startActivity(new Intent(this, GifStudioActivity.class));
                 })
                 .show();
+    }
+
+    private void chooseAliceChatImage() {
+        Intent pick = new Intent(Intent.ACTION_GET_CONTENT);
+        pick.setType("image/*");
+        pick.addCategory(Intent.CATEGORY_OPENABLE);
+        startActivityForResult(Intent.createChooser(pick, "Выбрать картину для Alice"), PICK_ALICE_CHAT_IMAGE);
     }
 
     private void showVideoProviderMenu() {
