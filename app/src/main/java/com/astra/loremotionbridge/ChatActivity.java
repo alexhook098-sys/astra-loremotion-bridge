@@ -61,6 +61,9 @@ public class ChatActivity extends Activity {
     private JSONArray history;
     private volatile boolean busy = false;
     private boolean chatResumed = false;
+    private static final int PICK_ALICE_IMAGE = 18772;
+    private FrameLayout overlayHost;
+    private AliceBrowserPanel aliceBrowserPanel;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -104,10 +107,12 @@ public class ChatActivity extends Activity {
         chatResumed = true;
         consumePendingPerchanceImages();
         consumePendingFlowVideos();
+        if (aliceBrowserPanel != null) aliceBrowserPanel.onHostResume();
     }
 
     @Override protected void onPause() {
         chatResumed = false;
+        if (aliceBrowserPanel != null) aliceBrowserPanel.onHostPause();
         super.onPause();
     }
 
@@ -168,6 +173,12 @@ public class ChatActivity extends Activity {
         LinearLayout.LayoutParams flowParams = new LinearLayout.LayoutParams(-1, dp(43));
         flowParams.bottomMargin = dp(8);
         root.addView(googleFlow, flowParams);
+
+        Button aliceMedia = smallButton("✦  ALICE MEDIA · ОЖИВИТЬ КАРТИНУ", LILAC);
+        aliceMedia.setOnClickListener(v -> openAliceMediaPanel());
+        LinearLayout.LayoutParams aliceParams = new LinearLayout.LayoutParams(-1, dp(43));
+        aliceParams.bottomMargin = dp(8);
+        root.addView(aliceMedia, aliceParams);
 
         installButton = smallButton("＋  ПОДКЛЮЧИТЬ OPENROUTER · API KEY", CYAN);
         installButton.setOnClickListener(v -> showOpenRouterSetup());
@@ -246,9 +257,73 @@ public class ChatActivity extends Activity {
         }
         frame.addView(wallpaper, new FrameLayout.LayoutParams(-1, -1));
         frame.addView(screen, new FrameLayout.LayoutParams(-1, -1));
+        overlayHost = frame;
         setContentView(frame);
     }
 
+
+    private void chooseAliceImage() {
+        Intent pick;
+        if (Build.VERSION.SDK_INT >= 33) {
+            pick = new Intent(android.provider.MediaStore.ACTION_PICK_IMAGES);
+            pick.setType("image/*");
+            pick.putExtra(android.provider.MediaStore.EXTRA_PICK_IMAGES_MAX, 1);
+        } else {
+            pick = new Intent(Intent.ACTION_GET_CONTENT);
+            pick.setType("image/*");
+            pick.addCategory(Intent.CATEGORY_OPENABLE);
+        }
+        startActivityForResult(pick, PICK_ALICE_IMAGE);
+    }
+
+    private void promptAliceImage(Uri image) {
+        EditText promptInput = new EditText(this);
+        promptInput.setHint("Опиши движение для Alice");
+        promptInput.setTextColor(WHITE);
+        promptInput.setHintTextColor(Color.GRAY);
+        LinearLayout box = new LinearLayout(this);
+        box.setPadding(dp(18), dp(8), dp(18), 0);
+        box.addView(promptInput, new LinearLayout.LayoutParams(-1, dp(76)));
+        new AlertDialog.Builder(this)
+                .setTitle("ASTRA · Оживить картину")
+                .setView(box)
+                .setPositiveButton("ЗАПУСТИТЬ", (dialog, which) -> {
+                    String prompt = promptInput.getText().toString().trim();
+                    if (prompt.isEmpty()) {
+                        addMessage("Напиши описание движения для Alice.", false, true);
+                        return;
+                    }
+                    addMessage("✦ ASTRA · передаю картину и промпт в Alice…", false, true);
+                    ensureAliceWorker();
+                    if (aliceBrowserPanel != null) aliceBrowserPanel.submitImageAndPrompt(image, prompt);
+                })
+                .setNegativeButton("ОТМЕНА", null)
+                .show();
+    }
+
+    private void ensureAliceWorker() {
+        if (overlayHost == null || isFinishing()) return;
+        if (aliceBrowserPanel == null) {
+            aliceBrowserPanel = new AliceBrowserPanel(this, message ->
+                    runOnUiThread(() -> addMessage("✦ Alice · " + message, false, true)));
+            overlayHost.addView(aliceBrowserPanel, new FrameLayout.LayoutParams(-1, -1));
+        }
+        aliceBrowserPanel.setVisibility(View.GONE);
+        aliceBrowserPanel.onHostResume();
+        android.util.Log.i("ASTRA-ALICE", "Hidden Alice worker ready; chat remains foreground");
+    }
+
+    private void openAliceMediaPanel() {
+        if (overlayHost == null || isFinishing()) return;
+        if (aliceBrowserPanel == null) {
+            aliceBrowserPanel = new AliceBrowserPanel(this, message ->
+                    runOnUiThread(() -> addMessage("✦ Alice · " + message, false, true)));
+            overlayHost.addView(aliceBrowserPanel, new FrameLayout.LayoutParams(-1, -1));
+        }
+        aliceBrowserPanel.setVisibility(View.VISIBLE);
+        aliceBrowserPanel.bringToFront();
+        aliceBrowserPanel.onHostResume();
+    }
 
     private void showAppearanceMenu() {
         new AlertDialog.Builder(this)
@@ -286,6 +361,14 @@ public class ChatActivity extends Activity {
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == AliceBrowserPanel.FILE_CHOOSER_REQUEST && aliceBrowserPanel != null) {
+            aliceBrowserPanel.handleActivityResult(requestCode, resultCode, data);
+            return;
+        }
+        if (requestCode == PICK_ALICE_IMAGE && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            promptAliceImage(data.getData());
+            return;
+        }
         if (requestCode == PICK_MOTION_REFERENCE && resultCode == RESULT_OK && data != null && data.getData() != null) {
             processMotionReference(data.getData());
             return;
@@ -904,6 +987,7 @@ public class ChatActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        if (aliceBrowserPanel != null) aliceBrowserPanel.onHostPause();
         if (activeInstance == this) activeInstance = null;
         // Keep the native model alive for the process; do not unload on screen close.
         super.onDestroy();
