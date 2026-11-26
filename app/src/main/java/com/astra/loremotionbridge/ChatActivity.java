@@ -573,6 +573,13 @@ public class ChatActivity extends Activity {
         }
     }
 
+    public static void onAliceAutomationStatus(Context context, String message) {
+        ChatActivity activity = activeInstance;
+        if (activity != null && message != null) {
+            activity.runOnUiThread(() -> activity.addMessage("✦ ALICE · " + message, false, true));
+        }
+    }
+
     public static void onAliceVideoReady(Context context, Uri video) {
         if (context == null || video == null) return;
         android.content.SharedPreferences prefs = context.getSharedPreferences("astra_chat", MODE_PRIVATE);
