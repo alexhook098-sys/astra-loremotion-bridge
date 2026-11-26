@@ -49,6 +49,8 @@ public class WebViewBrowserActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService perchanceDownloads = Executors.newSingleThreadExecutor();
     private final Set<String> seenPerchanceImages = new HashSet<>();
+    private final Set<String> seenAliceVideoBlobs = new HashSet<>();
+    private boolean aliceObserverRunning;
     private boolean perchanceObserverRunning;
     private final Runnable perchanceObserver = new Runnable() {
         @Override public void run() {
@@ -57,6 +59,34 @@ public class WebViewBrowserActivity extends Activity {
             if (isPerchanceUrl(url)) scanPerchanceImages();
             else { perchanceObserverRunning = false; return; }
             main.postDelayed(this, 2500L);
+        }
+    };
+    private final Runnable aliceMediaObserver = new Runnable() {
+        @Override public void run() {
+            if (webView == null || isFinishing()) { aliceObserverRunning = false; return; }
+            if (!isAliceMediaUrl(webView.getUrl())) {
+                main.postDelayed(this, 4000L);
+                return;
+            }
+            String js = "(()=>{try{return [...document.querySelectorAll('video')].filter(v=>"
+                    + "v.getClientRects().length&&v.readyState>=2&&v.videoWidth>0)"
+                    + ".map(v=>v.currentSrc||v.src).find(u=>u&&u.startsWith('blob:https://alice.yandex.ru/'))||null;"
+                    + "}catch(e){return null;}})()";
+            webView.evaluateJavascript(js, raw -> {
+                String source = null;
+                try {
+                    Object value = raw == null ? null : new org.json.JSONTokener(raw).nextValue();
+                    if (value instanceof String) source = (String) value;
+                } catch (Exception ignored) {}
+                if (source != null && !source.isEmpty() && !seenAliceVideoBlobs.contains(source)) {
+                    Log.i("ASTRA-ALICE", "Completed Alice video detected; capturing automatically");
+                    saveAliceVideoBlob(source, (saved, error) -> {
+                        if (error != null) setStatus("Ошибка получения видео Алисы: " + error);
+                        else setStatus("Видео Алисы доставлено в чат ASTRA: " + saved);
+                    });
+                }
+                if (webView != null && !isFinishing()) main.postDelayed(this, 3000L);
+            });
         }
     };
 
@@ -135,11 +165,12 @@ public class WebViewBrowserActivity extends Activity {
     @Override public void onBackPressed() {
         String current = webView == null ? "" : webView.getUrl();
         boolean perchance = false;
+        boolean aliceMedia = isAliceMediaUrl(current);
         try {
             perchance = current != null && "perchance.org".equalsIgnoreCase(
                     android.net.Uri.parse(current).getHost());
         } catch (Exception ignored) {}
-        if (perchance) {
+        if (perchance || aliceMedia) {
             try {
                 moveTaskToBack(true);
                 Log.i("ASTRA-WV-DIAG", "Perchance kept alive in background; URL=" + current);
@@ -150,6 +181,14 @@ public class WebViewBrowserActivity extends Activity {
             return;
         }
         super.onBackPressed();
+    }
+
+    private boolean isAliceMediaUrl(String value) {
+        try {
+            String host = Uri.parse(value == null ? "" : value).getHost();
+            return host != null && (host.equalsIgnoreCase("alice.yandex.ru")
+                    || host.toLowerCase(Locale.US).endsWith(".alice.yandex.ru"));
+        } catch (Exception ignored) { return false; }
     }
 
     private boolean isPerchanceUrl(String value) {
@@ -329,6 +368,12 @@ public class WebViewBrowserActivity extends Activity {
             @Override public void onPageFinished(WebView view, String url) {
                 Log.i("ASTRA-WV-DIAG", "onPageFinished url=" + url);
                 updateStatus();
+                if (isAliceMediaUrl(url) && !aliceObserverRunning) {
+                    aliceObserverRunning = true;
+                    main.removeCallbacks(aliceMediaObserver);
+                    main.postDelayed(aliceMediaObserver, 1800L);
+                    Log.i("ASTRA-ALICE", "Alice Media result observer started");
+                }
                 if (hideAfterPageLoad) {
                     hideAfterPageLoad = false;
                     sendToBackSoon();
@@ -413,6 +458,10 @@ public class WebViewBrowserActivity extends Activity {
     // Saves Alice Media's own video blob without routing it through the watermarked UI download URL.
     public void saveAliceVideoBlob(final String url, final EvalCallback callback) {
         main.post(() -> {
+            if (url != null && !seenAliceVideoBlobs.add(url)) {
+                callback.onResult(null, "alice_video_already_captured");
+                return;
+            }
             if (webView == null) {
                 callback.onResult(null, "webview_not_ready");
                 return;
