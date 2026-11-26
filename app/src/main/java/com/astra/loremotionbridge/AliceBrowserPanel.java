@@ -46,7 +46,9 @@ public final class AliceBrowserPanel extends LinearLayout {
     public static final int FILE_CHOOSER_REQUEST = 4817;
     private static final long MAX_UPLOAD_BYTES = 20L * 1024L * 1024L;
 
+    public interface ProgressListener { void onProgress(String message); }
     private final Activity host;
+    private final ProgressListener progressListener;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Set<String> baselineIds = new HashSet<>();
@@ -101,9 +103,12 @@ public final class AliceBrowserPanel extends LinearLayout {
         }
     };
 
-    public AliceBrowserPanel(Activity host) {
+    public AliceBrowserPanel(Activity host) { this(host, null); }
+
+    public AliceBrowserPanel(Activity host, ProgressListener listener) {
         super(host);
         this.host = host;
+        this.progressListener = listener;
         destroyed = false;
         setOrientation(LinearLayout.VERTICAL);
         setBackgroundColor(android.graphics.Color.rgb(8, 11, 24));
@@ -162,7 +167,8 @@ public final class AliceBrowserPanel extends LinearLayout {
                     queuedAutomationImage = null;
                     callback.onReceiveValue(new Uri[]{image});
                     Log.i(TAG, "Automation image supplied directly to Alice file chooser");
-                    main.postDelayed(() -> enterPromptAndStart(), 1800L);
+                    progress("Изображение передано; проверяю миниатюру…");
+                    main.postDelayed(() -> verifyImageAndContinue(), 1800L);
                     return true;
                 }
                 pendingFileCallback = callback;
@@ -243,40 +249,66 @@ public final class AliceBrowserPanel extends LinearLayout {
 
     public void submitImageAndPrompt(Uri image, String prompt) {
         if (destroyed || image == null || prompt == null || prompt.trim().isEmpty()) {
-            Log.w(TAG, "Automation rejected: missing image or prompt");
+            progress("Не удалось начать: нет изображения или промпта");
             return;
         }
         queuedAutomationImage = image;
         queuedAutomationPrompt = prompt.trim();
+        progress("Подготавливаю загрузку изображения…");
         if (!pageLoaded || webView == null) {
-            Log.w(TAG, "Automation queued until Alice page is ready");
+            progress("Жду загрузки Alice…");
             return;
         }
-        String js = "(function(){"
-                + "var vis=e=>!!(e&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden');"
-                + "var b=[...document.querySelectorAll('button,[role=button]')].find(e=>vis(e)&&/загрузить\\s+фото/i.test((e.innerText||e.getAttribute('aria-label')||'').trim()));"
-                + "if(b){b.click();return 'upload-button-clicked'}"
-                + "var f=[...document.querySelectorAll('input[type=file]')].find(vis);"
-                + "if(f){f.click();return 'file-input-clicked'}"
-                + "return 'upload-control-not-found'})()";
-        webView.evaluateJavascript(js, raw -> Log.i(TAG, "Alice upload control: " + raw));
+        clickUploadControl();
     }
 
     private void clickUploadControl() {
         if (destroyed || webView == null || queuedAutomationImage == null) return;
-        String js = "(function(){"
-                + "var vis=e=>!!(e&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden');"
+        progress("Нажимаю «Загрузить фото»…");
+        String js = "(function(){var vis=e=>!!(e&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden');"
                 + "var b=[...document.querySelectorAll('button,[role=button]')].find(e=>vis(e)&&/загрузить\\s+фото/i.test((e.innerText||e.getAttribute('aria-label')||'').trim()));"
                 + "if(b){b.click();return 'upload-button-clicked'}"
                 + "var f=[...document.querySelectorAll('input[type=file]')].find(vis);"
-                + "if(f){f.click();return 'file-input-clicked'}"
-                + "return 'upload-control-not-found'})()";
-        webView.evaluateJavascript(js, raw -> Log.i(TAG, "Alice upload control: " + raw));
+                + "if(f){f.click();return 'file-input-clicked'}return 'upload-control-not-found'})()";
+        webView.evaluateJavascript(js, raw -> {
+            Log.i(TAG, "Alice upload control: " + raw);
+            if (raw != null && raw.contains("not-found")) progress("Не нашла кнопку загрузки фото — остановилась");
+            else progress("Кнопка загрузки нажата; передаю картину…");
+        });
     }
+
+    private void verifyImageAndContinue() {
+        if (destroyed || webView == null || queuedAutomationPrompt == null) return;
+        progress("Проверяю, приняла ли Alice изображение…");
+        String js = "(function(){var vis=e=>!!(e&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden');"
+                + "var fields=[...document.querySelectorAll('textarea,input:not([type=file]),[contenteditable=true],[role=textbox]')].filter(vis);"
+                + "var field=fields.find(e=>/например|что сделать|описание/i.test((e.getAttribute('placeholder')||e.getAttribute('aria-label')||'')))||fields.find(e=>e.matches('[contenteditable=true],[role=textbox]'))||fields.find(e=>e.tagName==='TEXTAREA')||fields[0];"
+                + "var files=[...document.querySelectorAll('input[type=file]')].reduce((n,e)=>n+(e.files?e.files.length:0),0);"
+                + "var preview=false;for(var p=field,i=0;p&&i<9;p=p.parentElement,i++){if(p.querySelectorAll('img').length>0){preview=true;break;}}"
+                + "return JSON.stringify({files:files,preview:preview});})()";
+        webView.evaluateJavascript(js, raw -> {
+            try {
+                Object parsed = new org.json.JSONTokener(raw).nextValue();
+                JSONObject state = parsed instanceof String ? new JSONObject((String)parsed) : new JSONObject();
+                if (state.optInt("files",0)>0 || state.optBoolean("preview")) {
+                    progress("Картина принята. Ввожу промпт…");
+                    enterPromptAndStart();
+                } else {
+                    progress("Alice не подтвердила картину. Остановилась до запуска.");
+                    Log.w(TAG, "Upload not verified: " + raw);
+                }
+            } catch (Exception e) {
+                progress("Не удалось проверить загрузку; генерацию не запускаю");
+                Log.w(TAG, "Upload verification failed: " + raw, e);
+            }
+        });
+    }
+
     private void enterPromptAndStart() {
         if (destroyed || webView == null || queuedAutomationPrompt == null) return;
         final String prompt = queuedAutomationPrompt;
         final String quoted = JSONObject.quote(prompt);
+        progress("Ищу поле промпта…");
         String js = "(function(){"
                 + "var vis=e=>!!(e&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden');"
                 + "var fields=[...document.querySelectorAll('textarea,input:not([type=file]),[contenteditable=true],[role=textbox]')].filter(vis);"
@@ -291,15 +323,16 @@ public final class AliceBrowserPanel extends LinearLayout {
                 + "field.dispatchEvent(new Event('change',{bubbles:true}));"
                 + "var root=field;for(var i=0;i<8&&root;i++,root=root.parentElement){"
                 + "var bs=[...root.querySelectorAll('button,[role=button]')].filter(e=>vis(e)&&!e.disabled);"
-                + "var named=bs.find(e=>/создать|сгенерировать|отправить|оживить|generate|submit/i.test((e.getAttribute('aria-label')||'')+' '+(e.title||'')+' '+(e.innerText||'')));"
-                + "if(named){named.click();return JSON.stringify({ok:true,stage:'prompt-entered-and-named-button-clicked',button:named.outerHTML.slice(0,500)});}"
-                + "var arrows=bs.filter(e=>e.querySelector('svg')&&!/что сделать/i.test(e.innerText||''));"
-                + "if(arrows.length){var target=arrows[arrows.length-1];target.click();return JSON.stringify({ok:true,stage:'prompt-entered-and-composer-arrow-clicked',button:target.outerHTML.slice(0,500)});}"
+                + "var rect=e=>e.getBoundingClientRect();"
+                + "var arrows=bs.filter(e=>e.querySelector('svg')&&!/что сделать/i.test(e.innerText||'')).sort((a,b)=>{var x=rect(a),y=rect(b);return (y.bottom-x.bottom)||(y.right-x.right)});"
+                + "if(arrows.length){var target=arrows[0];target.click();return JSON.stringify({ok:true,stage:'prompt-entered-and-composer-arrow-clicked',button:target.outerHTML.slice(0,500)});}"
                 + "}"
                 + "return JSON.stringify({ok:false,stage:'prompt-entered-but-launch-button-not-found'});"
                 + "})()";
         webView.evaluateJavascript(js, raw -> {
             Log.i(TAG, "Alice automation result: " + raw);
+            if (raw != null && raw.contains("composer-arrow-clicked")) progress("Нажала стрелку отправки. Ожидаю генерацию…");
+            else progress("Не удалось подтвердить нажатие стрелки: " + raw);
             queuedAutomationPrompt = null;
         });
     }
@@ -378,6 +411,12 @@ public final class AliceBrowserPanel extends LinearLayout {
 
     private int dp(int value) {
         return (int) (value * host.getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private void progress(String message) {
+        Log.i(TAG, "STAGE: " + message);
+        if (status != null) status.setText("Alice: " + message);
+        if (progressListener != null) main.post(() -> progressListener.onProgress(message));
     }
 
     public void minimizeAlice() {
