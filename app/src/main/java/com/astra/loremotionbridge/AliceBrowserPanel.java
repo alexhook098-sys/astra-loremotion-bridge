@@ -210,6 +210,7 @@ public final class AliceBrowserPanel extends LinearLayout {
                 if (status != null) status.setText("Alice: страница загружена · наблюдатель активен");
                 Log.i(TAG, "Page finished: " + safeUrl(url));
                 if (!monitorStarted) captureBaselineAndStartMonitor(view);
+                if (queuedAutomationImage != null) main.postDelayed(() -> clickUploadControl(), 700L);
             }
         });
 
