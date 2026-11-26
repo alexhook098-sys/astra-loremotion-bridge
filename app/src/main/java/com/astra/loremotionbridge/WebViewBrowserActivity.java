@@ -470,10 +470,6 @@ public class WebViewBrowserActivity extends Activity {
     // Saves Alice Media's own video blob without routing it through the watermarked UI download URL.
     public void saveAliceVideoBlob(final String url, final EvalCallback callback) {
         main.post(() -> {
-            if (url != null && !seenAliceVideoBlobs.add(url)) {
-                callback.onResult(null, "alice_video_already_captured");
-                return;
-            }
             if (webView == null) {
                 callback.onResult(null, "webview_not_ready");
                 return;
@@ -482,7 +478,14 @@ public class WebViewBrowserActivity extends Activity {
                 callback.onResult(null, "untrusted_alice_blob_url");
                 return;
             }
-            new AliceVideoBlobSaveJob(url, callback).start();
+            if (!seenAliceVideoBlobs.add(url)) {
+                callback.onResult(null, "alice_video_already_captured");
+                return;
+            }
+            new AliceVideoBlobSaveJob(url, (value, error) -> {
+                if (error != null) seenAliceVideoBlobs.remove(url);
+                callback.onResult(value, error);
+            }).start();
         });
     }
 
