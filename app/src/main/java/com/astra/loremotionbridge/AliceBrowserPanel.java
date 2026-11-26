@@ -266,7 +266,7 @@ public final class AliceBrowserPanel extends LinearLayout {
         if (destroyed || webView == null || queuedAutomationImage == null) return;
         String js = "(function(){"
                 + "var vis=e=>!!(e&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden');"
-                + "var b=[...document.querySelectorAll('button,[role=button]')].find(e=>vis(e)&&/загрузить\\\\s+фото/i.test((e.innerText||e.getAttribute('aria-label')||'').trim()));"
+                + "var b=[...document.querySelectorAll('button,[role=button]')].find(e=>vis(e)&&/загрузить\\s+фото/i.test((e.innerText||e.getAttribute('aria-label')||'').trim()));"
                 + "if(b){b.click();return 'upload-button-clicked'}"
                 + "var f=[...document.querySelectorAll('input[type=file]')].find(vis);"
                 + "if(f){f.click();return 'file-input-clicked'}"
