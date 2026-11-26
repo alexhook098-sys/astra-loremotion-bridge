@@ -433,16 +433,17 @@ public class WebViewBrowserActivity extends Activity {
         String displayName = "alice-motion-" + System.currentTimeMillis() + ".mp4";
         if (Build.VERSION.SDK_INT >= 29) {
             ContentValues values = new ContentValues();
-            values.put(android.provider.MediaStore.Downloads.DISPLAY_NAME, displayName);
-            values.put(android.provider.MediaStore.Downloads.MIME_TYPE, mime);
-            values.put(android.provider.MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
-            values.put(android.provider.MediaStore.Downloads.IS_PENDING, 1);
+            values.put(android.provider.MediaStore.Video.Media.DISPLAY_NAME, displayName);
+            values.put(android.provider.MediaStore.Video.Media.MIME_TYPE, mime);
+            values.put(android.provider.MediaStore.Video.Media.RELATIVE_PATH,
+                    Environment.DIRECTORY_MOVIES + "/ASTRA/Alice");
+            values.put(android.provider.MediaStore.Video.Media.IS_PENDING, 1);
             Uri destination = getContentResolver().insert(
-                    android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
-            if (destination == null) throw new IOException("downloads_insert_failed");
+                    android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
+            if (destination == null) throw new IOException("alice_media_insert_failed");
             try (FileInputStream in = new FileInputStream(source);
                  OutputStream out = getContentResolver().openOutputStream(destination)) {
-                if (out == null) throw new IOException("downloads_output_stream_unavailable");
+                if (out == null) throw new IOException("alice_media_output_stream_unavailable");
                 byte[] buffer = new byte[32768];
                 int count;
                 while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
@@ -451,17 +452,19 @@ public class WebViewBrowserActivity extends Activity {
                 throw e;
             }
             ContentValues ready = new ContentValues();
-            ready.put(android.provider.MediaStore.Downloads.IS_PENDING, 0);
+            ready.put(android.provider.MediaStore.Video.Media.IS_PENDING, 0);
             if (getContentResolver().update(destination, ready, null, null) <= 0) {
                 getContentResolver().delete(destination, null, null);
-                throw new IOException("downloads_publish_failed");
+                throw new IOException("alice_media_publish_failed");
             }
-            return displayName;
+            return destination.toString();
         }
-        File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-        if (!dir.exists() && !dir.mkdirs()) throw new IOException("downloads_dir_failed");
+        File dir = new File(Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_MOVIES), "ASTRA/Alice");
+        if (!dir.exists() && !dir.mkdirs()) throw new IOException("alice_movies_dir_failed");
         File target = new File(dir, displayName);
-        try (FileInputStream in = new FileInputStream(source); FileOutputStream out = new FileOutputStream(target)) {
+        try (FileInputStream in = new FileInputStream(source);
+             FileOutputStream out = new FileOutputStream(target)) {
             byte[] buffer = new byte[32768];
             int count;
             while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
@@ -469,7 +472,8 @@ public class WebViewBrowserActivity extends Activity {
             target.delete();
             throw e;
         }
-        return target.getAbsolutePath();
+        return androidx.core.content.FileProvider.getUriForFile(
+                this, getPackageName() + ".fileprovider", target).toString();
     }
 
     private final class AliceVideoBlobSaveJob {
@@ -587,6 +591,8 @@ public class WebViewBrowserActivity extends Activity {
             try {
                 String saved = publishAliceVideoToDownloads(file, "video/mp4");
                 if (file != null && file.exists()) file.delete();
+                Uri savedUri = Uri.parse(saved);
+                ChatActivity.onAliceVideoReady(WebViewBrowserActivity.this, savedUri);
                 callback.onResult(saved, null);
             } catch (Exception e) { failAfterFinish(e.getMessage()); }
         }
