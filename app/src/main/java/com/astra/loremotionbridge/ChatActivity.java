@@ -1002,22 +1002,36 @@ public class ChatActivity extends Activity {
                         return;
                     }
                     addMessage("✦ ASTRA · передаю картину и промпт в Alice…", false, true);
-                    openAliceMediaPanel();
+                    ensureAliceWorker();
                     if (aliceBrowserPanel != null) aliceBrowserPanel.submitImageAndPrompt(image, prompt);
                 })
                 .setNegativeButton("ОТМЕНА", null)
                 .show();
     }
+    private void ensureAliceWorker() {
+        if (overlayHost == null || isFinishing()) return;
+        if (aliceBrowserPanel == null) {
+            aliceBrowserPanel = new AliceBrowserPanel(this, message ->
+                    runOnUiThread(() -> addMessage("✦ Alice · " + message, false, true)));
+            overlayHost.addView(aliceBrowserPanel, new FrameLayout.LayoutParams(-1, -1));
+        }
+        // Automation must never cover the chat. The attached WebView stays alive while GONE.
+        aliceBrowserPanel.setVisibility(View.GONE);
+        aliceBrowserPanel.onHostResume();
+        android.util.Log.i("ASTRA-ALICE", "Hidden Alice worker ready; chat remains foreground");
+    }
+
     private void openAliceMediaPanel() {
         if (overlayHost == null || isFinishing()) return;
         if (aliceBrowserPanel == null) {
-            aliceBrowserPanel = new AliceBrowserPanel(this);
+            aliceBrowserPanel = new AliceBrowserPanel(this, message ->
+                    runOnUiThread(() -> addMessage("✦ Alice · " + message, false, true)));
             overlayHost.addView(aliceBrowserPanel, new FrameLayout.LayoutParams(-1, -1));
         }
         aliceBrowserPanel.setVisibility(View.VISIBLE);
         aliceBrowserPanel.bringToFront();
         aliceBrowserPanel.onHostResume();
-        android.util.Log.i("ASTRA-ALICE", "Embedded Alice panel shown; WebView retained in ChatActivity");
+        android.util.Log.i("ASTRA-ALICE", "Manual Alice panel shown; WebView retained in ChatActivity");
     }
 
     private void openPerchanceStudio() {
