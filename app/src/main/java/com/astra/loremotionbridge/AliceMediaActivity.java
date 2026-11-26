@@ -1,6 +1,8 @@
 package com.astra.loremotionbridge;
 
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
@@ -9,6 +11,7 @@ import android.os.Looper;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
+import android.webkit.ValueCallback;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -37,6 +40,8 @@ public final class AliceMediaActivity extends Activity {
     private static final Set<String> DOWNLOADED_IDS = new HashSet<>();
     private static boolean monitorStarted;
     private WebView webView;
+    private ValueCallback<Uri[]> pendingFileCallback;
+    private static final int ALICE_FILE_CHOOSER = 4817;
 
     private static final Runnable MONITOR = new Runnable() {
         @Override public void run() {
@@ -85,6 +90,9 @@ public final class AliceMediaActivity extends Activity {
         if (sharedWebView == null) {
             sharedWebView = new WebView(getApplicationContext());
             WebSettings settings = sharedWebView.getSettings();
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                sharedWebView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
+            }
             settings.setJavaScriptEnabled(true);
             settings.setDomStorageEnabled(true);
             settings.setDatabaseEnabled(true);
@@ -94,7 +102,31 @@ public final class AliceMediaActivity extends Activity {
             CookieManager cookies = CookieManager.getInstance();
             cookies.setAcceptCookie(true);
             cookies.setAcceptThirdPartyCookies(sharedWebView,true);
-            sharedWebView.setWebChromeClient(new WebChromeClient());
+            sharedWebView.setWebChromeClient(new WebChromeClient() {
+                @Override public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
+                        FileChooserParams params) {
+                    if (pendingFileCallback != null) {
+                        try { pendingFileCallback.onReceiveValue(null); } catch (Exception ignored) {}
+                    }
+                    pendingFileCallback = callback;
+                    Intent pick;
+                    try {
+                        pick = params != null ? params.createIntent() : new Intent(Intent.ACTION_GET_CONTENT);
+                        if (pick.getType() == null) pick.setType("image/*");
+                        pick.addCategory(Intent.CATEGORY_OPENABLE);
+                        startActivityForResult(Intent.createChooser(pick, "Выбрать фото для Alice"), ALICE_FILE_CHOOSER);
+                        Log.i(TAG, "Alice file chooser opened");
+                        return true;
+                    } catch (ActivityNotFoundException e) {
+                        Log.e(TAG, "No file picker available", e);
+                    } catch (Exception e) {
+                        Log.e(TAG, "Could not open Alice file picker", e);
+                    }
+                    pendingFileCallback = null;
+                    callback.onReceiveValue(null);
+                    return false;
+                }
+            });
             sharedWebView.setWebViewClient(new WebViewClient() {
                 @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                     Log.i(TAG, "Navigation started: " + safeUrl(url));
@@ -140,11 +172,39 @@ public final class AliceMediaActivity extends Activity {
             sharedWebView.loadUrl(HOME);
         }
         webView = sharedWebView;
+        try {
+            Intent service = new Intent(this, BrowserBridgeService.class);
+            if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(service);
+            else startService(service);
+            BrowserBridgeService.setAliceTaskActive(true);
+        } catch (Exception e) {
+            Log.w(TAG, "Background helper service unavailable", e);
+        }
         if (webView.getParent() instanceof ViewGroup) ((ViewGroup)webView.getParent()).removeView(webView);
         root.addView(webView,new LinearLayout.LayoutParams(-1,0,1));
         setContentView(root);
         webView.onResume();
         webView.resumeTimers();
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != ALICE_FILE_CHOOSER) return;
+        ValueCallback<Uri[]> callback = pendingFileCallback;
+        pendingFileCallback = null;
+        if (callback == null) return;
+        Uri[] results = null;
+        if (resultCode == RESULT_OK && data != null) {
+            Uri uri = data.getData();
+            if (uri != null) results = new Uri[]{uri};
+            else if (data.getClipData() != null) {
+                android.content.ClipData clip = data.getClipData();
+                results = new Uri[clip.getItemCount()];
+                for (int i = 0; i < clip.getItemCount(); i++) results[i] = clip.getItemAt(i).getUri();
+            }
+        }
+        callback.onReceiveValue(results);
+        Log.i(TAG, "Alice file chooser result: " + (results == null ? "cancelled" : results.length + " URI(s)"));
     }
 
     private static void downloadAndDeliver(String id) {
@@ -180,6 +240,10 @@ public final class AliceMediaActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        if (pendingFileCallback != null) {
+            try { pendingFileCallback.onReceiveValue(null); } catch (Exception ignored) {}
+            pendingFileCallback = null;
+        }
         if (webView != null) {
             if (webView.getParent() instanceof ViewGroup) ((ViewGroup)webView.getParent()).removeView(webView);
             // Deliberately retain the WebView and monitor, matching RadioActivity's persistent player pattern.
