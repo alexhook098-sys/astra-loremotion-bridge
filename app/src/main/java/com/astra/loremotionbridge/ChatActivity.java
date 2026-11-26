@@ -345,6 +345,10 @@ public class ChatActivity extends Activity {
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == AliceBrowserPanel.FILE_CHOOSER_REQUEST && aliceBrowserPanel != null) {
+            aliceBrowserPanel.handleActivityResult(requestCode, resultCode, data);
+            return;
+        }
         if (requestCode == PICK_MOTION_REFERENCE && resultCode == RESULT_OK && data != null && data.getData() != null) {
             processMotionReference(data.getData());
             return;
@@ -1138,12 +1142,6 @@ public class ChatActivity extends Activity {
         return (int)(n * getResources().getDisplayMetrics().density + 0.5f);
     }
 
-    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == AliceBrowserPanel.FILE_CHOOSER_REQUEST && aliceBrowserPanel != null) {
-            aliceBrowserPanel.handleActivityResult(requestCode, resultCode, data);
-            return;
-        }
     @Override protected void onDestroy() {
         if (activeInstance == this) activeInstance = null;
         if (perchanceBrowserPanel != null) { perchanceBrowserPanel.dispose(); perchanceBrowserPanel = null; }
