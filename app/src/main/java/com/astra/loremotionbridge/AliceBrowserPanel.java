@@ -210,7 +210,7 @@ public final class AliceBrowserPanel extends LinearLayout {
                 if (status != null) status.setText("Alice: страница загружена · наблюдатель активен");
                 Log.i(TAG, "Page finished: " + safeUrl(url));
                 if (!monitorStarted) captureBaselineAndStartMonitor(view);
-                if (queuedAutomationPrompt != null) inspectAutomationForm();
+                if (queuedAutomationPrompt != null) { inspectAutomationForm(); launchQueuedImageUpload(); }
             }
         });
 
@@ -286,20 +286,26 @@ public final class AliceBrowserPanel extends LinearLayout {
                     return;
                 }
                 queuedAutomationImage = ready;
-                if (status != null) status.setText("Alice: передаю изображение в форму сайта…");
-                webView.evaluateJavascript(
-                        "(function(){var f=[...document.querySelectorAll('input[type=file]')].find(x=>!x.disabled);"
-                        + "if(f){f.click();return 'file-input-clicked'}"
-                        + "return 'file-input-not-found'})()", raw -> {
-                    Log.i(TAG, "Alice upload input probe: " + raw);
-                    if (raw == null || raw.contains("not-found")) {
-                        queuedAutomationImage = null;
-                        if (status != null) status.setText("Alice: кнопка загрузки пока не найдена — требуется диагностика");
-                        ChatActivity.onAliceAutomationStatus(host,
-                                "Alice открыта, но её поле загрузки не обнаружено автоматически. Нужна диагностика страницы.");
-                    }
-                });
+                if (pageLoaded) launchQueuedImageUpload();
+                else if (status != null) status.setText("Alice: изображение подготовлено, ожидаю загрузку страницы…");
             });
+        });
+    }
+
+    private void launchQueuedImageUpload() {
+        if (webView == null || queuedAutomationImage == null || destroyed) return;
+        if (status != null) status.setText("Alice: передаю изображение в форму сайта…");
+        webView.evaluateJavascript(
+                "(function(){var f=[...document.querySelectorAll('input[type=file]')].find(x=>!x.disabled);"
+                + "if(f){f.click();return 'file-input-clicked'}"
+                + "return 'file-input-not-found'})()", raw -> {
+            Log.i(TAG, "Alice upload input probe: " + raw);
+            if (raw == null || raw.contains("not-found")) {
+                queuedAutomationImage = null;
+                if (status != null) status.setText("Alice: поле загрузки не найдено — нужна диагностика");
+                ChatActivity.onAliceAutomationStatus(host,
+                        "Alice открыта, но поле загрузки не обнаружено автоматически. Нужна диагностика страницы.");
+            }
         });
     }
 
