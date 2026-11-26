@@ -2,6 +2,8 @@ package com.astra.loremotionbridge;
 
 import android.app.Activity;
 import android.graphics.Color;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -28,10 +30,15 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -275,6 +282,84 @@ public final class AliceBrowserPanel extends LinearLayout {
                 else callback.onReceiveValue(null);
             });
         });
+    }
+
+
+    /** Bridge-safe status snapshot for the already embedded Alice WebView. */
+    public String bridgeStatusJson() {
+        JSONObject out = new JSONObject();
+        try {
+            final String[] values = new String[3];
+            final boolean[] exists = new boolean[1];
+            Runnable read = () -> {
+                exists[0] = !destroyed && webView != null;
+                values[0] = exists[0] ? String.valueOf(webView.getUrl()) : "";
+                values[1] = String.valueOf(pageLoaded);
+                values[2] = String.valueOf(getVisibility() == View.VISIBLE);
+            };
+            if (Looper.myLooper() == Looper.getMainLooper()) read.run();
+            else {
+                CountDownLatch latch = new CountDownLatch(1);
+                main.post(() -> { try { read.run(); } finally { latch.countDown(); } });
+                if (!latch.await(5, TimeUnit.SECONDS)) throw new java.util.concurrent.TimeoutException("ui_timeout");
+            }
+            out.put("ok", true).put("panel_exists", true).put("webview_exists", exists[0])
+                    .put("url", values[0]).put("page_loaded", Boolean.parseBoolean(values[1]))
+                    .put("panel_visible", Boolean.parseBoolean(values[2]));
+        } catch (Exception e) {
+            try { out.put("ok", false).put("error", e.toString()); } catch (Exception ignored) {}
+        }
+        return out.toString();
+    }
+
+    /** Evaluate read/inspection JavaScript in this exact in-chat WebView. */
+    public String bridgeEvaluate(String script) {
+        if (script == null || script.trim().isEmpty()) return "{\"ok\":false,\"error\":\"empty_script\"}";
+        if (script.length() > 100000) return "{\"ok\":false,\"error\":\"script_too_large\"}";
+        final CountDownLatch latch = new CountDownLatch(1);
+        final AtomicReference<String> result = new AtomicReference<>();
+        Runnable evaluate = () -> {
+            if (destroyed || webView == null) { result.set(null); latch.countDown(); return; }
+            try {
+                webView.evaluateJavascript(script, value -> { result.set(value); latch.countDown(); });
+            } catch (Exception e) { result.set(null); latch.countDown(); }
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) evaluate.run();
+        else main.post(evaluate);
+        try {
+            if (!latch.await(12, TimeUnit.SECONDS)) return "{\"ok\":false,\"error\":\"javascript_timeout\"}";
+            if (result.get() == null) return "{\"ok\":false,\"error\":\"alice_webview_unavailable\"}";
+            return new JSONObject().put("ok", true).put("result", result.get()).toString();
+        } catch (Exception e) {
+            return "{\"ok\":false,\"error\":\"" + e.getClass().getSimpleName() + "\"}";
+        }
+    }
+
+    /** Capture the current rendered WebView into PNG bytes on the Android UI thread. */
+    public byte[] bridgeScreenshotPng() {
+        final CountDownLatch latch = new CountDownLatch(1);
+        final AtomicReference<byte[]> result = new AtomicReference<>();
+        Runnable capture = () -> {
+            try {
+                if (destroyed || webView == null) return;
+                int width = webView.getWidth();
+                int height = webView.getHeight();
+                if (width <= 0 || height <= 0) return;
+                Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+                Canvas canvas = new Canvas(bitmap);
+                webView.draw(canvas);
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                if (bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) result.set(out.toByteArray());
+                bitmap.recycle();
+            } catch (Exception e) {
+                Log.e(TAG, "Bridge screenshot failed", e);
+            } finally { latch.countDown(); }
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) capture.run();
+        else main.post(capture);
+        try { latch.await(8, TimeUnit.SECONDS); }
+        catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        return result.get();
     }
 
     private void downloadAndDeliver(String id) {
