@@ -987,7 +987,7 @@ public class ChatActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
-        if (aliceBrowserPanel != null) aliceBrowserPanel.onHostPause();
+        if (aliceBrowserPanel != null) aliceBrowserPanel.dispose();
         if (activeInstance == this) activeInstance = null;
         // Keep the native model alive for the process; do not unload on screen close.
         super.onDestroy();
