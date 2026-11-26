@@ -61,6 +61,9 @@ public class ChatActivity extends Activity {
     private JSONArray history;
     private volatile boolean busy = false;
     private boolean chatResumed = false;
+    private static final int PICK_ALICE_IMAGE = 18772;
+    private FrameLayout overlayHost;
+    private AliceBrowserPanel aliceBrowserPanel;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -97,6 +100,7 @@ public class ChatActivity extends Activity {
         updateProviderStatus();
         consumePendingPerchanceImages();
         consumePendingFlowVideos();
+        consumePendingAliceVideos();
     }
 
     @Override protected void onResume() {
@@ -104,10 +108,12 @@ public class ChatActivity extends Activity {
         chatResumed = true;
         consumePendingPerchanceImages();
         consumePendingFlowVideos();
+        if (aliceBrowserPanel != null) aliceBrowserPanel.onHostResume();
     }
 
     @Override protected void onPause() {
         chatResumed = false;
+        if (aliceBrowserPanel != null) aliceBrowserPanel.onHostPause();
         super.onPause();
     }
 
@@ -168,6 +174,12 @@ public class ChatActivity extends Activity {
         LinearLayout.LayoutParams flowParams = new LinearLayout.LayoutParams(-1, dp(43));
         flowParams.bottomMargin = dp(8);
         root.addView(googleFlow, flowParams);
+
+        Button aliceMedia = smallButton("✦  ALICE MEDIA · ОЖИВИТЬ КАРТИНУ", LILAC);
+        aliceMedia.setOnClickListener(v -> openAliceMediaPanel());
+        LinearLayout.LayoutParams aliceParams = new LinearLayout.LayoutParams(-1, dp(43));
+        aliceParams.bottomMargin = dp(8);
+        root.addView(aliceMedia, aliceParams);
 
         installButton = smallButton("＋  ПОДКЛЮЧИТЬ OPENROUTER · API KEY", CYAN);
         installButton.setOnClickListener(v -> showOpenRouterSetup());
@@ -246,9 +258,137 @@ public class ChatActivity extends Activity {
         }
         frame.addView(wallpaper, new FrameLayout.LayoutParams(-1, -1));
         frame.addView(screen, new FrameLayout.LayoutParams(-1, -1));
+        overlayHost = frame;
         setContentView(frame);
     }
 
+
+    private void chooseAliceImage() {
+        Intent pick;
+        if (Build.VERSION.SDK_INT >= 33) {
+            pick = new Intent(android.provider.MediaStore.ACTION_PICK_IMAGES);
+            pick.setType("image/*");
+            pick.putExtra(android.provider.MediaStore.EXTRA_PICK_IMAGES_MAX, 1);
+        } else {
+            pick = new Intent(Intent.ACTION_GET_CONTENT);
+            pick.setType("image/*");
+            pick.addCategory(Intent.CATEGORY_OPENABLE);
+        }
+        startActivityForResult(pick, PICK_ALICE_IMAGE);
+    }
+
+    private void promptAliceImage(Uri image) {
+        EditText promptInput = new EditText(this);
+        promptInput.setHint("Опиши движение для Alice");
+        promptInput.setTextColor(WHITE);
+        promptInput.setHintTextColor(Color.GRAY);
+        LinearLayout box = new LinearLayout(this);
+        box.setPadding(dp(18), dp(8), dp(18), 0);
+        box.addView(promptInput, new LinearLayout.LayoutParams(-1, dp(76)));
+        new AlertDialog.Builder(this)
+                .setTitle("ASTRA · Оживить картину")
+                .setView(box)
+                .setPositiveButton("ЗАПУСТИТЬ", (dialog, which) -> {
+                    String prompt = promptInput.getText().toString().trim();
+                    if (prompt.isEmpty()) {
+                        addMessage("Напиши описание движения для Alice.", false, true);
+                        return;
+                    }
+                    addMessage("✦ ASTRA · передаю картину и промпт в Alice…", false, true);
+                    ensureAliceWorker();
+                    if (aliceBrowserPanel != null) aliceBrowserPanel.submitImageAndPrompt(image, prompt);
+                })
+                .setNegativeButton("ОТМЕНА", null)
+                .show();
+    }
+
+    private void ensureAliceWorker() {
+        if (overlayHost == null || isFinishing()) return;
+        if (aliceBrowserPanel == null) {
+            aliceBrowserPanel = new AliceBrowserPanel(this, message ->
+                    runOnUiThread(() -> addMessage("✦ Alice · " + message, false, true)));
+            overlayHost.addView(aliceBrowserPanel, new FrameLayout.LayoutParams(-1, -1));
+        }
+        aliceBrowserPanel.setVisibility(View.GONE);
+        aliceBrowserPanel.onHostResume();
+        android.util.Log.i("ASTRA-ALICE", "Hidden Alice worker ready; chat remains foreground");
+    }
+
+    private void openAliceMediaPanel() {
+        if (overlayHost == null || isFinishing()) return;
+        if (aliceBrowserPanel == null) {
+            aliceBrowserPanel = new AliceBrowserPanel(this, message ->
+                    runOnUiThread(() -> addMessage("✦ Alice · " + message, false, true)));
+            overlayHost.addView(aliceBrowserPanel, new FrameLayout.LayoutParams(-1, -1));
+        }
+        aliceBrowserPanel.setVisibility(View.VISIBLE);
+        aliceBrowserPanel.bringToFront();
+        aliceBrowserPanel.onHostResume();
+    }
+
+    public static void onAliceVideoReady(Context context, Uri video) {
+        if (context == null || video == null) return;
+        android.content.SharedPreferences prefs = context.getSharedPreferences("astra_chat", MODE_PRIVATE);
+        JSONArray pending;
+        try { pending = new JSONArray(prefs.getString("alice_pending_videos", "[]")); }
+        catch (Exception e) { pending = new JSONArray(); }
+        try {
+            pending.put(new JSONObject().put("uri", video.toString()));
+            prefs.edit().putString("alice_pending_videos", pending.toString()).apply();
+        } catch (Exception ignored) {}
+        ChatActivity activity = activeInstance;
+        if (activity != null && activity.chatResumed) {
+            activity.runOnUiThread(() -> {
+                if (activity.chatResumed) activity.consumePendingAliceVideos();
+            });
+        }
+    }
+
+    private void consumePendingAliceVideos() {
+        if (isFinishing() || messages == null) return;
+        android.content.SharedPreferences prefs = getSharedPreferences("astra_chat", MODE_PRIVATE);
+        JSONArray pending;
+        try { pending = new JSONArray(prefs.getString("alice_pending_videos", "[]")); }
+        catch (Exception e) { pending = new JSONArray(); }
+        if (pending.length() == 0) return;
+        prefs.edit().remove("alice_pending_videos").apply();
+        for (int i=0;i<pending.length();i++) {
+            JSONObject item = pending.optJSONObject(i);
+            if (item == null) continue;
+            String value = item.optString("uri", "");
+            if (!value.isEmpty()) addAliceVideoMessage(Uri.parse(value), true);
+        }
+    }
+
+    private void addAliceVideoMessage(Uri video, boolean save) {
+        if (video == null || video.toString().isEmpty() || messages == null) return;
+        String message = "✦ ALICE: видео сохранено · Movies/ASTRA/Alice\\nНажми здесь, чтобы открыть MP4.";
+        addMessage(message, false, false);
+        int last = messages.getChildCount() - 1;
+        if (last >= 0) {
+            View row = messages.getChildAt(last);
+            if (row instanceof ViewGroup && ((ViewGroup) row).getChildCount() > 0) {
+                View bubble = ((ViewGroup) row).getChildAt(0);
+                bubble.setOnClickListener(v -> {
+                    Intent open = new Intent(Intent.ACTION_VIEW);
+                    open.setDataAndType(video, "video/mp4");
+                    open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    try { startActivity(open); }
+                    catch (Exception e) { addMessage("Не найдено приложение для просмотра MP4.", false, true); }
+                });
+            }
+        }
+        if (save) {
+            try {
+                history.put(new JSONObject().put("type", "alice_video").put("text", message)
+                        .put("uri", video.toString()).put("user", false));
+                getSharedPreferences("astra_chat", MODE_PRIVATE).edit()
+                        .putString("messages", history.toString()).apply();
+            } catch (Exception e) {
+                android.util.Log.e("ASTRA-ALICE-CHAT", "Could not persist Alice video message", e);
+            }
+        }
+    }
 
     private void showAppearanceMenu() {
         new AlertDialog.Builder(this)
@@ -286,6 +426,14 @@ public class ChatActivity extends Activity {
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == AliceBrowserPanel.FILE_CHOOSER_REQUEST && aliceBrowserPanel != null) {
+            aliceBrowserPanel.handleActivityResult(requestCode, resultCode, data);
+            return;
+        }
+        if (requestCode == PICK_ALICE_IMAGE && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            promptAliceImage(data.getData());
+            return;
+        }
         if (requestCode == PICK_MOTION_REFERENCE && resultCode == RESULT_OK && data != null && data.getData() != null) {
             processMotionReference(data.getData());
             return;
@@ -904,6 +1052,7 @@ public class ChatActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        if (aliceBrowserPanel != null) aliceBrowserPanel.dispose();
         if (activeInstance == this) activeInstance = null;
         // Keep the native model alive for the process; do not unload on screen close.
         super.onDestroy();
