@@ -62,7 +62,6 @@ public class ChatActivity extends Activity {
     private PerchanceBrowserPanel perchanceBrowserPanel;
     private FlowBrowserPanel flowBrowserPanel;
     private ZSkyBrowserPanel zskyBrowserPanel;
-    private AliceMediaBrowserPanel aliceMediaBrowserPanel;
     private Button installButton;
     private JSONArray history;
     private volatile boolean busy = false;
@@ -119,7 +118,6 @@ public class ChatActivity extends Activity {
         if (perchanceBrowserPanel != null) perchanceBrowserPanel.onHostResume();
         if (flowBrowserPanel != null) flowBrowserPanel.onHostResume();
         if (zskyBrowserPanel != null) zskyBrowserPanel.onHostResume();
-        if (aliceMediaBrowserPanel != null) aliceMediaBrowserPanel.onHostResume();
     }
 
     @Override protected void onPause() {
@@ -127,7 +125,6 @@ public class ChatActivity extends Activity {
         if (perchanceBrowserPanel != null) perchanceBrowserPanel.onHostPause();
         if (flowBrowserPanel != null) flowBrowserPanel.onHostPause();
         if (zskyBrowserPanel != null) zskyBrowserPanel.onHostPause();
-        if (aliceMediaBrowserPanel != null) aliceMediaBrowserPanel.onHostPause();
         super.onPause();
     }
 
@@ -273,7 +270,7 @@ public class ChatActivity extends Activity {
                             BrowserSessionManager.openFlow(this);
                             break;
                         case 3:
-                            openAliceMediaInChat();
+                            BrowserSessionManager.openAliceMedia(this);
                             break;
                         case 4:
                             // Open the authenticated studio for manual sign-in; never submit a prompt here.
@@ -695,23 +692,9 @@ public class ChatActivity extends Activity {
         if (activity != null && activity.chatResumed) activity.runOnUiThread(activity::consumePendingAliceVideos);
     }
 
-    private void openAliceMediaInChat() {
-        if (isFinishing()) return;
-        if (aliceMediaBrowserPanel == null) {
-            aliceMediaBrowserPanel = new AliceMediaBrowserPanel(this);
-            if (workerHost != null) workerHost.addView(aliceMediaBrowserPanel,
-                    new FrameLayout.LayoutParams(-1, -1));
-        }
-        aliceMediaBrowserPanel.setVisibility(View.VISIBLE);
-        aliceMediaBrowserPanel.onHostResume();
-        modelStatus.setText("● ASTRA · ALICE AI MEDIA РАБОТАЕТ В ЧАТЕ");
-    }
-
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (aliceMediaBrowserPanel != null)
-            aliceMediaBrowserPanel.onActivityResult(requestCode, resultCode, data);
     }
 
     private void consumePendingPerchanceImages() {
