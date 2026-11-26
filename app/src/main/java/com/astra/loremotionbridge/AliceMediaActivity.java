@@ -9,6 +9,9 @@ import android.os.Looper;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -88,11 +91,33 @@ public final class AliceMediaActivity extends Activity {
             settings.setLoadsImagesAutomatically(true);
             settings.setJavaScriptCanOpenWindowsAutomatically(true);
             settings.setSupportMultipleWindows(false);
-            CookieManager.getInstance().setAcceptCookie(true);
-            CookieManager.getInstance().setAcceptThirdPartyCookies(sharedWebView,true);
+            CookieManager cookies = CookieManager.getInstance();
+            cookies.setAcceptCookie(true);
+            cookies.setAcceptThirdPartyCookies(sharedWebView,true);
             sharedWebView.setWebChromeClient(new WebChromeClient());
             sharedWebView.setWebViewClient(new WebViewClient() {
+                @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                    Log.i(TAG, "Navigation started: " + safeUrl(url));
+                    super.onPageStarted(view, url, favicon);
+                }
+                @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                    super.onReceivedError(view, request, error);
+                    if (request != null && request.isForMainFrame()) {
+                        Log.e(TAG, "Main-frame load error: url=" + safeUrl(String.valueOf(request.getUrl()))
+                                + " code=" + (error == null ? -1 : error.getErrorCode())
+                                + " description=" + (error == null ? "unknown" : error.getDescription()));
+                    }
+                }
+                @Override public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
+                    super.onReceivedHttpError(view, request, response);
+                    if (request != null && request.isForMainFrame()) {
+                        Log.e(TAG, "Main-frame HTTP error: url=" + safeUrl(String.valueOf(request.getUrl()))
+                                + " status=" + (response == null ? -1 : response.getStatusCode()));
+                    }
+                }
                 @Override public void onPageFinished(WebView view,String url) {
+                    Log.i(TAG, "Navigation finished: " + safeUrl(url));
+                    CookieManager.getInstance().flush();
                     super.onPageFinished(view,url);
                     if (!monitorStarted) {
                         // Snapshot IDs already present before the user starts a new animation.
@@ -139,7 +164,20 @@ public final class AliceMediaActivity extends Activity {
         }
     }
 
+    private static String safeUrl(String raw) {
+        if (raw == null) return "";
+        try {
+            Uri u = Uri.parse(raw);
+            return u.getScheme() + "://" + u.getHost() + (u.getPath() == null ? "" : u.getPath());
+        } catch (Exception ignored) { return "[invalid_url]"; }
+    }
+
     private int dp(int v) { return (int)(v*getResources().getDisplayMetrics().density+0.5f); }
+
+    @Override public void onBackPressed() {
+        // Keep Alice in its own task, like Perchance: returning to ASTRA must not destroy the page.
+        moveTaskToBack(true);
+    }
 
     @Override protected void onDestroy() {
         if (webView != null) {
