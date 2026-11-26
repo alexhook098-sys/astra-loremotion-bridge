@@ -262,6 +262,17 @@ public final class AliceBrowserPanel extends LinearLayout {
         webView.evaluateJavascript(js, raw -> Log.i(TAG, "Alice upload control: " + raw));
     }
 
+    private void clickUploadControl() {
+        if (destroyed || webView == null || queuedAutomationImage == null) return;
+        String js = "(function(){"
+                + "var vis=e=>!!(e&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden');"
+                + "var b=[...document.querySelectorAll('button,[role=button]')].find(e=>vis(e)&&/загрузить\\\\s+фото/i.test((e.innerText||e.getAttribute('aria-label')||'').trim()));"
+                + "if(b){b.click();return 'upload-button-clicked'}"
+                + "var f=[...document.querySelectorAll('input[type=file]')].find(vis);"
+                + "if(f){f.click();return 'file-input-clicked'}"
+                + "return 'upload-control-not-found'})()";
+        webView.evaluateJavascript(js, raw -> Log.i(TAG, "Alice upload control: " + raw));
+    }
     private void enterPromptAndStart() {
         if (destroyed || webView == null || queuedAutomationPrompt == null) return;
         final String prompt = queuedAutomationPrompt;
