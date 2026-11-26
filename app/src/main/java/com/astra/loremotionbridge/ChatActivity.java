@@ -62,6 +62,8 @@ public class ChatActivity extends Activity {
     private PerchanceBrowserPanel perchanceBrowserPanel;
     private FlowBrowserPanel flowBrowserPanel;
     private ZSkyBrowserPanel zskyBrowserPanel;
+    private AliceBrowserPanel aliceBrowserPanel;
+    private FrameLayout overlayHost;
     private Button installButton;
     private JSONArray history;
     private volatile boolean busy = false;
@@ -118,6 +120,7 @@ public class ChatActivity extends Activity {
         if (perchanceBrowserPanel != null) perchanceBrowserPanel.onHostResume();
         if (flowBrowserPanel != null) flowBrowserPanel.onHostResume();
         if (zskyBrowserPanel != null) zskyBrowserPanel.onHostResume();
+        if (aliceBrowserPanel != null) aliceBrowserPanel.onHostResume();
     }
 
     @Override protected void onPause() {
@@ -125,6 +128,7 @@ public class ChatActivity extends Activity {
         if (perchanceBrowserPanel != null) perchanceBrowserPanel.onHostPause();
         if (flowBrowserPanel != null) flowBrowserPanel.onHostPause();
         if (zskyBrowserPanel != null) zskyBrowserPanel.onHostPause();
+        if (aliceBrowserPanel != null) aliceBrowserPanel.onHostPause();
         super.onPause();
     }
 
@@ -179,7 +183,7 @@ public class ChatActivity extends Activity {
         root.addView(radioButton, radioParams);
 
         Button aliceButton = smallButton("✦  ALICE MEDIA", LILAC);
-        aliceButton.setOnClickListener(v -> startActivity(new Intent(this, AliceMediaActivity.class)));
+        aliceButton.setOnClickListener(v -> openAliceMediaPanel());
         LinearLayout.LayoutParams aliceParams = new LinearLayout.LayoutParams(-1, dp(40));
         aliceParams.bottomMargin = dp(10);
         root.addView(aliceButton, aliceParams);
@@ -248,6 +252,7 @@ public class ChatActivity extends Activity {
         workerHost.setFocusable(false);
         frame.addView(workerHost, new FrameLayout.LayoutParams(-1, -1));
         frame.addView(screen, new FrameLayout.LayoutParams(-1, -1));
+        overlayHost = frame;
         setContentView(frame);
     }
 
@@ -955,6 +960,18 @@ public class ChatActivity extends Activity {
                 .show();
     }
 
+    private void openAliceMediaPanel() {
+        if (overlayHost == null || isFinishing()) return;
+        if (aliceBrowserPanel == null) {
+            aliceBrowserPanel = new AliceBrowserPanel(this);
+            overlayHost.addView(aliceBrowserPanel, new FrameLayout.LayoutParams(-1, -1));
+        }
+        aliceBrowserPanel.setVisibility(View.VISIBLE);
+        aliceBrowserPanel.bringToFront();
+        aliceBrowserPanel.onHostResume();
+        android.util.Log.i("ASTRA-ALICE", "Embedded Alice panel shown; WebView retained in ChatActivity");
+    }
+
     private void openPerchanceStudio() {
         // Open the full provider page for manual login, model/settings changes and account maintenance.
         startActivity(new Intent(this, PerchanceBrowserActivity.class));
@@ -1121,11 +1138,18 @@ public class ChatActivity extends Activity {
         return (int)(n * getResources().getDisplayMetrics().density + 0.5f);
     }
 
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == AliceBrowserPanel.FILE_CHOOSER_REQUEST && aliceBrowserPanel != null) {
+            aliceBrowserPanel.handleActivityResult(requestCode, resultCode, data);
+            return;
+        }
     @Override protected void onDestroy() {
         if (activeInstance == this) activeInstance = null;
         if (perchanceBrowserPanel != null) { perchanceBrowserPanel.dispose(); perchanceBrowserPanel = null; }
         if (flowBrowserPanel != null) { flowBrowserPanel.dispose(); flowBrowserPanel = null; }
         if (zskyBrowserPanel != null) { zskyBrowserPanel.dispose(); zskyBrowserPanel = null; }
+        if (aliceBrowserPanel != null) { aliceBrowserPanel.dispose(); aliceBrowserPanel = null; }
         // Keep the native model alive for the process; do not unload on screen close.
         super.onDestroy();
     }
