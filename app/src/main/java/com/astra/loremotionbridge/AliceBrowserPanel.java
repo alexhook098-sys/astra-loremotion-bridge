@@ -57,6 +57,8 @@ public final class AliceBrowserPanel extends LinearLayout {
     private boolean pageLoaded;
     private boolean monitorStarted;
     private boolean destroyed;
+    private Uri queuedAutomationImage;
+    private String queuedAutomationPrompt;
 
     private final Runnable monitor = new Runnable() {
         @Override public void run() {
@@ -155,6 +157,14 @@ public final class AliceBrowserPanel extends LinearLayout {
                 if (pendingFileCallback != null) {
                     try { pendingFileCallback.onReceiveValue(null); } catch (Exception ignored) {}
                 }
+                if (queuedAutomationImage != null) {
+                    Uri image = queuedAutomationImage;
+                    queuedAutomationImage = null;
+                    callback.onReceiveValue(new Uri[]{image});
+                    Log.i(TAG, "Automation image supplied directly to Alice file chooser");
+                    main.postDelayed(() -> enterPromptAndStart(), 1800L);
+                    return true;
+                }
                 pendingFileCallback = callback;
                 android.content.Intent pick = new android.content.Intent(android.content.Intent.ACTION_GET_CONTENT);
                 pick.setType("image/*");
@@ -227,6 +237,58 @@ public final class AliceBrowserPanel extends LinearLayout {
             main.removeCallbacks(monitor);
             main.post(monitor);
             Log.i(TAG, "Baseline captured; Flow-style background observer started");
+        });
+    }
+
+    public void submitImageAndPrompt(Uri image, String prompt) {
+        if (destroyed || image == null || prompt == null || prompt.trim().isEmpty()) {
+            Log.w(TAG, "Automation rejected: missing image or prompt");
+            return;
+        }
+        queuedAutomationImage = image;
+        queuedAutomationPrompt = prompt.trim();
+        if (!pageLoaded || webView == null) {
+            Log.w(TAG, "Automation queued until Alice page is ready");
+            return;
+        }
+        String js = "(function(){"
+                + "var vis=e=>!!(e&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden');"
+                + "var b=[...document.querySelectorAll('button,[role=button]')].find(e=>vis(e)&&/загрузить\\s+фото/i.test((e.innerText||e.getAttribute('aria-label')||'').trim()));"
+                + "if(b){b.click();return 'upload-button-clicked'}"
+                + "var f=[...document.querySelectorAll('input[type=file]')].find(vis);"
+                + "if(f){f.click();return 'file-input-clicked'}"
+                + "return 'upload-control-not-found'})()";
+        webView.evaluateJavascript(js, raw -> Log.i(TAG, "Alice upload control: " + raw));
+    }
+
+    private void enterPromptAndStart() {
+        if (destroyed || webView == null || queuedAutomationPrompt == null) return;
+        final String prompt = queuedAutomationPrompt;
+        final String quoted = JSONObject.quote(prompt);
+        String js = "(function(){"
+                + "var vis=e=>!!(e&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden');"
+                + "var fields=[...document.querySelectorAll('textarea,input:not([type=file]),[contenteditable=true],[role=textbox]')].filter(vis);"
+                + "var field=fields.find(e=>/например|что сделать|описание/i.test((e.getAttribute('placeholder')||e.getAttribute('aria-label')||'')))"
+                + "||fields.find(e=>e.matches('[contenteditable=true],[role=textbox]'))||fields.find(e=>e.tagName==='TEXTAREA')||fields[0];"
+                + "if(!field)return JSON.stringify({ok:false,stage:'prompt-field-not-found',fields:fields.length});"
+                + "field.focus();"
+                + "if(field.isContentEditable||field.getAttribute('role')==='textbox'){field.textContent=" + quoted + ";}"
+                + "else{var proto=field.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;"
+                + "var setter=Object.getOwnPropertyDescriptor(proto,'value');if(setter&&setter.set)setter.set.call(field," + quoted + ");else field.value=" + quoted + ";}"
+                + "field.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:" + quoted + "}));"
+                + "field.dispatchEvent(new Event('change',{bubbles:true}));"
+                + "var root=field;for(var i=0;i<8&&root;i++,root=root.parentElement){"
+                + "var bs=[...root.querySelectorAll('button,[role=button]')].filter(e=>vis(e)&&!e.disabled);"
+                + "var named=bs.find(e=>/создать|сгенерировать|отправить|оживить|generate|submit/i.test((e.getAttribute('aria-label')||'')+' '+(e.title||'')+' '+(e.innerText||'')));"
+                + "if(named){named.click();return JSON.stringify({ok:true,stage:'prompt-entered-and-named-button-clicked',button:named.outerHTML.slice(0,500)});}"
+                + "var arrows=bs.filter(e=>e.querySelector('svg')&&!/что сделать/i.test(e.innerText||''));"
+                + "if(arrows.length){var target=arrows[arrows.length-1];target.click();return JSON.stringify({ok:true,stage:'prompt-entered-and-composer-arrow-clicked',button:target.outerHTML.slice(0,500)});}"
+                + "}"
+                + "return JSON.stringify({ok:false,stage:'prompt-entered-but-launch-button-not-found'});"
+                + "})()";
+        webView.evaluateJavascript(js, raw -> {
+            Log.i(TAG, "Alice automation result: " + raw);
+            queuedAutomationPrompt = null;
         });
     }
 
