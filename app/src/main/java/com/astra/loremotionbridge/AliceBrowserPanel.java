@@ -109,7 +109,7 @@ public final class AliceBrowserPanel extends LinearLayout {
         LinearLayout root = new LinearLayout(host);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(12), dp(10), dp(12), dp(8));
-        TextView title = new TextView(this);
+        TextView title = new TextView(host);
         title.setText("✦  ASTRA · ALICE MEDIA");
         title.setTextColor(android.graphics.Color.rgb(229, 199, 255));
         title.setTextSize(18);
