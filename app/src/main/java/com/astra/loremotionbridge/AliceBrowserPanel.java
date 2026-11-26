@@ -54,6 +54,8 @@ public final class AliceBrowserPanel extends LinearLayout {
     private WebView webView;
     private TextView status;
     private ValueCallback<Uri[]> pendingFileCallback;
+    private Uri queuedAutomationImage;
+    private String queuedAutomationPrompt;
     private boolean pageLoaded;
     private boolean monitorStarted;
     private boolean destroyed;
@@ -156,6 +158,14 @@ public final class AliceBrowserPanel extends LinearLayout {
                     try { pendingFileCallback.onReceiveValue(null); } catch (Exception ignored) {}
                 }
                 pendingFileCallback = callback;
+                if (queuedAutomationImage != null) {
+                    Uri queued = queuedAutomationImage;
+                    queuedAutomationImage = null;
+                    pendingFileCallback = null;
+                    callback.onReceiveValue(new Uri[]{queued});
+                    Log.i(TAG, "Automation supplied queued chat image to Alice file input");
+                    return true;
+                }
                 android.content.Intent pick = new android.content.Intent(android.content.Intent.ACTION_GET_CONTENT);
                 pick.setType("image/*");
                 pick.addCategory(android.content.Intent.CATEGORY_OPENABLE);
@@ -200,6 +210,7 @@ public final class AliceBrowserPanel extends LinearLayout {
                 if (status != null) status.setText("Alice: страница загружена · наблюдатель активен");
                 Log.i(TAG, "Page finished: " + safeUrl(url));
                 if (!monitorStarted) captureBaselineAndStartMonitor(view);
+                if (queuedAutomationPrompt != null) inspectAutomationForm();
             }
         });
 
@@ -228,6 +239,77 @@ public final class AliceBrowserPanel extends LinearLayout {
             main.post(monitor);
             Log.i(TAG, "Baseline captured; Flow-style background observer started");
         });
+    }
+
+    /**
+     * Starts the safe first stage of chat-driven Alice automation: copy the selected image
+     * into app cache, trigger the site's native file input, and let WebChromeClient deliver
+     * the queued content URI. Prompt/button automation remains gated on DOM diagnostics.
+     */
+    public void prepareChatAutomation(Uri sourceImage, String prompt) {
+        if (sourceImage == null || prompt == null || prompt.trim().isEmpty() || destroyed) return;
+        queuedAutomationPrompt = prompt.trim();
+        if (status != null) status.setText("Alice: подготавливаю изображение из сообщения ASTRA…");
+        io.execute(() -> {
+            Uri shareUri = null;
+            try {
+                File dir = new File(host.getCacheDir(), "uploads");
+                if (!dir.exists() && !dir.mkdirs()) throw new java.io.IOException("cache_dir_failed");
+                String mime = host.getContentResolver().getType(sourceImage);
+                String ext = mime != null && mime.toLowerCase(Locale.US).contains("png") ? ".png"
+                        : mime != null && mime.toLowerCase(Locale.US).contains("webp") ? ".webp" : ".jpg";
+                File copy = new File(dir, "alice-chat-" + System.currentTimeMillis() + ext);
+                long total = 0L;
+                try (InputStream in = host.getContentResolver().openInputStream(sourceImage);
+                     FileOutputStream out = new FileOutputStream(copy)) {
+                    if (in == null) throw new java.io.IOException("source_stream_unavailable");
+                    byte[] buffer = new byte[16384];
+                    int count;
+                    while ((count = in.read(buffer)) != -1) {
+                        total += count;
+                        if (total > MAX_UPLOAD_BYTES) throw new java.io.IOException("image_too_large");
+                        out.write(buffer, 0, count);
+                    }
+                    out.flush();
+                }
+                shareUri = FileProvider.getUriForFile(host, host.getPackageName() + ".fileprovider", copy);
+                Log.i(TAG, "Chat image staged bytes=" + total + " mime=" + mime);
+            } catch (Exception e) {
+                Log.e(TAG, "Could not stage chat image for Alice", e);
+            }
+            final Uri ready = shareUri;
+            main.post(() -> {
+                if (destroyed) return;
+                if (ready == null) {
+                    if (status != null) status.setText("Alice: не удалось подготовить изображение");
+                    ChatActivity.onAliceAutomationStatus(host, "Не удалось подготовить изображение для Alice.");
+                    return;
+                }
+                queuedAutomationImage = ready;
+                if (status != null) status.setText("Alice: передаю изображение в форму сайта…");
+                webView.evaluateJavascript(
+                        "(function(){var f=[...document.querySelectorAll('input[type=file]')].find(x=>!x.disabled);"
+                        + "if(f){f.click();return 'file-input-clicked'}"
+                        + "return 'file-input-not-found'})()", raw -> {
+                    Log.i(TAG, "Alice upload input probe: " + raw);
+                    if (raw == null || raw.contains("not-found")) {
+                        queuedAutomationImage = null;
+                        if (status != null) status.setText("Alice: кнопка загрузки пока не найдена — требуется диагностика");
+                        ChatActivity.onAliceAutomationStatus(host,
+                                "Alice открыта, но её поле загрузки не обнаружено автоматически. Нужна диагностика страницы.");
+                    }
+                });
+            });
+        });
+    }
+
+    private void inspectAutomationForm() {
+        if (webView == null || destroyed) return;
+        String js = "(function(){return JSON.stringify({"
+                + "inputs:[...document.querySelectorAll('textarea,input:not([type=file]),[contenteditable=true],[role=textbox]')].filter(e=>{var r=e.getBoundingClientRect();return r.width>0&&r.height>0}).map(e=>({tag:e.tagName,type:e.type||'',placeholder:e.getAttribute('placeholder')||'',aria:e.getAttribute('aria-label')||'',role:e.getAttribute('role')||'',text:(e.innerText||'').slice(0,80)})).slice(0,20),"
+                + "buttons:[...document.querySelectorAll('button,[role=button]')].filter(e=>{var r=e.getBoundingClientRect();return r.width>0&&r.height>0}).map(e=>({text:(e.innerText||'').trim().slice(0,80),aria:e.getAttribute('aria-label')||'',title:e.getAttribute('title')||'',disabled:!!e.disabled})).slice(0,40)"
+                + "})})()";
+        webView.evaluateJavascript(js, raw -> Log.i(TAG, "Alice automation DOM candidates: " + raw));
     }
 
     public void handleActivityResult(int requestCode, int resultCode, android.content.Intent data) {
