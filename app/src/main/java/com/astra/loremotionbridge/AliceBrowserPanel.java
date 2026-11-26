@@ -284,7 +284,7 @@ public final class AliceBrowserPanel extends LinearLayout {
                 + "var fields=[...document.querySelectorAll('textarea,input:not([type=file]),[contenteditable=true],[role=textbox]')].filter(vis);"
                 + "var field=fields.find(e=>/например|что сделать|описание/i.test((e.getAttribute('placeholder')||e.getAttribute('aria-label')||'')))||fields.find(e=>e.matches('[contenteditable=true],[role=textbox]'))||fields.find(e=>e.tagName==='TEXTAREA')||fields[0];"
                 + "var files=[...document.querySelectorAll('input[type=file]')].reduce((n,e)=>n+(e.files?e.files.length:0),0);"
-                + "var preview=false;for(var p=field,i=0;p&&i<9;p=p.parentElement,i++){if(p.querySelectorAll('img').length>0){preview=true;break;}}"
+                + "var preview=false;for(var p=field,i=0;p&&i<6;p=p.parentElement,i++){if([...p.querySelectorAll('img')].some(im=>/^(blob:|data:image\\/)/i.test(im.currentSrc||im.src||''))){preview=true;break;}}"
                 + "return JSON.stringify({files:files,preview:preview});})()";
         webView.evaluateJavascript(js, raw -> {
             try {
