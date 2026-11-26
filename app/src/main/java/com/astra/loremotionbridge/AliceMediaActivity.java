@@ -99,6 +99,7 @@ public final class AliceMediaActivity extends Activity {
                         String baselineScript = "(function(){var u=[];document.querySelectorAll('video,video source,a[href]').forEach(e=>{var x=e.currentSrc||e.src||e.href||'';if(x)u.push(x)});"
                                 + "performance.getEntriesByType('resource').forEach(e=>{if(/webalice|yaart-images|video/i.test(e.name))u.push(e.name)});"
                                 + "var ids=new Set();u.forEach(x=>{var p=String(x).split('webalice/')[1]||'';var m=p.match(/^([0-9a-f]{32})/i)||String(x).match(/[?&]video=([0-9a-f]{32})/i);if(m)ids.add(m[1].toLowerCase())});"
+                                + "var m=location.href.match(/[?&]video=([0-9a-f]{32})/i);if(m)ids.add(m[1].toLowerCase());return JSON.stringify([...ids])})()";
                         view.evaluateJavascript(baselineScript, raw -> {
                             try {
                                 Object parsed = new org.json.JSONTokener(raw).nextValue();
