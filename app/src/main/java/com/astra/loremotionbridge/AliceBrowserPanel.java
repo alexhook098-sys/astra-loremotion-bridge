@@ -288,16 +288,19 @@ public final class AliceBrowserPanel extends LinearLayout {
                         progress("Alice не запросила файл напрямую. Остановилась без повторных нажатий.");
                         queuedAutomationImage = null;
                         queuedAutomationPrompt = null;
+                        automationUploadStarted = false;
                     }
                 }, 3500L);
             } else if (raw != null && raw.contains("upload-button-only")) {
                 progress("Alice показывает собственное меню выбора. Автоматический выбор через WebView недоступен; остановилась, картина сохранена.");
                 queuedAutomationImage = null;
                 queuedAutomationPrompt = null;
+                automationUploadStarted = false;
             } else {
                 progress("Не найден прямой загрузчик файла Alice. Остановилась; картину не потеряла.");
                 queuedAutomationImage = null;
                 queuedAutomationPrompt = null;
+                automationUploadStarted = false;
             }
         });
     }
@@ -320,10 +323,14 @@ public final class AliceBrowserPanel extends LinearLayout {
                     enterPromptAndStart();
                 } else {
                     progress("Alice не подтвердила картину. Остановилась до запуска.");
+                    queuedAutomationPrompt = null;
+                    automationUploadStarted = false;
                     Log.w(TAG, "Upload not verified: " + raw);
                 }
             } catch (Exception e) {
                 progress("Не удалось проверить загрузку; генерацию не запускаю");
+                queuedAutomationPrompt = null;
+                automationUploadStarted = false;
                 Log.w(TAG, "Upload verification failed: " + raw, e);
             }
         });
@@ -359,6 +366,7 @@ public final class AliceBrowserPanel extends LinearLayout {
             if (raw != null && raw.contains("composer-arrow-clicked")) progress("Нажала стрелку отправки. Ожидаю генерацию…");
             else progress("Не удалось подтвердить нажатие стрелки: " + raw);
             queuedAutomationPrompt = null;
+            automationUploadStarted = false;
         });
     }
 
