@@ -17,6 +17,7 @@ on:
       - feature/astra-browser-core-in-chat
       - fix/zsky-embedded-worker-462
       - feature/alice-media-service-472
+      - feature/alice-media-chat-worker
 
 jobs:
   build:
