@@ -11,6 +11,7 @@ on:
       - fix/flow-download-auth-response
       - fix/one-click-motion-isolation
       - feature/astra-story-motion
+      - merge/alice-automation-into-story-motion-571
 
 jobs:
   build:
