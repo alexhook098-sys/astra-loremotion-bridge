@@ -30,6 +30,8 @@
         <activity android:name=".GifStudioActivity" android:exported="false" />
         <activity android:name=".RadioActivity" android:exported="false" />
         <activity android:name=".AliceMediaActivity" android:exported="false"
+            android:launchMode="singleTask" android:taskAffinity="com.astra.loremotionbridge.alice"
+            android:excludeFromRecents="false" android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
             android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".PerchanceBrowserActivity" android:exported="false"
             android:launchMode="singleTask" android:taskAffinity="com.astra.loremotionbridge.perchance"
