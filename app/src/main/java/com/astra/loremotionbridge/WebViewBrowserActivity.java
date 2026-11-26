@@ -49,9 +49,6 @@ public class WebViewBrowserActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService perchanceDownloads = Executors.newSingleThreadExecutor();
     private final Set<String> seenPerchanceImages = new HashSet<>();
-    private final Set<String> seenAliceVideoBlobs = new HashSet<>();
-    private boolean aliceObserverRunning;
-    private boolean aliceBaselineCaptured;
     private boolean perchanceObserverRunning;
     private final Runnable perchanceObserver = new Runnable() {
         @Override public void run() {
@@ -60,45 +57,6 @@ public class WebViewBrowserActivity extends Activity {
             if (isPerchanceUrl(url)) scanPerchanceImages();
             else { perchanceObserverRunning = false; return; }
             main.postDelayed(this, 2500L);
-        }
-    };
-    private final Runnable aliceMediaObserver = new Runnable() {
-        @Override public void run() {
-            if (webView == null || isFinishing()) { aliceObserverRunning = false; return; }
-            if (!isAliceMediaUrl(webView.getUrl())) {
-                main.postDelayed(this, 4000L);
-                return;
-            }
-            String js = "(()=>{try{return JSON.stringify([...new Set([...document.querySelectorAll('video')]"
-                    + ".filter(v=>v.getClientRects().length&&v.readyState>=2&&v.videoWidth>0)"
-                    + ".map(v=>v.currentSrc||v.src).filter(u=>u&&u.startsWith('blob:https://alice.yandex.ru/')))]);"
-                    + "}catch(e){return '[]';}})()";
-            webView.evaluateJavascript(js, raw -> {
-                try {
-                    Object decoded = raw == null ? null : new org.json.JSONTokener(raw).nextValue();
-                    if (decoded instanceof String) {
-                        org.json.JSONArray urls = new org.json.JSONArray((String) decoded);
-                        for (int i = 0; i < urls.length(); i++) {
-                            String source = urls.optString(i, "");
-                            if (source.isEmpty()) continue;
-                            if (!aliceBaselineCaptured) {
-                                seenAliceVideoBlobs.add(source);
-                            } else if (!seenAliceVideoBlobs.contains(source)) {
-                                Log.i("ASTRA-ALICE", "New completed Alice video detected; capturing automatically");
-                                saveAliceVideoBlob(source, (saved, error) -> {
-                                    if (error != null) setStatus("Ошибка получения видео Алисы: " + error);
-                                    else setStatus("Видео Алисы доставлено в чат ASTRA: " + saved);
-                                });
-                                break;
-                            }
-                        }
-                    }
-                } catch (Exception parseError) {
-                    Log.w("ASTRA-ALICE", "Could not parse video observer result", parseError);
-                }
-                aliceBaselineCaptured = true;
-                if (webView != null && !isFinishing()) main.postDelayed(this, 3000L);
-            });
         }
     };
 
@@ -177,12 +135,11 @@ public class WebViewBrowserActivity extends Activity {
     @Override public void onBackPressed() {
         String current = webView == null ? "" : webView.getUrl();
         boolean perchance = false;
-        boolean aliceMedia = isAliceMediaUrl(current);
         try {
             perchance = current != null && "perchance.org".equalsIgnoreCase(
                     android.net.Uri.parse(current).getHost());
         } catch (Exception ignored) {}
-        if (perchance || aliceMedia) {
+        if (perchance) {
             try {
                 moveTaskToBack(true);
                 Log.i("ASTRA-WV-DIAG", "Perchance kept alive in background; URL=" + current);
@@ -193,14 +150,6 @@ public class WebViewBrowserActivity extends Activity {
             return;
         }
         super.onBackPressed();
-    }
-
-    private boolean isAliceMediaUrl(String value) {
-        try {
-            String host = Uri.parse(value == null ? "" : value).getHost();
-            return host != null && (host.equalsIgnoreCase("alice.yandex.ru")
-                    || host.toLowerCase(Locale.US).endsWith(".alice.yandex.ru"));
-        } catch (Exception ignored) { return false; }
     }
 
     private boolean isPerchanceUrl(String value) {
@@ -380,12 +329,6 @@ public class WebViewBrowserActivity extends Activity {
             @Override public void onPageFinished(WebView view, String url) {
                 Log.i("ASTRA-WV-DIAG", "onPageFinished url=" + url);
                 updateStatus();
-                if (isAliceMediaUrl(url) && !aliceObserverRunning) {
-                    aliceObserverRunning = true;
-                    main.removeCallbacks(aliceMediaObserver);
-                    main.postDelayed(aliceMediaObserver, 1800L);
-                    Log.i("ASTRA-ALICE", "Alice Media result observer started");
-                }
                 if (hideAfterPageLoad) {
                     hideAfterPageLoad = false;
                     sendToBackSoon();
@@ -478,14 +421,7 @@ public class WebViewBrowserActivity extends Activity {
                 callback.onResult(null, "untrusted_alice_blob_url");
                 return;
             }
-            if (!seenAliceVideoBlobs.add(url)) {
-                callback.onResult(null, "alice_video_already_captured");
-                return;
-            }
-            new AliceVideoBlobSaveJob(url, (value, error) -> {
-                if (error != null) seenAliceVideoBlobs.remove(url);
-                callback.onResult(value, error);
-            }).start();
+            new AliceVideoBlobSaveJob(url, callback).start();
         });
     }
 
@@ -497,17 +433,16 @@ public class WebViewBrowserActivity extends Activity {
         String displayName = "alice-motion-" + System.currentTimeMillis() + ".mp4";
         if (Build.VERSION.SDK_INT >= 29) {
             ContentValues values = new ContentValues();
-            values.put(android.provider.MediaStore.Video.Media.DISPLAY_NAME, displayName);
-            values.put(android.provider.MediaStore.Video.Media.MIME_TYPE, mime);
-            values.put(android.provider.MediaStore.Video.Media.RELATIVE_PATH,
-                    Environment.DIRECTORY_MOVIES + "/ASTRA/Alice");
-            values.put(android.provider.MediaStore.Video.Media.IS_PENDING, 1);
+            values.put(android.provider.MediaStore.Downloads.DISPLAY_NAME, displayName);
+            values.put(android.provider.MediaStore.Downloads.MIME_TYPE, mime);
+            values.put(android.provider.MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+            values.put(android.provider.MediaStore.Downloads.IS_PENDING, 1);
             Uri destination = getContentResolver().insert(
-                    android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
-            if (destination == null) throw new IOException("alice_media_insert_failed");
+                    android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            if (destination == null) throw new IOException("downloads_insert_failed");
             try (FileInputStream in = new FileInputStream(source);
                  OutputStream out = getContentResolver().openOutputStream(destination)) {
-                if (out == null) throw new IOException("alice_media_output_stream_unavailable");
+                if (out == null) throw new IOException("downloads_output_stream_unavailable");
                 byte[] buffer = new byte[32768];
                 int count;
                 while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
@@ -516,19 +451,17 @@ public class WebViewBrowserActivity extends Activity {
                 throw e;
             }
             ContentValues ready = new ContentValues();
-            ready.put(android.provider.MediaStore.Video.Media.IS_PENDING, 0);
+            ready.put(android.provider.MediaStore.Downloads.IS_PENDING, 0);
             if (getContentResolver().update(destination, ready, null, null) <= 0) {
                 getContentResolver().delete(destination, null, null);
-                throw new IOException("alice_media_publish_failed");
+                throw new IOException("downloads_publish_failed");
             }
-            return destination.toString();
+            return displayName;
         }
-        File dir = new File(Environment.getExternalStoragePublicDirectory(
-                Environment.DIRECTORY_MOVIES), "ASTRA/Alice");
-        if (!dir.exists() && !dir.mkdirs()) throw new IOException("alice_movies_dir_failed");
+        File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        if (!dir.exists() && !dir.mkdirs()) throw new IOException("downloads_dir_failed");
         File target = new File(dir, displayName);
-        try (FileInputStream in = new FileInputStream(source);
-             FileOutputStream out = new FileOutputStream(target)) {
+        try (FileInputStream in = new FileInputStream(source); FileOutputStream out = new FileOutputStream(target)) {
             byte[] buffer = new byte[32768];
             int count;
             while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
@@ -536,8 +469,7 @@ public class WebViewBrowserActivity extends Activity {
             target.delete();
             throw e;
         }
-        return androidx.core.content.FileProvider.getUriForFile(
-                this, getPackageName() + ".fileprovider", target).toString();
+        return target.getAbsolutePath();
     }
 
     private final class AliceVideoBlobSaveJob {
@@ -655,8 +587,6 @@ public class WebViewBrowserActivity extends Activity {
             try {
                 String saved = publishAliceVideoToDownloads(file, "video/mp4");
                 if (file != null && file.exists()) file.delete();
-                Uri savedUri = Uri.parse(saved);
-                ChatActivity.onAliceVideoReady(WebViewBrowserActivity.this, savedUri);
                 callback.onResult(saved, null);
             } catch (Exception e) { failAfterFinish(e.getMessage()); }
         }
