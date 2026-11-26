@@ -33,6 +33,7 @@ public class BrowserBridgeService extends Service {
             }
             LocalBridgeServer.start();
             Log.i(TAG, "Bridge started; WebView backend available");
+            if (aliceRequestedActive) updateAliceTaskState(true);
         } catch (Exception e) {
             Log.e(TAG, "FAILED TO START BROWSER BRIDGE", e);
             stopSelf();
