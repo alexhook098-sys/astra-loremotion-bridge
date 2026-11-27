@@ -79,9 +79,14 @@ make -j"$(nproc)"
 mkdir -p "${OUT}"
 install -m 0755 ffmpeg "${OUT}/libffmpeg.so"
 "${STRIP}" "${OUT}/libffmpeg.so"
-# Fail the build unless the filters required by both motion pipelines are compiled in.
-"${OUT}/libffmpeg.so" -filters 2>&1 | grep -E 'zoompan|minterpolate' 
-"${OUT}/libffmpeg.so" -filters 2>&1 | grep -q 'zoompan'
-"${OUT}/libffmpeg.so" -filters 2>&1 | grep -q 'minterpolate'
+# This is a cross-compiled ARM64 Android executable; the x86_64 GitHub runner
+# cannot execute it. Verify the generated FFmpeg configuration instead.
+grep -q '^#define CONFIG_ZOOMPAN_FILTER 1
+echo "ASTRA FFmpeg ARM64 ready: ${OUT}/libffmpeg.so"
+ config.h
+grep -q '^#define CONFIG_MINTERPOLATE_FILTER 1
+echo "ASTRA FFmpeg ARM64 ready: ${OUT}/libffmpeg.so"
+ config.h
 file "${OUT}/libffmpeg.so"
+echo "Verified FFmpeg filters in config.h: zoompan, minterpolate"
 echo "ASTRA FFmpeg ARM64 ready: ${OUT}/libffmpeg.so"
