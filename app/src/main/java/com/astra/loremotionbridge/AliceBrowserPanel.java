@@ -192,6 +192,7 @@ public final class AliceBrowserPanel extends LinearLayout {
 
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                pageLoaded = false;
                 Log.i(TAG, "Navigation started: " + safeUrl(url));
                 super.onPageStarted(view, url, favicon);
             }
@@ -217,7 +218,10 @@ public final class AliceBrowserPanel extends LinearLayout {
                 if (status != null) status.setText("Alice: страница загружена · наблюдатель активен");
                 Log.i(TAG, "Page finished: " + safeUrl(url));
                 if (!monitorStarted) captureBaselineAndStartMonitor(view);
-                if (queuedAutomationImage != null && !automationUploadStarted) main.postDelayed(() -> clickUploadControl(), 700L);
+                if (queuedAutomationImage != null && automationUploadStarted) {
+                    Log.i(TAG, "Queued Alice upload resumed after page load");
+                    main.postDelayed(() -> clickUploadControl(), 700L);
+                }
             }
         });
 
