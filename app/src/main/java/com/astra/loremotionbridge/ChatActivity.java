@@ -351,7 +351,18 @@ public class ChatActivity extends Activity {
             return;
         }
         if (requestCode == PICK_ALICE_IMAGE && resultCode == RESULT_OK && data != null && data.getData() != null) {
-            promptAliceImage(data.getData());
+            Uri selectedImage = data.getData();
+            try {
+                getContentResolver().takePersistableUriPermission(
+                        selectedImage, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                android.util.Log.i("ASTRA-GALLERY", "Persisted read access to selected image");
+            } catch (Exception e) {
+                // Some picker providers grant temporary access only; the URI remains valid
+                // for the active generation flow and is not treated as a permanent grant.
+                android.util.Log.i("ASTRA-GALLERY", "Using temporary picker grant: " + e.getClass().getSimpleName());
+            }
+            addMessage("✦ ASTRA Gallery · фотография выбрана. Готовлю её для Alice…", false, true);
+            promptAliceImage(selectedImage);
             return;
         }
         if (requestCode == PICK_MOTION_REFERENCE && resultCode == RESULT_OK && data != null && data.getData() != null) {
@@ -941,7 +952,17 @@ public class ChatActivity extends Activity {
         promptInput.setTextColor(WHITE);
         promptInput.setHintTextColor(Color.GRAY);
         LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(18), dp(8), dp(18), 0);
+        ImageView preview = new ImageView(this);
+        preview.setImageURI(image);
+        preview.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        preview.setBackground(round(Color.rgb(29, 34, 58), LILAC, 16));
+        preview.setClipToOutline(true);
+        box.addView(preview, new LinearLayout.LayoutParams(-1, dp(150)));
+        TextView selectedLabel = label("✦  ФОТО ВЫБРАНО · ASTRA GALLERY", 11, CYAN, true);
+        selectedLabel.setPadding(dp(2), dp(8), dp(2), dp(5));
+        box.addView(selectedLabel, new LinearLayout.LayoutParams(-1, -2));
         box.addView(promptInput, new LinearLayout.LayoutParams(-1, dp(76)));
         new AlertDialog.Builder(this)
                 .setTitle("ASTRA · Новое видео")
@@ -971,8 +992,10 @@ public class ChatActivity extends Activity {
     }
 
     private void chooseAliceImage() {
+        addMessage("✦ ASTRA Gallery · выбери фотографию для оживления…", false, true);
         Intent pick;
         if (Build.VERSION.SDK_INT >= 33) {
+            // Android Photo Picker: user-selected access, no broad gallery permission required.
             pick = new Intent(android.provider.MediaStore.ACTION_PICK_IMAGES);
             pick.setType("image/*");
             pick.putExtra(android.provider.MediaStore.EXTRA_PICK_IMAGES_MAX, 1);
