@@ -173,6 +173,12 @@ public final class AliceBrowserPanel extends LinearLayout {
                     return true;
                 }
                 pendingFileCallback = callback;
+                if (host instanceof ChatActivity) {
+                    Log.i(TAG, "Routing Alice file request to ASTRA in-chat Gallery card");
+                    ((ChatActivity) host).requestAliceGalleryForPendingChooser();
+                    progress("Alice ждёт фото. Открой карточку ASTRA Gallery прямо в чате.");
+                    return true;
+                }
                 android.content.Intent pick = new android.content.Intent(android.content.Intent.ACTION_GET_CONTENT);
                 pick.setType("image/*");
                 pick.addCategory(android.content.Intent.CATEGORY_OPENABLE);
@@ -307,12 +313,12 @@ public final class AliceBrowserPanel extends LinearLayout {
                 main.postDelayed(() -> clickPhotoMenuOption(), 450L);
                 main.postDelayed(() -> {
                     if (!destroyed && queuedAutomationImage != null && automationUploadStarted) {
-                        progress("Alice не вызвала запрос фотографии. Меню не удалось обработать автоматически; изображение сохранено в ASTRA.");
+                        progress("Alice открыла системный выбор. Ожидаю запрос файла; если он появится, выбор продолжится через карточку ASTRA Gallery.");
                         queuedAutomationImage = null;
-                        queuedAutomationPrompt = null;
-                        automationUploadStarted = false;
+                        // Keep the prompt and task alive: WebView may request the file only
+                        // after its native sheet animation has completed.
                     }
-                }, 15000L);
+                }, 30000L);
             } else {
                 progress("Не найден прямой загрузчик файла Alice. Остановилась; картину не потеряла.");
                 queuedAutomationImage = null;
@@ -406,6 +412,23 @@ public final class AliceBrowserPanel extends LinearLayout {
             queuedAutomationPrompt = null;
             automationUploadStarted = false;
         });
+    }
+
+    public boolean hasPendingFileChooser() {
+        return pendingFileCallback != null;
+    }
+
+    public void provideFileToAlice(Uri image) {
+        if (pendingFileCallback == null || image == null) {
+            progress("Запрос Alice уже закрыт. Повтори выбор фотографии.");
+            return;
+        }
+        ValueCallback<Uri[]> callback = pendingFileCallback;
+        pendingFileCallback = null;
+        callback.onReceiveValue(new Uri[]{image});
+        Log.i(TAG, "ASTRA Gallery image supplied to pending Alice chooser");
+        progress("Фото передано из ASTRA Gallery. Проверяю миниатюру…");
+        main.postDelayed(() -> verifyImageAndContinue(), 1800L);
     }
 
     public void handleActivityResult(int requestCode, int resultCode, android.content.Intent data) {
