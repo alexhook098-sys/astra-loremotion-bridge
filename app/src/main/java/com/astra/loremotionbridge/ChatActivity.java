@@ -362,6 +362,9 @@ public class ChatActivity extends Activity {
             if (aliceBrowserPanel != null && aliceBrowserPanel.hasPendingFileChooser()) {
                 addMessage("✦ ASTRA Gallery · фото выбрано. Передаю его в Alice…", false, true);
                 aliceBrowserPanel.provideFileToAlice(selectedImage);
+            } else if (aliceBrowserPanel != null && aliceBrowserPanel.hasActiveAutomation()) {
+                addMessage("✦ ASTRA Gallery · фото выбрано. Сохраняю его для текущего задания Alice…", false, true);
+                aliceBrowserPanel.replaceQueuedAutomationImage(selectedImage);
             } else {
                 addMessage("✦ ASTRA Gallery · фотография выбрана. Готовлю её для Alice…", false, true);
                 promptAliceImage(selectedImage);
