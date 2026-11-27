@@ -357,12 +357,15 @@ public class ChatActivity extends Activity {
                         selectedImage, Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 android.util.Log.i("ASTRA-GALLERY", "Persisted read access to selected image");
             } catch (Exception e) {
-                // Some picker providers grant temporary access only; the URI remains valid
-                // for the active generation flow and is not treated as a permanent grant.
                 android.util.Log.i("ASTRA-GALLERY", "Using temporary picker grant: " + e.getClass().getSimpleName());
             }
-            addMessage("✦ ASTRA Gallery · фотография выбрана. Готовлю её для Alice…", false, true);
-            promptAliceImage(selectedImage);
+            if (aliceBrowserPanel != null && aliceBrowserPanel.hasPendingFileChooser()) {
+                addMessage("✦ ASTRA Gallery · фото выбрано. Передаю его в Alice…", false, true);
+                aliceBrowserPanel.provideFileToAlice(selectedImage);
+            } else {
+                addMessage("✦ ASTRA Gallery · фотография выбрана. Готовлю её для Alice…", false, true);
+                promptAliceImage(selectedImage);
+            }
             return;
         }
         if (requestCode == PICK_MOTION_REFERENCE && resultCode == RESULT_OK && data != null && data.getData() != null) {
@@ -1031,6 +1034,29 @@ public class ChatActivity extends Activity {
                 .setNegativeButton("ОТМЕНА", null)
                 .show();
     }
+    public void requestAliceGalleryForPendingChooser() {
+        runOnUiThread(() -> {
+            LinearLayout card = new LinearLayout(this);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setPadding(dp(14), dp(12), dp(14), dp(12));
+            card.setBackground(round(Color.rgb(25, 31, 57), LILAC, 18));
+            TextView heading = label("✦  ASTRA GALLERY", 14, LILAC, true);
+            card.addView(heading, new LinearLayout.LayoutParams(-1, -2));
+            TextView hint = label("Alice ждёт фотографию. Выбери её здесь — системное меню Alice больше не понадобится.", 13, WHITE, false);
+            hint.setPadding(0, dp(6), 0, dp(10));
+            card.addView(hint, new LinearLayout.LayoutParams(-1, -2));
+            Button choose = smallButton("▧  ВЫБРАТЬ ФОТО", CYAN);
+            choose.setTextSize(13);
+            choose.setOnClickListener(v -> chooseAliceImage());
+            card.addView(choose, new LinearLayout.LayoutParams(-1, dp(48)));
+            LinearLayout row = new LinearLayout(this);
+            row.setPadding(dp(2), dp(5), dp(2), dp(5));
+            row.addView(card, new LinearLayout.LayoutParams(-1, -2));
+            messages.addView(row);
+            messageScroll.post(() -> messageScroll.fullScroll(View.FOCUS_DOWN));
+        });
+    }
+
     private void ensureAliceWorker() {
         if (overlayHost == null || isFinishing()) return;
         if (aliceBrowserPanel == null) {
