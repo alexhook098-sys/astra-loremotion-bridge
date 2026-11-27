@@ -32,10 +32,23 @@ public final class AstraCinematicMotionEngine {
         File output = new File(context.getCacheDir(),
                 "astra_cinematic_motion_" + System.nanoTime() + ".mp4");
         try {
-            File[] frameFiles = frames.listFiles((dir, name) ->
-                    name.startsWith("frame_") && name.endsWith(".png"));
-            if (frameFiles == null || frameFiles.length != INPUT_FRAMES)
-                throw new IllegalStateException("Для Cinematic Motion нужны 20 кадров из листа 5×4");
+            // Validate the exact numbered sequence before FFmpeg opens the image2 input.
+            // A count-only check can miss a gap such as frame_0010.png.
+            for (int i = 1; i <= INPUT_FRAMES; i++) {
+                File frame = new File(frames, String.format(Locale.US, "frame_%04d.png", i));
+                if (!frame.isFile() || frame.length() < 128) {
+                    StringBuilder present = new StringBuilder();
+                    File[] files = frames.listFiles();
+                    if (files != null) {
+                        for (File item : files) {
+                            if (present.length() < 1500) present.append(item.getName())
+                                    .append("(").append(item.length()).append("), ");
+                        }
+                    }
+                    throw new IllegalStateException("Не найден кадр " + i + " из 20: " +
+                            frame.getAbsolutePath() + ". Файлы в папке: " + present);
+                }
+            }
 
             File ffmpeg = new File(context.getApplicationInfo().nativeLibraryDir, "libffmpeg.so");
             if (!ffmpeg.isFile() || !ffmpeg.canExecute())
