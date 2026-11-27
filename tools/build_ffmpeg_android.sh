@@ -64,6 +64,7 @@ make distclean >/dev/null 2>&1 || true
   --enable-filter=tpad \
   --enable-filter=trim \
   --enable-filter=setpts \
+  --enable-filter=pad \
   --enable-filter=scale \
   --enable-filter=format \
   --disable-network \
@@ -83,6 +84,7 @@ install -m 0755 ffmpeg "${OUT}/libffmpeg.so"
 # cannot execute it. Verify the generated FFmpeg configuration instead.
 grep -qF -- '#define CONFIG_ZOOMPAN_FILTER 1' config_components.h
 grep -qF -- '#define CONFIG_MINTERPOLATE_FILTER 1' config_components.h
+grep -qF -- '#define CONFIG_PAD_FILTER 1' config_components.h
 file "${OUT}/libffmpeg.so"
-echo "Verified FFmpeg filters in config_components.h: zoompan, minterpolate"
+echo "Verified FFmpeg filters in config_components.h: zoompan, minterpolate, pad"
 echo "ASTRA FFmpeg ARM64 ready: ${OUT}/libffmpeg.so"
