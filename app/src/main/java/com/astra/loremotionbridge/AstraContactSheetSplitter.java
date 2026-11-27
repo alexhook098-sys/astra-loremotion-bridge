@@ -85,12 +85,14 @@ public final class AstraContactSheetSplitter {
             int cellW = sheet.getWidth() / columns;
             int cellH = sheet.getHeight() / rows;
             if (cellW < 8 || cellH < 8) throw new IllegalArgumentException("Контактный лист слишком маленький");
-            File dir = new File(context.getFilesDir(), "astra_motion/frames");
-            if (dir.exists()) {
-                File[] old = dir.listFiles();
-                if (old != null) for (File f : old) if (f.isFile()) f.delete();
-            }
-            if (!dir.exists() && !dir.mkdirs()) throw new IllegalStateException("Не удалось создать рабочую папку");
+            // Give every processing request its own frame directory. This prevents
+            // One Click, Cinematic and Story Motion jobs from deleting each other's frames.
+            File jobsRoot = new File(context.getCacheDir(), "astra_motion_jobs");
+            if (!jobsRoot.exists() && !jobsRoot.mkdirs())
+                throw new IllegalStateException("Не удалось создать рабочую папку обработки");
+            File dir = new File(jobsRoot, "frames_" + System.nanoTime());
+            if (!dir.mkdirs())
+                throw new IllegalStateException("Не удалось создать папку кадров текущего запуска");
             for (int i = 0; i < rows * columns; i++) {
                 int col = i % columns, row = i / columns;
                 int left = col * cellW + CELL_INSET;
