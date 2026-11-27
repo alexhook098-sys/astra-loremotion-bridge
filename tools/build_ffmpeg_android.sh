@@ -60,6 +60,7 @@ make distclean >/dev/null 2>&1 || true
   --enable-encoder=mpeg4 \
   --enable-muxer=mp4 \
   --enable-filter=minterpolate \
+  --enable-filter=zoompan \
   --enable-filter=tpad \
   --enable-filter=trim \
   --enable-filter=setpts \
@@ -78,5 +79,9 @@ make -j"$(nproc)"
 mkdir -p "${OUT}"
 install -m 0755 ffmpeg "${OUT}/libffmpeg.so"
 "${STRIP}" "${OUT}/libffmpeg.so"
+# Fail the build unless the filters required by both motion pipelines are compiled in.
+"${OUT}/libffmpeg.so" -filters 2>&1 | grep -E 'zoompan|minterpolate' 
+"${OUT}/libffmpeg.so" -filters 2>&1 | grep -q 'zoompan'
+"${OUT}/libffmpeg.so" -filters 2>&1 | grep -q 'minterpolate'
 file "${OUT}/libffmpeg.so"
 echo "ASTRA FFmpeg ARM64 ready: ${OUT}/libffmpeg.so"
