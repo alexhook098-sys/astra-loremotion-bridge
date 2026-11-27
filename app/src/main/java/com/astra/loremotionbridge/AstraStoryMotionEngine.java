@@ -17,10 +17,8 @@ import java.util.concurrent.TimeUnit;
  * Independent RIFE pipeline for ASTRA STORY MOTION.
  * Does not call or modify AstraMotionEngine.
  *
- * Required APK assets:
- * assets/story_motion/rife-ncnn-vulkan
- * assets/story_motion/model/flownet.bin
- * assets/story_motion/model/flownet.param
+ * RIFE executable is extracted by Android into nativeLibraryDir.
+ * Required APK assets: assets/story_motion/rife-v4.6/flownet.bin and flownet.param
  */
 public final class AstraStoryMotionEngine {
     private static final int SCENES = 4;
@@ -42,8 +40,13 @@ public final class AstraStoryMotionEngine {
                 throw new IllegalStateException("Не удалось создать рабочую папку ASTRA STORY MOTION");
 
             File runtime = prepareRuntime(context);
-            File rife = new File(runtime, "rife-ncnn-vulkan");
+            // Execute from nativeLibraryDir, not filesDir: Android can mount app data
+            // with noexec, producing EACCES even after chmod on an extracted asset.
+            File rife = new File(context.getApplicationInfo().nativeLibraryDir,
+                    "librife-ncnn-vulkan.so");
             File model = new File(runtime, "rife-v4.6");
+            if (!rife.isFile() || !rife.canExecute())
+                throw new IllegalStateException("RIFE native executable missing/not executable: " + rife);
             File ffmpeg = new File(context.getApplicationInfo().nativeLibraryDir, "libffmpeg.so");
             if (!ffmpeg.isFile() || !ffmpeg.canExecute())
                 throw new IllegalStateException("Встроенный FFmpeg не найден или недоступен для запуска");
@@ -113,16 +116,12 @@ public final class AstraStoryMotionEngine {
         File model = new File(runtime, "rife-v4.6");
         if (!model.exists() && !model.mkdirs())
             throw new IllegalStateException("Не удалось создать папку модели RIFE");
-        File binary = new File(runtime, "rife-ncnn-vulkan");
         File bin = new File(model, "flownet.bin");
         File param = new File(model, "flownet.param");
-        copyAssetIfMissing(context, "story_motion/rife-ncnn-vulkan", binary);
         copyAssetIfMissing(context, "story_motion/rife-v4.6/flownet.bin", bin);
         copyAssetIfMissing(context, "story_motion/rife-v4.6/flownet.param", param);
-        if (!binary.setExecutable(true, true) && !binary.canExecute())
-            throw new IllegalStateException("Android не разрешил запуск встроенного RIFE");
-        if (!binary.isFile() || !bin.isFile() || !param.isFile())
-            throw new IllegalStateException("Комплект RIFE неполный в APK");
+        if (!bin.isFile() || !param.isFile())
+            throw new IllegalStateException("Модель RIFE неполная в APK");
         return runtime;
     }
 
@@ -140,7 +139,7 @@ public final class AstraStoryMotionEngine {
             out.getFD().sync();
         } catch (Exception e) {
             throw new IllegalStateException("Ресурс отсутствует в APK: " + asset +
-                    ". Сначала добавь бинарник RIFE и модель в app/src/main/assets/story_motion.", e);
+                    ". Проверь модель в app/src/main/assets/story_motion.", e);
         }
     }
 
