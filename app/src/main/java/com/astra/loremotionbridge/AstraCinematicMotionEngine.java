@@ -68,8 +68,10 @@ public final class AstraCinematicMotionEngine {
                     "y='ih/2-(ih/zoom/2)-2*sin(PI*on/54)':" +
                     "d=1:s=720x1280:fps=24";
             String interpolation = "minterpolate=fps=24:mi_mode=blend";
-            String filter = "scale=720:1280:force_original_aspect_ratio=decrease," +
-                    "pad=720:1280:(ow-iw)/2:(oh-ih)/2," +
+            // Use named filter options: this bundled FFmpeg parser rejects
+            // positional pad arguments containing arithmetic expressions.
+            String filter = "scale=w=720:h=1280:force_original_aspect_ratio=decrease," +
+                    "pad=w=720:h=1280:x=(ow-iw)/2:y=(oh-ih)/2:color=black," +
                     interpolation + "," + camera +
                     ",trim=end_frame=" + OUTPUT_FRAMES + ",setpts=N/(24*TB)";
 
