@@ -300,10 +300,11 @@ public final class AliceBrowserPanel extends LinearLayout {
                 // menu. The actual HTML file input is opened only after the user chooses
                 // Photo, which triggers onShowFileChooser asynchronously. Keep the ASTRA
                 // image queued until that callback consumes it; never open a second picker.
-                progress("Открыла меню Alice. Жду запрос фотографии, чтобы передать выбранное в ASTRA изображение…");
+                progress("Открыла меню Alice. Ищу пункт «Фото»…");
+                main.postDelayed(() -> clickPhotoMenuOption(), 450L);
                 main.postDelayed(() -> {
                     if (!destroyed && queuedAutomationImage != null && automationUploadStarted) {
-                        progress("Alice не запросила фотографию. Остановилась без ручного выбора; изображение сохранено в ASTRA.");
+                        progress("Alice не вызвала запрос фотографии. Меню не удалось обработать автоматически; изображение сохранено в ASTRA.");
                         queuedAutomationImage = null;
                         queuedAutomationPrompt = null;
                         automationUploadStarted = false;
@@ -314,6 +315,27 @@ public final class AliceBrowserPanel extends LinearLayout {
                 queuedAutomationImage = null;
                 queuedAutomationPrompt = null;
                 automationUploadStarted = false;
+            }
+        });
+    }
+
+    private void clickPhotoMenuOption() {
+        if (destroyed || webView == null || queuedAutomationImage == null) return;
+        String js = "(function(){"
+                + "var norm=s=>(s||'').replace(/\\s+/g,' ').trim().toLowerCase();"
+                + "var visible=e=>!!(e&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden'&&getComputedStyle(e).display!=='none');"
+                + "var nodes=[...document.querySelectorAll('button,[role=button],[role=menuitem], [aria-label],div,span')].filter(visible);"
+                + "var hits=nodes.filter(e=>/^(фото|photo|галерея|gallery)$/.test(norm(e.innerText||e.getAttribute('aria-label'))));"
+                + "if(!hits.length)return 'photo-option-not-in-dom';"
+                + "var target=hits.find(e=>e.matches('button,[role=button],[role=menuitem]'))||hits[0].closest('button,[role=button],[role=menuitem]')||hits[0];"
+                + "target.click();return 'photo-option-clicked:'+norm(target.innerText||target.getAttribute('aria-label'));"
+                + "})()";
+        webView.evaluateJavascript(js, raw -> {
+            Log.i(TAG, "Alice Photo menu action: " + raw);
+            if (raw != null && raw.contains("photo-option-clicked")) {
+                progress("Нажала «Фото». Жду запрос файла Alice…");
+            } else {
+                progress("Пункт «Фото» не найден среди элементов страницы. Проверяю, не системное ли это меню…");
             }
         });
     }
