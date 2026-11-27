@@ -81,8 +81,8 @@ install -m 0755 ffmpeg "${OUT}/libffmpeg.so"
 "${STRIP}" "${OUT}/libffmpeg.so"
 # This is a cross-compiled ARM64 Android executable; the x86_64 GitHub runner
 # cannot execute it. Verify the generated FFmpeg configuration instead.
-grep -qF -- '#define CONFIG_ZOOMPAN_FILTER 1' config.h
-grep -qF -- '#define CONFIG_MINTERPOLATE_FILTER 1' config.h
+grep -qF -- '#define CONFIG_ZOOMPAN_FILTER 1' config_components.h
+grep -qF -- '#define CONFIG_MINTERPOLATE_FILTER 1' config_components.h
 file "${OUT}/libffmpeg.so"
-echo "Verified FFmpeg filters in config.h: zoompan, minterpolate"
+echo "Verified FFmpeg filters in config_components.h: zoompan, minterpolate"
 echo "ASTRA FFmpeg ARM64 ready: ${OUT}/libffmpeg.so"
