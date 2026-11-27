@@ -35,6 +35,7 @@ public class VideoStudioActivity extends Activity {
     private TextView previewTitle;
     private TextView previewHint;
     private LinearLayout recentList;
+    private LinearLayout emptyOverlay;
     private Uri currentUri;
     private final ArrayList<File> recentFiles = new ArrayList<>();
 
@@ -103,7 +104,8 @@ public class VideoStudioActivity extends Activity {
             return true;
         });
 
-        LinearLayout empty = new LinearLayout(this);
+        emptyOverlay = new LinearLayout(this);
+        LinearLayout empty = emptyOverlay;
         empty.setOrientation(LinearLayout.VERTICAL);
         empty.setGravity(Gravity.CENTER);
         empty.setPadding(dp(20), dp(18), dp(20), dp(18));
@@ -176,6 +178,7 @@ public class VideoStudioActivity extends Activity {
 
     private void play(Uri uri, String name) {
         currentUri = uri;
+        if (emptyOverlay != null) emptyOverlay.setVisibility(View.GONE);
         previewTitle.setText(name == null ? "ВИДЕО ВЫБРАНО" : name);
         previewHint.setText("Загрузка видео…");
         MediaController controls = new MediaController(this);
