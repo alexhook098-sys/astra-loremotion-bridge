@@ -305,22 +305,14 @@ public final class AliceBrowserPanel extends LinearLayout {
                     }
                 }, 30000L);
             } else if (raw != null && raw.contains("upload-button-only")) {
-                // Alice's visible upload button opens an intermediate Camera / Photo / Files
-                // menu. The actual HTML file input is opened only after the user chooses
-                // Photo, which triggers onShowFileChooser asynchronously. Keep the ASTRA
-                // image queued until that callback consumes it; never open a second picker.
-                // The upload control opened Alice's intermediate Camera / Photo / Files
-                // surface. It is not a DOM element, so JavaScript cannot reliably press it.
-                // Show ASTRA's own picker in chat instead of pretending we clicked Photo.
-                progress("Alice открыла меню загрузки. Показываю ASTRA Gallery прямо в чате…");
-                if (host instanceof ChatActivity) {
-                    ((ChatActivity) host).requestAliceGalleryForPendingChooser();
-                }
-                main.postDelayed(() -> {
-                    if (!destroyed && queuedAutomationImage != null && automationUploadStarted) {
-                        progress("Жду выбора фото в ASTRA Gallery или запроса файла от Alice. Исходная картина сохранена.");
-                    }
-                }, 30000L);
+                // Alice opened its native Camera / Photo / Files sheet. That sheet is
+                // outside the WebView DOM, so a second ASTRA picker cannot complete it.
+                // Stop this attempt cleanly: keep the original chat selection intact and
+                // never create a duplicate Gallery card or claim that upload succeeded.
+                progress("Alice открыла системное меню, которым ASTRA не может управлять. Задание остановлено без повторного выбора фото.");
+                queuedAutomationImage = null;
+                queuedAutomationPrompt = null;
+                automationUploadStarted = false;
             } else {
                 progress("Не найден прямой загрузчик файла Alice. Остановилась; картину не потеряла.");
                 queuedAutomationImage = null;
