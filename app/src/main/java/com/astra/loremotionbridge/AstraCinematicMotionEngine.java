@@ -56,8 +56,11 @@ public final class AstraCinematicMotionEngine {
 
             // The camera uses a restrained S-curve: a gradual push-in with a tiny
             // lateral drift. No frame is stretched; the crop stays centered.
+            // The timeline spans N-1 intervals between N source frames.
+            // Using N / duration shortens the actual first-to-last timestamp span
+            // and produced only 50 frames (2.083s) instead of the intended 55.
             String inputRate = String.format(Locale.US, "%.8f",
-                    INPUT_FRAMES / DURATION_SECONDS);
+                    (INPUT_FRAMES - 1) / DURATION_SECONDS);
             String camera = "zoompan=" +
                     "z='1+0.045*(0.5-0.5*cos(PI*on/19))':" +
                     "x='iw/2-(iw/zoom/2)+3*sin(PI*on/19)':" +
