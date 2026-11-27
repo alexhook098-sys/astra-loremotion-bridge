@@ -16,8 +16,8 @@ import java.util.concurrent.TimeUnit;
  * Independent cinematic variant of One Click Motion.
  * Keeps the original AstraMotionEngine pipeline untouched.
  *
- * 5x4 contact sheet -> gentle S-curve camera move -> motion-compensated
- * interpolation -> 55 frames at 24 FPS (about 2.3 seconds).
+ * 5x4 contact sheet -> blended frame transitions -> LIRA S-curve camera move
+ * -> 55 frames at 24 FPS (about 2.3 seconds), without optical-flow warping.
  */
 public final class AstraCinematicMotionEngine {
     private static final int INPUT_FRAMES = 20;
@@ -54,21 +54,23 @@ public final class AstraCinematicMotionEngine {
             if (!ffmpeg.isFile() || !ffmpeg.canExecute())
                 throw new IllegalStateException("Встроенный FFmpeg не найден или недоступен для запуска");
 
-            // The camera uses a restrained S-curve: a gradual push-in with a tiny
-            // lateral drift. No frame is stretched; the crop stays centered.
-            // The timeline spans N-1 intervals between N source frames.
-            // Using N / duration shortens the actual first-to-last timestamp span
-            // and produced only 50 frames (2.083s) instead of the intended 55.
+            // LIRA Curves & Dynamic Camera 2.3:
+            // 1) Preserve source aspect ratio in a 9:16 canvas (no stretching).
+            // 2) Blend adjacent storyboard frames instead of optical-flow warping.
+            // 3) Apply the camera move AFTER frame blending so the S-curve spans
+            //    the complete 55-frame output, not just the 20 source images.
+            // 4) Finish with an exact 55-frame / 24-FPS timeline.
             String inputRate = String.format(Locale.US, "%.8f",
                     (INPUT_FRAMES - 1) / DURATION_SECONDS);
             String camera = "zoompan=" +
-                    "z='1+0.045*(0.5-0.5*cos(PI*on/19))':" +
-                    "x='iw/2-(iw/zoom/2)+3*sin(PI*on/19)':" +
-                    "y='ih/2-(ih/zoom/2)-2*sin(PI*on/19)':" +
-                    "d=1:s=576x896:fps=" + inputRate;
-            String interpolation = "minterpolate=fps=24:mi_mode=mci:" +
-                    "mc_mode=aobmc:me_mode=bidir:vsbmc=1";
-            String filter = camera + "," + interpolation +
+                    "z='1+0.055*(0.5-0.5*cos(PI*on/54))':" +
+                    "x='iw/2-(iw/zoom/2)+5*sin(PI*on/54)':" +
+                    "y='ih/2-(ih/zoom/2)-2*sin(PI*on/54)':" +
+                    "d=1:s=720x1280:fps=24";
+            String interpolation = "minterpolate=fps=24:mi_mode=blend";
+            String filter = "scale=720:1280:force_original_aspect_ratio=decrease," +
+                    "pad=720:1280:(ow-iw)/2:(oh-ih)/2," +
+                    interpolation + "," + camera +
                     ",trim=end_frame=" + OUTPUT_FRAMES + ",setpts=N/(24*TB)";
 
             Process process = new ProcessBuilder(
