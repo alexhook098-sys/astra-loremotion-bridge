@@ -304,11 +304,13 @@ public class ChatActivity extends Activity {
         new AlertDialog.Builder(this)
                 .setTitle("ASTRA STUDIO")
                 .setItems(new String[]{
+                        "▶  ASTRA VIDEO · плеер и галерея",
                         "✦  One Click Motion · изображение в видео",
                         "✧  ASTRA Story Motion · RIFE × 4 сцены"
                 }, (dialog, which) -> {
-                    if (which == 0) showMotionModeDialog();
-                    else if (which == 1) chooseStoryMotionReference();
+                    if (which == 0) startActivity(new Intent(this, VideoStudioActivity.class));
+                    else if (which == 1) showMotionModeDialog();
+                    else if (which == 2) chooseStoryMotionReference();
                 })
                 .setNegativeButton("ЗАКРЫТЬ", null)
                 .show();
