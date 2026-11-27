@@ -952,17 +952,7 @@ public class ChatActivity extends Activity {
         promptInput.setTextColor(WHITE);
         promptInput.setHintTextColor(Color.GRAY);
         LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(18), dp(8), dp(18), 0);
-        ImageView preview = new ImageView(this);
-        preview.setImageURI(image);
-        preview.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        preview.setBackground(round(Color.rgb(29, 34, 58), LILAC, 16));
-        preview.setClipToOutline(true);
-        box.addView(preview, new LinearLayout.LayoutParams(-1, dp(150)));
-        TextView selectedLabel = label("✦  ФОТО ВЫБРАНО · ASTRA GALLERY", 11, CYAN, true);
-        selectedLabel.setPadding(dp(2), dp(8), dp(2), dp(5));
-        box.addView(selectedLabel, new LinearLayout.LayoutParams(-1, -2));
         box.addView(promptInput, new LinearLayout.LayoutParams(-1, dp(76)));
         new AlertDialog.Builder(this)
                 .setTitle("ASTRA · Новое видео")
@@ -1013,7 +1003,17 @@ public class ChatActivity extends Activity {
         promptInput.setTextColor(WHITE);
         promptInput.setHintTextColor(Color.GRAY);
         LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(18), dp(8), dp(18), 0);
+        ImageView preview = new ImageView(this);
+        preview.setImageURI(image);
+        preview.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        preview.setBackground(round(Color.rgb(29, 34, 58), LILAC, 16));
+        preview.setClipToOutline(true);
+        box.addView(preview, new LinearLayout.LayoutParams(-1, dp(150)));
+        TextView selectedLabel = label("✦  ФОТО ВЫБРАНО · ASTRA GALLERY", 11, CYAN, true);
+        selectedLabel.setPadding(dp(2), dp(8), dp(2), dp(5));
+        box.addView(selectedLabel, new LinearLayout.LayoutParams(-1, -2));
         box.addView(promptInput, new LinearLayout.LayoutParams(-1, dp(76)));
         new AlertDialog.Builder(this)
                 .setTitle("ASTRA · Оживить картину")
