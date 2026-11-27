@@ -292,10 +292,19 @@ public final class AliceBrowserPanel extends LinearLayout {
                     }
                 }, 3500L);
             } else if (raw != null && raw.contains("upload-button-only")) {
-                progress("Alice показывает собственное меню выбора. Автоматический выбор через WebView недоступен; остановилась, картина сохранена.");
-                queuedAutomationImage = null;
-                queuedAutomationPrompt = null;
-                automationUploadStarted = false;
+                // Alice's visible upload button opens an intermediate Camera / Photo / Files
+                // menu. The actual HTML file input is opened only after the user chooses
+                // Photo, which triggers onShowFileChooser asynchronously. Keep the ASTRA
+                // image queued until that callback consumes it; never open a second picker.
+                progress("Открыла меню Alice. Жду запрос фотографии, чтобы передать выбранное в ASTRA изображение…");
+                main.postDelayed(() -> {
+                    if (!destroyed && queuedAutomationImage != null && automationUploadStarted) {
+                        progress("Alice не запросила фотографию. Остановилась без ручного выбора; изображение сохранено в ASTRA.");
+                        queuedAutomationImage = null;
+                        queuedAutomationPrompt = null;
+                        automationUploadStarted = false;
+                    }
+                }, 15000L);
             } else {
                 progress("Не найден прямой загрузчик файла Alice. Остановилась; картину не потеряла.");
                 queuedAutomationImage = null;
