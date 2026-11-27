@@ -309,14 +309,16 @@ public final class AliceBrowserPanel extends LinearLayout {
                 // menu. The actual HTML file input is opened only after the user chooses
                 // Photo, which triggers onShowFileChooser asynchronously. Keep the ASTRA
                 // image queued until that callback consumes it; never open a second picker.
-                progress("Открыла меню Alice. Ищу пункт «Фото»…");
-                main.postDelayed(() -> clickPhotoMenuOption(), 450L);
+                // The upload control opened Alice's intermediate Camera / Photo / Files
+                // surface. It is not a DOM element, so JavaScript cannot reliably press it.
+                // Show ASTRA's own picker in chat instead of pretending we clicked Photo.
+                progress("Alice открыла меню загрузки. Показываю ASTRA Gallery прямо в чате…");
+                if (host instanceof ChatActivity) {
+                    ((ChatActivity) host).requestAliceGalleryForPendingChooser();
+                }
                 main.postDelayed(() -> {
                     if (!destroyed && queuedAutomationImage != null && automationUploadStarted) {
-                        progress("Alice открыла системный выбор. Ожидаю запрос файла; если он появится, выбор продолжится через карточку ASTRA Gallery.");
-                        queuedAutomationImage = null;
-                        // Keep the prompt and task alive: WebView may request the file only
-                        // after its native sheet animation has completed.
+                        progress("Жду выбора фото в ASTRA Gallery или запроса файла от Alice. Исходная картина сохранена.");
                     }
                 }, 30000L);
             } else {
@@ -416,6 +418,17 @@ public final class AliceBrowserPanel extends LinearLayout {
 
     public boolean hasPendingFileChooser() {
         return pendingFileCallback != null;
+    }
+
+    public boolean hasActiveAutomation() {
+        return automationUploadStarted;
+    }
+
+    public void replaceQueuedAutomationImage(Uri image) {
+        if (destroyed || image == null || !automationUploadStarted) return;
+        queuedAutomationImage = image;
+        progress("Фото выбрано в ASTRA Gallery. Жду запрос файла от Alice для передачи…");
+        Log.i(TAG, "Queued automation image replaced from in-chat ASTRA Gallery");
     }
 
     public void provideFileToAlice(Uri image) {
