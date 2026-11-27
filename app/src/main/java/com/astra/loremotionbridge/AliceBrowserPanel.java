@@ -287,14 +287,17 @@ public final class AliceBrowserPanel extends LinearLayout {
             Log.i(TAG, "Alice direct file input trigger: " + raw);
             if (raw != null && raw.contains("file-input-clicked")) {
                 progress("Запросила файл напрямую. Передаю выбранную в ASTRA картину…");
+                // Android/WebView may deliver onShowFileChooser asynchronously after the
+                // page's upload sheet animation. Do not discard the queued ASTRA URI after
+                // 3.5 seconds: that raced the native chooser and caused a second manual picker.
                 main.postDelayed(() -> {
-                    if (queuedAutomationImage != null) {
-                        progress("Alice не запросила файл напрямую. Остановилась без повторных нажатий.");
+                    if (!destroyed && queuedAutomationImage != null && automationUploadStarted) {
+                        progress("Alice не запросила файл за 30 секунд. Остановилась без ручного выбора; фото осталось в ASTRA.");
                         queuedAutomationImage = null;
                         queuedAutomationPrompt = null;
                         automationUploadStarted = false;
                     }
-                }, 3500L);
+                }, 30000L);
             } else if (raw != null && raw.contains("upload-button-only")) {
                 // Alice's visible upload button opens an intermediate Camera / Photo / Files
                 // menu. The actual HTML file input is opened only after the user chooses
