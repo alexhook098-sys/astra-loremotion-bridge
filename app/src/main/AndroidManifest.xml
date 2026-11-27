@@ -28,6 +28,7 @@
         <uses-native-library android:name="libagifencoder.quram.so" android:required="false" />
 
         <activity android:name=".GifStudioActivity" android:exported="false" />
+        <activity android:name=".VideoStudioActivity" android:exported="false" />
         <activity android:name=".RadioActivity" android:exported="false" />
         <activity android:name=".AliceMediaActivity" android:exported="false"
             android:launchMode="singleTask" android:taskAffinity="com.astra.loremotionbridge.alice"
