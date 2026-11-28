@@ -115,6 +115,8 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private LinearLayout timelineList;
     private TextView timelineSummary;
     private int selectedClipIndex = -1;
+    private boolean timelinePreviewActive = false;
+    private int previewTimelineIndex = -1;
     private static class TimelineClip { Uri uri; String name; int durationMs; int startMs; int endMs; TimelineClip(Uri u, String n, int d) { uri=u; name=n; durationMs=d; startMs=0; endMs=d; } }
 
     @Override protected void onCreate(Bundle state) {
@@ -268,10 +270,13 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         trimPanel.setBackground(gradient(PANEL, Color.rgb(75, 48, 119), 17));
         TextView trimTitle = text("ОБРЕЗКА ФРАГМЕНТА", 13, WHITE, true);
         trimPanel.addView(trimTitle, wrap());
+        TextView trimHelp = text("Выбери фрагмент ниже и настрой начало и конец", 10, MUTED, false);
+        LinearLayout.LayoutParams thp = wrap(); thp.topMargin = dp(3);
+        trimPanel.addView(trimHelp, thp);
         trimRangeLabel = text("00:00 — 00:00", 11, LILAC, true);
         LinearLayout.LayoutParams trlp = wrap(); trlp.topMargin = dp(5);
         trimPanel.addView(trimRangeLabel, trlp);
-        TextView startCaption = text("НАЧАЛО", 9, MUTED, true);
+        TextView startCaption = text("НАЧАТЬ С", 10, MUTED, true);
         LinearLayout.LayoutParams scp = wrap(); scp.topMargin = dp(7);
         trimPanel.addView(startCaption, scp);
         trimStartBar = new SeekBar(this);
@@ -291,7 +296,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
             }
         });
         trimPanel.addView(trimStartBar, wrap());
-        TextView endCaption = text("КОНЕЦ", 9, MUTED, true);
+        TextView endCaption = text("ЗАКОНЧИТЬ НА", 10, MUTED, true);
         trimPanel.addView(endCaption, wrap());
         trimEndBar = new SeekBar(this);
         trimEndBar.setMax(1000);
@@ -317,7 +322,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         timelinePanel.setPadding(dp(13), dp(12), dp(13), dp(12));
         timelinePanel.setBackground(gradient(PANEL, Color.rgb(75, 48, 119), 17));
         timelinePanel.addView(text("МОНТАЖНАЯ ШКАЛА", 13, WHITE, true), wrap());
-        timelineSummary = text("Добавь ещё видео, чтобы собрать ролик", 10, MUTED, false);
+        timelineSummary = text("Фрагменты будут идти друг за другом в готовом видео", 10, MUTED, false);
         timelinePanel.addView(timelineSummary, wrap());
         timelineList = new LinearLayout(this);
         timelineList.setOrientation(LinearLayout.VERTICAL);
@@ -458,6 +463,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     }
 
     private void play(Uri uri, String name) {
+        timelinePreviewActive = false; previewTimelineIndex = -1;
         currentUri = uri;
         sourceDurationMs = 0;
         trimStartMs = 0;
@@ -492,24 +498,22 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 if (currentTimeLabel != null) currentTimeLabel.setText("00:00");
                 if (durationLabel != null) durationLabel.setText(formatTime(mp.getDuration()));
                 sourceDurationMs = mp.getDuration();
-                if (selectedClipIndex >= 0 && selectedClipIndex < timelineClips.size()) {
-                    TimelineClip selected = timelineClips.get(selectedClipIndex);
-                    trimStartMs = selected.startMs;
-                    trimEndMs = selected.endMs;
-                } else {
-                    trimStartMs = 0;
-                    trimEndMs = sourceDurationMs;
-                }
+                if (timelinePreviewActive && previewTimelineIndex >= 0 && previewTimelineIndex < timelineClips.size()) {
+                    TimelineClip active = timelineClips.get(previewTimelineIndex); trimStartMs = active.startMs; trimEndMs = active.endMs;
+                } else if (selectedClipIndex >= 0 && selectedClipIndex < timelineClips.size()) {
+                    TimelineClip selected = timelineClips.get(selectedClipIndex); trimStartMs = selected.startMs; trimEndMs = selected.endMs;
+                } else { trimStartMs = 0; trimEndMs = sourceDurationMs; }
                 if (trimStartBar != null) { trimStartBar.setMax(sourceDurationMs); trimStartBar.setProgress(0); }
                 if (trimEndBar != null) { trimEndBar.setMax(sourceDurationMs); trimEndBar.setProgress(sourceDurationMs); }
                 updateTrimLabel();
                 if (playPauseButton != null) playPauseButton.setText("Ⅱ");
                 applyPlaybackSpeed();
+                if (timelinePreviewActive && previewTimelineIndex >= 0 && previewTimelineIndex < timelineClips.size()) mp.seekTo(timelineClips.get(previewTimelineIndex).startMs);
                 mp.start();
                 uiHandler.removeCallbacks(progressUpdater);
                 uiHandler.post(progressUpdater);
             });
-            mediaPlayer.setOnCompletionListener(mp -> previewHint.setText("Просмотр завершён"));
+            mediaPlayer.setOnCompletionListener(mp -> { if (timelinePreviewActive) advanceTimelinePreview(); else previewHint.setText("Просмотр завершён"); });
             mediaPlayer.setOnErrorListener((mp, what, extra) -> {
                 prepared = false;
                 previewHint.setText("Ошибка воспроизведения (" + what + "/" + extra + ")");
@@ -684,16 +688,37 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     }
 
     private void togglePlayback() {
+        if (prepared && mediaPlayer != null && mediaPlayer.isPlaying()) { mediaPlayer.pause(); playPauseButton.setText("▶"); return; }
+        if (timelineClips.size() > 1) { startTimelinePreview(); return; }
         if (!prepared || mediaPlayer == null) return;
-        if (mediaPlayer.isPlaying()) {
-            mediaPlayer.pause();
-            playPauseButton.setText("▶");
-        } else {
-            mediaPlayer.start();
-            playPauseButton.setText("Ⅱ");
-            uiHandler.removeCallbacks(progressUpdater);
-            uiHandler.post(progressUpdater);
+        mediaPlayer.start(); playPauseButton.setText("Ⅱ");
+        uiHandler.removeCallbacks(progressUpdater); uiHandler.post(progressUpdater);
+    }
+
+    private void startTimelinePreview() {
+        if (timelineClips.isEmpty()) return;
+        timelinePreviewActive = true; previewTimelineIndex = 0; selectedClipIndex = 0;
+        renderTimeline(); prepareTimelinePreviewClip(timelineClips.get(0));
+    }
+
+    private void prepareTimelinePreviewClip(TimelineClip clip) {
+        currentUri = clip.uri; sourceDurationMs = clip.durationMs;
+        trimStartMs = clip.startMs; trimEndMs = clip.endMs;
+        previewTitle.setText("МОНТАЖ · " + (previewTimelineIndex + 1) + "/" + timelineClips.size());
+        previewHint.setText("Просмотр всей монтажной последовательности");
+        prepareVideo(clip.uri);
+    }
+
+    private void advanceTimelinePreview() {
+        if (!timelinePreviewActive) return;
+        previewTimelineIndex++;
+        if (previewTimelineIndex >= timelineClips.size()) {
+            timelinePreviewActive = false; previewHint.setText("Просмотр всего монтажа завершён");
+            if (playPauseButton != null) playPauseButton.setText("▶");
+            return;
         }
+        selectedClipIndex = previewTimelineIndex; renderTimeline();
+        prepareTimelinePreviewClip(timelineClips.get(previewTimelineIndex));
     }
 
     @Override public void start() { if (prepared && mediaPlayer != null) mediaPlayer.start(); }
@@ -712,7 +737,8 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         String last = uri.getLastPathSegment();
         if (last == null) return "МОЁ ВИДЕО";
         int slash = last.lastIndexOf('/');
-        return slash >= 0 ? last.substring(slash + 1) : last;
+        String name = slash >= 0 ? last.substring(slash + 1) : last;
+        return name.startsWith("video:") ? "Видеофрагмент" : name;
     }
 
     private void scanAstraExports() {
