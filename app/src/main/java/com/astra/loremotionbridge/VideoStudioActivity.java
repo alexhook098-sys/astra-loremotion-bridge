@@ -492,8 +492,14 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 if (currentTimeLabel != null) currentTimeLabel.setText("00:00");
                 if (durationLabel != null) durationLabel.setText(formatTime(mp.getDuration()));
                 sourceDurationMs = mp.getDuration();
-                trimStartMs = 0;
-                trimEndMs = sourceDurationMs;
+                if (selectedClipIndex >= 0 && selectedClipIndex < timelineClips.size()) {
+                    TimelineClip selected = timelineClips.get(selectedClipIndex);
+                    trimStartMs = selected.startMs;
+                    trimEndMs = selected.endMs;
+                } else {
+                    trimStartMs = 0;
+                    trimEndMs = sourceDurationMs;
+                }
                 if (trimStartBar != null) { trimStartBar.setMax(sourceDurationMs); trimStartBar.setProgress(0); }
                 if (trimEndBar != null) { trimEndBar.setMax(sourceDurationMs); trimEndBar.setProgress(sourceDurationMs); }
                 updateTrimLabel();
