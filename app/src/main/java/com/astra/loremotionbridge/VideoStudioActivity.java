@@ -444,6 +444,17 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
             if (frame != null) thumb.setImageBitmap(frame);
             else thumb.setBackgroundColor(Color.rgb(42, 36, 62));
             card.addView(thumb, new LinearLayout.LayoutParams(dp(126), dp(66)));
+            thumb.setOnTouchListener((v, event) -> {
+                if (event.getAction() == android.view.MotionEvent.ACTION_DOWN
+                        || event.getAction() == android.view.MotionEvent.ACTION_MOVE
+                        || event.getAction() == android.view.MotionEvent.ACTION_UP) {
+                    float fraction = Math.max(0f, Math.min(1f, event.getX() / Math.max(1f, v.getWidth())));
+                    int target = clip.startMs + Math.round((clip.endMs - clip.startMs) * fraction);
+                    setTimelineCursor(index, target);
+                    return true;
+                }
+                return true;
+            });
             TextView caption = text((index + 1) + "  ·  " + formatTime(clip.endMs - clip.startMs), 10,
                     i == selectedClipIndex ? LILAC : WHITE, true);
             caption.setGravity(Gravity.CENTER);
@@ -479,11 +490,15 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         TimelineClip clip = timelineClips.get(index);
         selectedCursorMs = Math.max(clip.startMs, Math.min(clip.endMs, positionMs));
         pendingPreviewSeekMs = selectedCursorMs;
+        if (timelinePlayer != null) {
+            releaseTimelinePlayer();
+        }
         if (prepared && mediaPlayer != null && currentUri != null && currentUri.equals(clip.uri)) {
             try {
                 pauseAfterPreviewSeek = true;
+                if (mediaPlayer.isPlaying()) mediaPlayer.pause();
                 mediaPlayer.seekTo(selectedCursorMs);
-                if (!mediaPlayer.isPlaying()) mediaPlayer.start();
+                if (playPauseButton != null) playPauseButton.setText("▶");
             } catch (Exception ignored) {}
         } else if (videoView != null && videoView.isAvailable()) {
             prepareVideo(clip.uri);
@@ -794,8 +809,8 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 playPauseButton.setText("▶");
             } else {
                 if (timelinePlayer.getPlaybackState() == Player.STATE_ENDED) {
-                    timelinePlayer.seekTo(0, 0);
-                    timelinePlayer.prepare();
+                    int restartIndex = selectedClipIndex >= 0 && selectedClipIndex < timelineClips.size() ? selectedClipIndex : 0;
+                    timelinePlayer.seekTo(restartIndex, 0L);
                 }
                 timelinePlayer.play();
                 playPauseButton.setText("Ⅱ");
@@ -813,8 +828,9 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
 
     private void startTimelinePreview() {
         if (timelineClips.isEmpty() || !videoView.isAvailable()) return;
+        int startIndex = selectedClipIndex >= 0 && selectedClipIndex < timelineClips.size() ? selectedClipIndex : 0;
         releasePlayer();
-        timelinePreviewActive = true; previewTimelineIndex = 0; selectedClipIndex = 0;
+        timelinePreviewActive = true; previewTimelineIndex = startIndex; selectedClipIndex = startIndex;
         try {
             timelinePlayer = new ExoPlayer.Builder(this).build();
             timelinePlayer.setVideoTextureView(videoView);
@@ -854,7 +870,9 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                         .setStartPositionMs(clip.startMs).setEndPositionMs(clip.endMs).build();
                 playlist.add(new MediaItem.Builder().setUri(clip.uri).setClippingConfiguration(clipping).build());
             }
-            timelinePlayer.setMediaItems(playlist); timelinePlayer.prepare(); timelinePlayer.play();
+            timelinePlayer.setMediaItems(playlist, startIndex, 0L);
+            timelinePlayer.prepare();
+            timelinePlayer.play();
             renderTimeline(); uiHandler.removeCallbacks(progressUpdater); uiHandler.post(progressUpdater);
         } catch (Exception e) {
             timelinePreviewActive = false; previewHint.setText("Не удалось запустить монтаж: " + e.getMessage());
