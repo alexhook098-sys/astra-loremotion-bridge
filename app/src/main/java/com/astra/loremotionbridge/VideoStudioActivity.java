@@ -310,6 +310,27 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         trp.bottomMargin = dp(10);
         root.addView(trimPanel, trp);
 
+
+        LinearLayout timelinePanel = new LinearLayout(this);
+        timelinePanel.setOrientation(LinearLayout.VERTICAL);
+        timelinePanel.setPadding(dp(13), dp(12), dp(13), dp(12));
+        timelinePanel.setBackground(gradient(PANEL, Color.rgb(75, 48, 119), 17));
+        timelinePanel.addView(text("МОНТАЖНАЯ ШКАЛА", 13, WHITE, true), wrap());
+        timelineSummary = text("Добавь ещё видео, чтобы собрать ролик", 10, MUTED, false);
+        timelinePanel.addView(timelineSummary, wrap());
+        timelineList = new LinearLayout(this);
+        timelineList.setOrientation(LinearLayout.VERTICAL);
+        timelinePanel.addView(timelineList, wrap());
+        Button addClip = pill("＋  ДОБАВИТЬ ФРАГМЕНТ", LILAC);
+        addClip.setOnClickListener(v -> chooseExtraVideo());
+        LinearLayout.LayoutParams addParams = new LinearLayout.LayoutParams(-1, dp(44));
+        addParams.topMargin = dp(8);
+        timelinePanel.addView(addClip, addParams);
+        TextView transitionInfo = text("ПЕРЕХОДЫ: пока доступна склейка. Растворение и затемнение — следующий этап.", 10, MUTED, false);
+        LinearLayout.LayoutParams transitionParams = wrap(); transitionParams.topMargin = dp(8);
+        timelinePanel.addView(transitionInfo, transitionParams);
+        LinearLayout.LayoutParams timelineParams = new LinearLayout.LayoutParams(-1, -2); timelineParams.bottomMargin = dp(10);
+        root.addView(timelinePanel, timelineParams);
         LinearLayout quick = new LinearLayout(this);
         quick.setOrientation(LinearLayout.HORIZONTAL);
         quick.addView(quickCard("✂", "Монтаж", "Скоро"), weighted());
