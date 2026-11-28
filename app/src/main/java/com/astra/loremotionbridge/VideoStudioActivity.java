@@ -463,24 +463,63 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
             TimelineClip clip = timelineClips.get(i);
             total += Math.max(0, clip.endMs - clip.startMs);
             final int index = i;
-            Button item = pill((i == selectedClipIndex ? "●  " : (i + 1) + ".  ") + clip.name
-                    + "   " + formatTime(clip.endMs - clip.startMs), i == selectedClipIndex ? PURPLE : LILAC);
-            item.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
-            item.setOnClickListener(v -> selectTimelineClip(index));
-            item.setOnLongClickListener(v -> {
+            LinearLayout card = new LinearLayout(this);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setPadding(dp(5), dp(5), dp(5), dp(4));
+            card.setBackground(gradient(i == selectedClipIndex ? PANEL_2 : PANEL,
+                    i == selectedClipIndex ? PURPLE : Color.rgb(65, 55, 91), 10));
+            ImageView thumb = new ImageView(this);
+            thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            Bitmap frame = null;
+            MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+            try {
+                retriever.setDataSource(this, clip.uri);
+                frame = retriever.getFrameAtTime(clip.startMs * 1000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+            } catch (Exception ignored) {
+            } finally { try { retriever.release(); } catch (Exception ignored) {} }
+            if (frame != null) thumb.setImageBitmap(frame);
+            else thumb.setBackgroundColor(Color.rgb(42, 36, 62));
+            card.addView(thumb, new LinearLayout.LayoutParams(dp(126), dp(66)));
+            TextView caption = text((index + 1) + "  ·  " + formatTime(clip.endMs - clip.startMs), 10,
+                    i == selectedClipIndex ? LILAC : WHITE, true);
+            caption.setGravity(Gravity.CENTER);
+            card.addView(caption, new LinearLayout.LayoutParams(-1, dp(23)));
+            LinearLayout actions = new LinearLayout(this);
+            actions.setGravity(Gravity.CENTER);
+            TextView left = text("‹", 18, i > 0 ? LILAC : MUTED, true);
+            TextView right = text("›", 18, i < timelineClips.size() - 1 ? LILAC : MUTED, true);
+            left.setGravity(Gravity.CENTER); right.setGravity(Gravity.CENTER);
+            left.setOnClickListener(v -> moveTimelineClip(index, -1));
+            right.setOnClickListener(v -> moveTimelineClip(index, 1));
+            actions.addView(left, new LinearLayout.LayoutParams(dp(38), dp(25)));
+            actions.addView(text("↕", 11, MUTED, false), new LinearLayout.LayoutParams(dp(24), dp(25)));
+            actions.addView(right, new LinearLayout.LayoutParams(dp(38), dp(25)));
+            card.addView(actions);
+            card.setOnClickListener(v -> selectTimelineClip(index));
+            card.setOnLongClickListener(v -> {
                 if (timelineClips.size() <= 1) return true;
                 timelineClips.remove(index);
-                selectedClipIndex = Math.min(selectedClipIndex, timelineClips.size() - 1);
+                selectedClipIndex = Math.min(index, timelineClips.size() - 1);
                 selectTimelineClip(selectedClipIndex);
                 Toast.makeText(this, "Фрагмент удалён", Toast.LENGTH_SHORT).show();
                 return true;
             });
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(42));
-            params.bottomMargin = dp(5);
-            timelineList.addView(item, params);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(140), dp(112));
+            params.rightMargin = dp(7);
+            timelineList.addView(card, params);
         }
-        if (timelineSummary != null) timelineSummary.setText(timelineClips.size() + " фрагм. · " + formatTime(total)
-                + " · нажми для выбора, удерживай для удаления");
+        if (timelineSummary != null) timelineSummary.setText(timelineClips.size() + " клипа · " + formatTime(total)
+                + " · листай в сторону, удерживай для удаления");
+    }
+
+    private void moveTimelineClip(int from, int delta) {
+        int to = from + delta;
+        if (from < 0 || from >= timelineClips.size() || to < 0 || to >= timelineClips.size()) return;
+        TimelineClip clip = timelineClips.remove(from);
+        timelineClips.add(to, clip);
+        selectedClipIndex = to;
+        releaseTimelinePlayer();
+        selectTimelineClip(to);
     }
 
     private void play(Uri uri, String name) {
