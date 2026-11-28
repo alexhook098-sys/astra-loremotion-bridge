@@ -6,6 +6,9 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
+import android.media.MediaPlayer;
+import android.view.Surface;
+import android.view.TextureView;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -16,12 +19,12 @@ import android.widget.LinearLayout;
 import android.widget.MediaController;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.VideoView;
+
 import android.widget.Toast;
 import java.io.File;
 import java.util.ArrayList;
 
-public class VideoStudioActivity extends Activity {
+public class VideoStudioActivity extends Activity implements MediaController.MediaPlayerControl {
     private static final int BG = Color.rgb(7, 8, 20);
     private static final int PANEL = Color.rgb(19, 18, 39);
     private static final int PANEL_2 = Color.rgb(27, 22, 52);
@@ -31,7 +34,11 @@ public class VideoStudioActivity extends Activity {
     private static final int MUTED = Color.rgb(157, 148, 185);
     private static final int PICK_VIDEO = 8421;
 
-    private VideoView videoView;
+    private TextureView videoView;
+    private MediaPlayer mediaPlayer;
+    private MediaController mediaController;
+    private Surface videoSurface;
+    private boolean prepared = false;
     private FrameLayout previewCard;
     private TextView previewTitle;
     private TextView previewHint;
@@ -94,19 +101,20 @@ public class VideoStudioActivity extends Activity {
         vp.topMargin = dp(9);
         root.addView(previewCard, vp);
 
-        videoView = new VideoView(this);
-        videoView.setBackgroundColor(Color.BLACK);
+        videoView = new TextureView(this);
+        videoView.setOpaque(false);
+        videoView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+            @Override public void onSurfaceTextureAvailable(android.graphics.SurfaceTexture texture, int w, int h) {
+                if (currentUri != null) prepareVideo(currentUri);
+            }
+            @Override public void onSurfaceTextureSizeChanged(android.graphics.SurfaceTexture texture, int w, int h) {}
+            @Override public boolean onSurfaceTextureDestroyed(android.graphics.SurfaceTexture texture) {
+                releasePlayer();
+                return true;
+            }
+            @Override public void onSurfaceTextureUpdated(android.graphics.SurfaceTexture texture) {}
+        });
         previewCard.addView(videoView, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
-        videoView.setOnPreparedListener(mp -> {
-            previewTitle.setText("ВОСПРОИЗВЕДЕНИЕ");
-            previewHint.setText("Видео готово · нажми ▶");
-            // VideoView performs native aspect-ratio measurement; do not resize its SurfaceView.
-        });
-        videoView.setOnCompletionListener(mp -> previewHint.setText("Просмотр завершён"));
-        videoView.setOnErrorListener((mp, what, extra) -> {
-            previewHint.setText("Не удалось воспроизвести этот файл");
-            return true;
-        });
 
         emptyOverlay = new LinearLayout(this);
         LinearLayout empty = emptyOverlay;
@@ -185,17 +193,60 @@ public class VideoStudioActivity extends Activity {
         if (emptyOverlay != null) emptyOverlay.setVisibility(View.GONE);
         previewTitle.setText(name == null ? "ВИДЕО ВЫБРАНО" : name);
         previewHint.setText("Загрузка видео…");
-        MediaController controls = new MediaController(this);
-        controls.setAnchorView(videoView);
-        videoView.setMediaController(controls);
-        videoView.setVideoURI(uri);
-        videoView.requestFocus();
-        videoView.setOnPreparedListener(mp -> {
-            previewHint.setText(formatTime(mp.getDuration()) + "  ·  готово к просмотру");
-            // Keep VideoView at match-parent; its internal measure pass fits the source aspect ratio.
-            videoView.start();
-        });
+        releasePlayer();
+        if (videoView.isAvailable()) prepareVideo(uri);
     }
+
+    private void prepareVideo(Uri uri) {
+        releasePlayer();
+        try {
+            mediaPlayer = new MediaPlayer();
+            mediaPlayer.setDataSource(this, uri);
+            videoSurface = new Surface(videoView.getSurfaceTexture());
+            mediaPlayer.setSurface(videoSurface);
+            mediaPlayer.setOnPreparedListener(mp -> {
+                prepared = true;
+                previewTitle.setText("ВОСПРОИЗВЕДЕНИЕ");
+                previewHint.setText(formatTime(mp.getDuration()) + "  ·  готово к просмотру");
+                mediaController = new MediaController(this);
+                mediaController.setAnchorView(previewCard);
+                mediaController.setMediaPlayer(this);
+                mediaController.setEnabled(true);
+                mp.start();
+            });
+            mediaPlayer.setOnCompletionListener(mp -> previewHint.setText("Просмотр завершён"));
+            mediaPlayer.setOnErrorListener((mp, what, extra) -> {
+                prepared = false;
+                previewHint.setText("Ошибка воспроизведения (" + what + "/" + extra + ")");
+                return true;
+            });
+            mediaPlayer.prepareAsync();
+        } catch (Exception e) {
+            previewHint.setText("Не удалось открыть видео: " + e.getMessage());
+            releasePlayer();
+        }
+    }
+
+    private void releasePlayer() {
+        prepared = false;
+        if (mediaPlayer != null) {
+            try { mediaPlayer.setOnPreparedListener(null); mediaPlayer.setOnCompletionListener(null); mediaPlayer.setOnErrorListener(null); mediaPlayer.reset(); mediaPlayer.release(); } catch (Exception ignored) {}
+            mediaPlayer = null;
+        }
+        if (videoSurface != null) { try { videoSurface.release(); } catch (Exception ignored) {} videoSurface = null; }
+    }
+
+    @Override public void start() { if (prepared && mediaPlayer != null) mediaPlayer.start(); }
+    @Override public void pause() { if (prepared && mediaPlayer != null && mediaPlayer.isPlaying()) mediaPlayer.pause(); }
+    @Override public int getDuration() { return prepared && mediaPlayer != null ? mediaPlayer.getDuration() : 0; }
+    @Override public int getCurrentPosition() { return prepared && mediaPlayer != null ? mediaPlayer.getCurrentPosition() : 0; }
+    @Override public void seekTo(int pos) { if (prepared && mediaPlayer != null) mediaPlayer.seekTo(pos); }
+    @Override public boolean isPlaying() { return prepared && mediaPlayer != null && mediaPlayer.isPlaying(); }
+    @Override public int getBufferPercentage() { return 0; }
+    @Override public boolean canPause() { return true; }
+    @Override public boolean canSeekBackward() { return true; }
+    @Override public boolean canSeekForward() { return true; }
+    @Override public int getAudioSessionId() { return mediaPlayer != null ? mediaPlayer.getAudioSessionId() : 0; }
 
     private String displayName(Uri uri) {
         String last = uri.getLastPathSegment();
@@ -282,11 +333,12 @@ public class VideoStudioActivity extends Activity {
     private int dp(int n) { return Math.round(n * getResources().getDisplayMetrics().density); }
 
     @Override protected void onPause() {
-        if (videoView != null && videoView.isPlaying()) videoView.pause();
+        if (prepared && mediaPlayer != null && mediaPlayer.isPlaying()) mediaPlayer.pause();
         super.onPause();
     }
     @Override protected void onDestroy() {
-        if (videoView != null) { videoView.stopPlayback(); videoView = null; }
+        releasePlayer();
+        videoView = null;
         super.onDestroy();
     }
 }
