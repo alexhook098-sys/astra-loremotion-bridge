@@ -24,8 +24,22 @@ import android.os.Looper;
 import android.widget.TextView;
 
 import android.widget.Toast;
+import android.content.ContentValues;
+import android.provider.MediaStore;
+import android.os.Build;
+import android.os.Environment;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.MimeTypes;
+import androidx.media3.transformer.Composition;
+import androidx.media3.transformer.EditedMediaItem;
+import androidx.media3.transformer.ExportException;
+import androidx.media3.transformer.ExportResult;
+import androidx.media3.transformer.ProgressHolder;
+import androidx.media3.transformer.Transformer;
 
 public class VideoStudioActivity extends Activity implements MediaController.MediaPlayerControl {
     private static final int BG = Color.rgb(7, 8, 20);
@@ -43,6 +57,20 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private Surface videoSurface;
     private boolean prepared = false;
     private Button playPauseButton;
+    private Button exportButton;
+    private Transformer activeTransformer;
+    private File activeExportFile;
+    private final ProgressHolder exportProgress = new ProgressHolder();
+    private final Runnable exportProgressUpdater = new Runnable() {
+        @Override public void run() {
+            if (activeTransformer == null) return;
+            int state = activeTransformer.getProgress(exportProgress);
+            if (state == Transformer.PROGRESS_STATE_AVAILABLE) {
+                previewHint.setText("Экспорт видео… " + exportProgress.progress + "%");
+                uiHandler.postDelayed(this, 500);
+            }
+        }
+    };
     private SeekBar seekBar;
     private TextView currentTimeLabel;
     private TextView durationLabel;
@@ -203,6 +231,14 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         op.topMargin = dp(14); op.bottomMargin = dp(9);
         root.addView(open, op);
 
+        exportButton = pill("↧   СОХРАНИТЬ КОПИЮ", PURPLE);
+        exportButton.setTextSize(13);
+        exportButton.setVisibility(View.GONE);
+        exportButton.setOnClickListener(v -> exportCurrentVideo());
+        LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(-1, dp(48));
+        ep.bottomMargin = dp(9);
+        root.addView(exportButton, ep);
+
         LinearLayout quick = new LinearLayout(this);
         quick.setOrientation(LinearLayout.HORIZONTAL);
         quick.addView(quickCard("✂", "Монтаж", "Скоро"), weighted());
@@ -247,6 +283,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
 
     private void play(Uri uri, String name) {
         currentUri = uri;
+        if (exportButton != null) exportButton.setVisibility(View.VISIBLE);
         if (videoView != null && previewCard != null) {
             FrameLayout.LayoutParams full = new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER);
             videoView.setLayoutParams(full);
@@ -325,6 +362,92 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         if (currentTimeLabel != null) currentTimeLabel.setText("00:00");
         if (durationLabel != null) durationLabel.setText("00:00");
         if (videoSurface != null) { try { videoSurface.release(); } catch (Exception ignored) {} videoSurface = null; }
+    }
+
+
+    private void exportCurrentVideo() {
+        if (currentUri == null || activeTransformer != null) {
+            if (activeTransformer != null) Toast.makeText(this, "Экспорт уже выполняется", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        File movies = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+        if (movies == null) { Toast.makeText(this, "Нет папки для экспорта", Toast.LENGTH_LONG).show(); return; }
+        if (!movies.exists() && !movies.mkdirs()) { Toast.makeText(this, "Не удалось создать папку экспорта", Toast.LENGTH_LONG).show(); return; }
+        activeExportFile = new File(movies, "ASTRA_" + System.currentTimeMillis() + ".mp4");
+        exportButton.setEnabled(false);
+        exportButton.setText("ЭКСПОРТ…");
+        previewHint.setText("Подготовка экспорта…");
+        try {
+            EditedMediaItem edited = new EditedMediaItem.Builder(MediaItem.fromUri(currentUri)).build();
+            activeTransformer = new Transformer.Builder(this)
+                    .setVideoMimeType(MimeTypes.VIDEO_H264)
+                    .setAudioMimeType(MimeTypes.AUDIO_AAC)
+                    .addListener(new Transformer.Listener() {
+                        @Override public void onCompleted(Composition composition, ExportResult result) {
+                            uiHandler.removeCallbacks(exportProgressUpdater);
+                            activeTransformer = null;
+                            publishExportToGallery(activeExportFile);
+                        }
+                        @Override public void onError(Composition composition, ExportResult result, ExportException exception) {
+                            uiHandler.removeCallbacks(exportProgressUpdater);
+                            activeTransformer = null;
+                            if (activeExportFile != null) activeExportFile.delete();
+                            exportButton.setEnabled(true);
+                            exportButton.setText("↧   СОХРАНИТЬ КОПИЮ");
+                            previewHint.setText("Ошибка экспорта: " + exception.getErrorCodeName());
+                            Toast.makeText(VideoStudioActivity.this, "Не удалось экспортировать видео", Toast.LENGTH_LONG).show();
+                        }
+                    }).build();
+            activeTransformer.start(edited, activeExportFile.getAbsolutePath());
+            uiHandler.post(exportProgressUpdater);
+        } catch (Exception e) {
+            activeTransformer = null;
+            if (activeExportFile != null) activeExportFile.delete();
+            exportButton.setEnabled(true);
+            exportButton.setText("↧   СОХРАНИТЬ КОПИЮ");
+            previewHint.setText("Не удалось начать экспорт");
+            Toast.makeText(this, "Ошибка запуска экспорта: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void publishExportToGallery(File file) {
+        if (file == null || !file.exists() || file.length() == 0) { finishExportUi(false, "Файл экспорта не найден"); return; }
+        try {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Video.Media.DISPLAY_NAME, file.getName());
+            values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
+            if (Build.VERSION.SDK_INT >= 29) {
+                values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/ASTRA");
+                values.put(MediaStore.Video.Media.IS_PENDING, 1);
+            }
+            android.net.Uri destination = getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
+            if (destination == null) throw new java.io.IOException("Не удалось создать запись в галерее");
+            try (FileInputStream input = new FileInputStream(file); OutputStream output = getContentResolver().openOutputStream(destination)) {
+                if (output == null) throw new java.io.IOException("Не удалось открыть файл галереи");
+                byte[] buffer = new byte[65536]; int count;
+                while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+                output.flush();
+            } catch (Exception copyError) {
+                getContentResolver().delete(destination, null, null);
+                throw copyError;
+            }
+            if (Build.VERSION.SDK_INT >= 29) {
+                ContentValues ready = new ContentValues(); ready.put(MediaStore.Video.Media.IS_PENDING, 0);
+                getContentResolver().update(destination, ready, null, null);
+            }
+            file.delete();
+            finishExportUi(true, "Готово! Видео сохранено в Галерею → Movies/ASTRA");
+        } catch (Exception e) {
+            finishExportUi(false, "Экспорт готов, перенос в Галерею не удался: " + e.getMessage());
+        }
+    }
+
+    private void finishExportUi(boolean success, String message) {
+        exportButton.setEnabled(true);
+        exportButton.setText("↧   СОХРАНИТЬ КОПИЮ");
+        previewHint.setText(message);
+        Toast.makeText(this, success ? "Видео сохранено в Галерею" : message, Toast.LENGTH_LONG).show();
+        scanAstraExports();
     }
 
     private void togglePlayback() {
@@ -441,6 +564,8 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         super.onPause();
     }
     @Override protected void onDestroy() {
+        uiHandler.removeCallbacks(exportProgressUpdater);
+        if (activeTransformer != null) { try { activeTransformer.cancel(); } catch (Exception ignored) {} activeTransformer = null; }
         releasePlayer();
         videoView = null;
         super.onDestroy();
