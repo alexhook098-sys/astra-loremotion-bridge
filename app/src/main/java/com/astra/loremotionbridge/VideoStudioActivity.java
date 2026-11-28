@@ -32,6 +32,7 @@ public class VideoStudioActivity extends Activity {
     private static final int PICK_VIDEO = 8421;
 
     private VideoView videoView;
+    private FrameLayout previewCard;
     private TextView previewTitle;
     private TextView previewHint;
     private LinearLayout recentList;
@@ -82,7 +83,7 @@ public class VideoStudioActivity extends Activity {
         section.setLetterSpacing(0.12f);
         root.addView(section, wrap());
 
-        FrameLayout previewCard = new FrameLayout(this);
+        previewCard = new FrameLayout(this);
         GradientDrawable previewBg = gradient(PANEL_2, Color.rgb(75, 48, 119), 24);
         previewCard.setBackground(previewBg);
         previewCard.setClipToOutline(true);
@@ -92,11 +93,13 @@ public class VideoStudioActivity extends Activity {
         root.addView(previewCard, vp);
 
         videoView = new VideoView(this);
-        previewCard.addView(videoView, new FrameLayout.LayoutParams(-1, -1));
+        videoView.setBackgroundColor(Color.BLACK);
+        previewCard.addView(videoView, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
         videoView.setOnPreparedListener(mp -> {
             previewTitle.setText("ВОСПРОИЗВЕДЕНИЕ");
             previewHint.setText("Видео готово · нажми ▶");
-            mp.setOnVideoSizeChangedListener((m,w,h) -> videoView.setBackgroundColor(Color.TRANSPARENT));
+            fitVideoInsidePreview(mp.getVideoWidth(), mp.getVideoHeight());
+            mp.setOnVideoSizeChangedListener((m,w,h) -> fitVideoInsidePreview(w, h));
         });
         videoView.setOnCompletionListener(mp -> previewHint.setText("Просмотр завершён"));
         videoView.setOnErrorListener((mp, what, extra) -> {
@@ -188,7 +191,24 @@ public class VideoStudioActivity extends Activity {
         videoView.requestFocus();
         videoView.setOnPreparedListener(mp -> {
             previewHint.setText(formatTime(mp.getDuration()) + "  ·  готово к просмотру");
+            fitVideoInsidePreview(mp.getVideoWidth(), mp.getVideoHeight());
             videoView.start();
+        });
+    }
+
+    // Keep the complete source frame visible and center it for portrait, landscape and square videos.
+    private void fitVideoInsidePreview(int videoWidth, int videoHeight) {
+        if (previewCard == null || videoView == null || videoWidth <= 0 || videoHeight <= 0) return;
+        previewCard.post(() -> {
+            int availableWidth = previewCard.getWidth();
+            int availableHeight = previewCard.getHeight();
+            if (availableWidth <= 0 || availableHeight <= 0) return;
+            float scale = Math.min((float) availableWidth / videoWidth, (float) availableHeight / videoHeight);
+            int fittedWidth = Math.max(1, Math.round(videoWidth * scale));
+            int fittedHeight = Math.max(1, Math.round(videoHeight * scale));
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(fittedWidth, fittedHeight, Gravity.CENTER);
+            videoView.setLayoutParams(params);
+            videoView.setBackgroundColor(Color.BLACK);
         });
     }
 
