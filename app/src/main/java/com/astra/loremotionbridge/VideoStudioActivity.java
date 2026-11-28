@@ -461,7 +461,6 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                     float fraction = Math.max(0f, Math.min(1f, x / dp(140)));
                     setTimelineCursor(index, clip.startMs + Math.round((clip.endMs - clip.startMs) * fraction));
                 }
-                if (event.getAction() == android.view.MotionEvent.ACTION_UP) v.performClick();
                 return true;
             });
             card.setOnClickListener(v -> selectTimelineClip(index));
@@ -484,18 +483,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
 
     private void setTimelineCursor(int index, int positionMs) {
         if (index < 0 || index >= timelineClips.size()) return;
-        if (selectedClipIndex != index) {
-            selectedClipIndex = index;
-            TimelineClip clip = timelineClips.get(index);
-            currentUri = clip.uri;
-            previewTitle.setText(clip.name);
-            if (prepared && mediaPlayer != null) {
-                try { mediaPlayer.pause(); } catch (Exception ignored) {}
-                mediaPlayer.seekTo(positionMs);
-            } else if (videoView != null && videoView.isAvailable()) {
-                prepareVideo(clip.uri);
-            }
-        }
+        if (selectedClipIndex != index) selectTimelineClip(index);
         TimelineClip clip = timelineClips.get(index);
         selectedCursorMs = Math.max(clip.startMs, Math.min(clip.endMs, positionMs));
         if (prepared && mediaPlayer != null && currentUri != null && currentUri.equals(clip.uri)) {
