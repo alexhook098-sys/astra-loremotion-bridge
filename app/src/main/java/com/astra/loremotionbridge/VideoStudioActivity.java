@@ -486,14 +486,21 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
 
     private void setTimelineCursor(int index, int positionMs) {
         if (index < 0 || index >= timelineClips.size()) return;
-        if (selectedClipIndex != index) selectTimelineClip(index);
         TimelineClip clip = timelineClips.get(index);
+        boolean changedClip = selectedClipIndex != index;
+        selectedClipIndex = index;
+        currentUri = clip.uri;
+        sourceDurationMs = clip.durationMs;
+        trimStartMs = clip.startMs;
+        trimEndMs = clip.endMs;
         selectedCursorMs = Math.max(clip.startMs, Math.min(clip.endMs, positionMs));
         pendingPreviewSeekMs = selectedCursorMs;
-        if (timelinePlayer != null) {
-            releaseTimelinePlayer();
-        }
-        if (prepared && mediaPlayer != null && currentUri != null && currentUri.equals(clip.uri)) {
+        if (timelinePlayer != null) releaseTimelinePlayer();
+        if (exportButton != null) exportButton.setVisibility(View.VISIBLE);
+        if (changedClip) {
+            renderTimeline();
+            if (videoView != null && videoView.isAvailable()) prepareVideo(clip.uri);
+        } else if (prepared && mediaPlayer != null && currentUri.equals(clip.uri)) {
             try {
                 pauseAfterPreviewSeek = true;
                 if (mediaPlayer.isPlaying()) mediaPlayer.pause();
@@ -512,7 +519,11 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         int position = 0;
         if (timelinePlayer != null && timelinePreviewActive) {
             index = timelinePlayer.getCurrentMediaItemIndex();
-            position = (int) timelinePlayer.getCurrentPosition();
+            if (index >= 0 && index < timelineClips.size()) {
+                TimelineClip active = timelineClips.get(index);
+                position = active.startMs + (int) timelinePlayer.getCurrentPosition();
+                selectedCursorMs = position;
+            }
         } else if (prepared && mediaPlayer != null && mediaPlayer.isPlaying()) {
             position = mediaPlayer.getCurrentPosition();
             if (index >= 0 && index < timelineClips.size()) selectedCursorMs = position;
