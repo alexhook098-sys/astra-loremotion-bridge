@@ -286,6 +286,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
             }
             @Override public void onStartTrackingTouch(SeekBar bar) {}
             @Override public void onStopTrackingTouch(SeekBar bar) {
+                saveSelectedClipRange();
                 if (prepared && mediaPlayer != null) mediaPlayer.seekTo(trimStartMs);
             }
         });
@@ -303,7 +304,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 }
             }
             @Override public void onStartTrackingTouch(SeekBar bar) {}
-            @Override public void onStopTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) { saveSelectedClipRange(); }
         });
         trimPanel.addView(trimEndBar, wrap());
         LinearLayout.LayoutParams trp = new LinearLayout.LayoutParams(-1, -2);
@@ -366,11 +367,11 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
 
     @Override @Deprecated protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
-        if (request != PICK_VIDEO || result != RESULT_OK || data == null || data.getData() == null) return;
+        if ((request != PICK_VIDEO && request != PICK_EXTRA_VIDEO) || result != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
         try { getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION); }
         catch (Exception ignored) {}
-        play(uri, displayName(uri));
+        if (request == PICK_VIDEO) { timelineClips.clear(); selectedClipIndex = -1; play(uri, displayName(uri)); addClipToTimeline(uri, displayName(uri)); } else { addClipToTimeline(uri, displayName(uri)); }
     }
 
 
