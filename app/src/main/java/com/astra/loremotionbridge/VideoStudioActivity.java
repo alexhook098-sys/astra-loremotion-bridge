@@ -58,6 +58,9 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private boolean prepared = false;
     private Button playPauseButton;
     private Button exportButton;
+    private Button speedButton;
+    private final float[] playbackSpeeds = new float[]{1.0f, 1.25f, 1.5f, 2.0f, 0.75f, 0.5f};
+    private int playbackSpeedIndex = 0;
     private Transformer activeTransformer;
     private File activeExportFile;
     private final ProgressHolder exportProgress = new ProgressHolder();
@@ -239,6 +242,12 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         ep.bottomMargin = dp(9);
         root.addView(exportButton, ep);
 
+        speedButton = pill("СКОРОСТЬ  1.0×", LILAC);
+        speedButton.setOnClickListener(v -> cyclePlaybackSpeed());
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, dp(42));
+        sp.bottomMargin = dp(9);
+        root.addView(speedButton, sp);
+
         LinearLayout quick = new LinearLayout(this);
         quick.setOrientation(LinearLayout.HORIZONTAL);
         quick.addView(quickCard("✂", "Монтаж", "Скоро"), weighted());
@@ -312,6 +321,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 if (currentTimeLabel != null) currentTimeLabel.setText("00:00");
                 if (durationLabel != null) durationLabel.setText(formatTime(mp.getDuration()));
                 if (playPauseButton != null) playPauseButton.setText("Ⅱ");
+                applyPlaybackSpeed();
                 mp.start();
                 uiHandler.removeCallbacks(progressUpdater);
                 uiHandler.post(progressUpdater);
@@ -450,6 +460,23 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         scanAstraExports();
     }
 
+    private void cyclePlaybackSpeed() {
+        playbackSpeedIndex = (playbackSpeedIndex + 1) % playbackSpeeds.length;
+        applyPlaybackSpeed();
+    }
+
+    private void applyPlaybackSpeed() {
+        float speed = playbackSpeeds[playbackSpeedIndex];
+        if (speedButton != null) speedButton.setText("СКОРОСТЬ  " + String.format(java.util.Locale.US, "%.2f", speed).replaceAll("0+$", "").replaceAll("\\.$", "") + "×");
+        if (prepared && mediaPlayer != null) {
+            try {
+                mediaPlayer.setPlaybackParams(mediaPlayer.getPlaybackParams().setSpeed(speed));
+            } catch (Exception e) {
+                Toast.makeText(this, "Эта скорость не поддерживается устройством", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
     private void togglePlayback() {
         if (!prepared || mediaPlayer == null) return;
         if (mediaPlayer.isPlaying()) {
@@ -483,6 +510,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     }
 
     private void scanAstraExports() {
+        recentFiles.clear();
         File[] dirs = new File[]{
             getExternalFilesDir(android.os.Environment.DIRECTORY_MOVIES),
             new File(getExternalFilesDir(null) == null ? getFilesDir() : getExternalFilesDir(null), "ASTRA")
