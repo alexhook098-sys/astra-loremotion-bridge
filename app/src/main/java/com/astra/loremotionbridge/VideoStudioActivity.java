@@ -100,6 +100,10 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 if (currentTimeLabel != null) currentTimeLabel.setText(formatTime(position));
                 if (durationLabel != null) durationLabel.setText(formatTime(duration));
                 if (playPauseButton != null) playPauseButton.setText(mediaPlayer.isPlaying() ? "Ⅱ" : "▶");
+                if (timelinePreviewActive && mediaPlayer.isPlaying() && previewTimelineIndex >= 0 && previewTimelineIndex < timelineClips.size()) {
+                    TimelineClip active = timelineClips.get(previewTimelineIndex);
+                    if (position >= active.endMs) { mediaPlayer.pause(); advanceTimelinePreview(); return; }
+                }
                 uiHandler.postDelayed(this, 250);
             }
         }
