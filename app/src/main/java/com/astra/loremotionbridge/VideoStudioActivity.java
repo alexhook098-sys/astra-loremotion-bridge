@@ -125,6 +125,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private View timelinePlayhead;
     private TextView timelineSummary;
     private int selectedClipIndex = -1;
+    private int selectedCursorMs = 0;
     private boolean timelinePreviewActive = false;
     private int previewTimelineIndex = -1;
     private static class TimelineClip { Uri uri; String name; int durationMs; int startMs; int endMs; TimelineClip(Uri u, String n, int d) { uri=u; name=n; durationMs=d; startMs=0; endMs=d; } }
@@ -395,6 +396,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         sourceDurationMs = clip.durationMs;
         trimStartMs = clip.startMs;
         trimEndMs = clip.endMs;
+        selectedCursorMs = clip.startMs;
         previewTitle.setText(clip.name);
         if (trimStartBar != null) { trimStartBar.setMax(sourceDurationMs); trimStartBar.setProgress(trimStartMs); }
         if (trimEndBar != null) { trimEndBar.setMax(sourceDurationMs); trimEndBar.setProgress(trimEndMs); }
@@ -453,6 +455,15 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
             actions.addView(text("↕", 11, MUTED, false), new LinearLayout.LayoutParams(dp(24), dp(25)));
             actions.addView(right, new LinearLayout.LayoutParams(dp(38), dp(25)));
             card.addView(actions);
+            card.setOnTouchListener((v, event) -> {
+                if (event.getAction() == android.view.MotionEvent.ACTION_DOWN || event.getAction() == android.view.MotionEvent.ACTION_MOVE) {
+                    float x = Math.max(0f, Math.min(dp(140), event.getX()));
+                    float fraction = Math.max(0f, Math.min(1f, x / dp(140)));
+                    setTimelineCursor(index, clip.startMs + Math.round((clip.endMs - clip.startMs) * fraction));
+                }
+                if (event.getAction() == android.view.MotionEvent.ACTION_UP) v.performClick();
+                return true;
+            });
             card.setOnClickListener(v -> selectTimelineClip(index));
             card.setOnLongClickListener(v -> {
                 if (timelineClips.size() <= 1) return true;
@@ -471,6 +482,28 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         updateTimelinePlayhead();
     }
 
+    private void setTimelineCursor(int index, int positionMs) {
+        if (index < 0 || index >= timelineClips.size()) return;
+        if (selectedClipIndex != index) {
+            selectedClipIndex = index;
+            TimelineClip clip = timelineClips.get(index);
+            currentUri = clip.uri;
+            previewTitle.setText(clip.name);
+            if (prepared && mediaPlayer != null) {
+                try { mediaPlayer.pause(); } catch (Exception ignored) {}
+                mediaPlayer.seekTo(positionMs);
+            } else if (videoView != null && videoView.isAvailable()) {
+                prepareVideo(clip.uri);
+            }
+        }
+        TimelineClip clip = timelineClips.get(index);
+        selectedCursorMs = Math.max(clip.startMs, Math.min(clip.endMs, positionMs));
+        if (prepared && mediaPlayer != null && currentUri != null && currentUri.equals(clip.uri)) {
+            try { mediaPlayer.seekTo(selectedCursorMs); } catch (Exception ignored) {}
+        }
+        updateTimelinePlayhead();
+    }
+
     private void updateTimelinePlayhead() {
         if (timelinePlayhead == null || timelineScroller == null || timelineClips.isEmpty()) return;
         int index = selectedClipIndex;
@@ -480,8 +513,9 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
             position = (int) timelinePlayer.getCurrentPosition();
         } else if (prepared && mediaPlayer != null) {
             position = mediaPlayer.getCurrentPosition();
+            if (index >= 0 && index < timelineClips.size()) selectedCursorMs = position;
         } else if (index >= 0 && index < timelineClips.size()) {
-            position = timelineClips.get(index).startMs;
+            position = selectedCursorMs;
         }
         if (index < 0 || index >= timelineClips.size()) return;
         TimelineClip clip = timelineClips.get(index);
@@ -822,9 +856,9 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         } else if (prepared && mediaPlayer != null) {
             position = mediaPlayer.getCurrentPosition();
         } else {
-            Toast.makeText(this, "Сначала запусти монтаж и установи курсор", Toast.LENGTH_SHORT).show(); return;
+            position = selectedCursorMs;
         }
-        position = Math.max(original.startMs + 500, Math.min(original.endMs - 500, position));
+        position = Math.max(original.startMs + 100, Math.min(original.endMs - 100, position));
         if (position <= original.startMs || position >= original.endMs) {
             Toast.makeText(this, "Слишком близко к краю фрагмента", Toast.LENGTH_SHORT).show(); return;
         }
