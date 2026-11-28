@@ -126,6 +126,8 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private TextView timelineSummary;
     private int selectedClipIndex = -1;
     private int selectedCursorMs = 0;
+    private int pendingPreviewSeekMs = -1;
+    private boolean pauseAfterPreviewSeek = false;
     private boolean timelinePreviewActive = false;
     private int previewTimelineIndex = -1;
     private static class TimelineClip { Uri uri; String name; int durationMs; int startMs; int endMs; TimelineClip(Uri u, String n, int d) { uri=u; name=n; durationMs=d; startMs=0; endMs=d; } }
@@ -389,6 +391,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
 
     private void selectTimelineClip(int index) {
         if (index < 0 || index >= timelineClips.size()) return;
+        releaseTimelinePlayer();
         timelinePreviewActive = false; previewTimelineIndex = -1;
         selectedClipIndex = index;
         TimelineClip clip = timelineClips.get(index);
@@ -486,8 +489,15 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         if (selectedClipIndex != index) selectTimelineClip(index);
         TimelineClip clip = timelineClips.get(index);
         selectedCursorMs = Math.max(clip.startMs, Math.min(clip.endMs, positionMs));
+        pendingPreviewSeekMs = selectedCursorMs;
         if (prepared && mediaPlayer != null && currentUri != null && currentUri.equals(clip.uri)) {
-            try { mediaPlayer.seekTo(selectedCursorMs); } catch (Exception ignored) {}
+            try {
+                pauseAfterPreviewSeek = true;
+                mediaPlayer.seekTo(selectedCursorMs);
+                if (!mediaPlayer.isPlaying()) mediaPlayer.start();
+            } catch (Exception ignored) {}
+        } else if (videoView != null && videoView.isAvailable()) {
+            prepareVideo(clip.uri);
         }
         updateTimelinePlayhead();
     }
@@ -499,7 +509,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         if (timelinePlayer != null && timelinePreviewActive) {
             index = timelinePlayer.getCurrentMediaItemIndex();
             position = (int) timelinePlayer.getCurrentPosition();
-        } else if (prepared && mediaPlayer != null) {
+        } else if (prepared && mediaPlayer != null && mediaPlayer.isPlaying()) {
             position = mediaPlayer.getCurrentPosition();
             if (index >= 0 && index < timelineClips.size()) selectedCursorMs = position;
         } else if (index >= 0 && index < timelineClips.size()) {
@@ -570,8 +580,23 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 updateTrimLabel();
                 if (playPauseButton != null) playPauseButton.setText("Ⅱ");
                 applyPlaybackSpeed();
-                if (timelinePreviewActive && previewTimelineIndex >= 0 && previewTimelineIndex < timelineClips.size()) mp.seekTo(timelineClips.get(previewTimelineIndex).startMs);
-                mp.start();
+                int seekTarget = pendingPreviewSeekMs >= 0 ? pendingPreviewSeekMs :
+                        (selectedClipIndex >= 0 && selectedClipIndex < timelineClips.size() ? selectedCursorMs : 0);
+                pendingPreviewSeekMs = -1;
+                if (seekTarget > 0) {
+                    pauseAfterPreviewSeek = true;
+                    mp.setOnSeekCompleteListener(player -> {
+                        if (pauseAfterPreviewSeek) {
+                            pauseAfterPreviewSeek = false;
+                            try { player.pause(); } catch (Exception ignored) {}
+                            if (playPauseButton != null) playPauseButton.setText("▶");
+                        }
+                    });
+                    mp.seekTo(Math.min(seekTarget, Math.max(0, mp.getDuration() - 100)), MediaPlayer.SEEK_CLOSEST);
+                    mp.start();
+                } else {
+                    mp.start();
+                }
                 uiHandler.removeCallbacks(progressUpdater);
                 uiHandler.post(progressUpdater);
             });
@@ -836,14 +861,13 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         }
         TimelineClip original = timelineClips.get(selectedClipIndex);
         int position;
-        if (timelinePlayer != null && timelinePreviewActive) {
+        if (timelinePlayer != null && timelinePreviewActive && timelinePlayer.isPlaying()) {
             int playingIndex = timelinePlayer.getCurrentMediaItemIndex();
             if (playingIndex >= 0 && playingIndex < timelineClips.size()) selectedClipIndex = playingIndex;
             original = timelineClips.get(selectedClipIndex);
             position = original.startMs + (int) timelinePlayer.getCurrentPosition();
-        } else if (prepared && mediaPlayer != null) {
-            position = mediaPlayer.getCurrentPosition();
         } else {
+            // The touch-selected timeline position is authoritative while paused.
             position = selectedCursorMs;
         }
         position = Math.max(original.startMs + 100, Math.min(original.endMs - 100, position));
@@ -853,7 +877,10 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         TimelineClip second = new TimelineClip(original.uri, original.name, original.durationMs);
         second.startMs = position; second.endMs = original.endMs; original.endMs = position;
         timelineClips.add(selectedClipIndex + 1, second);
-        int next = selectedClipIndex + 1; releaseTimelinePlayer(); selectTimelineClip(next);
+        int next = selectedClipIndex + 1;
+        selectedCursorMs = position;
+        pendingPreviewSeekMs = position;
+        releaseTimelinePlayer(); selectTimelineClip(next);
         if (timelineScroller != null) timelineScroller.post(() -> timelineScroller.smoothScrollTo(Math.max(0, dp(147) * next - dp(40)), 0));
         Toast.makeText(this, "Фрагмент разделён на две части", Toast.LENGTH_SHORT).show();
     }
