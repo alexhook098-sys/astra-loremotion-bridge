@@ -44,6 +44,8 @@ import androidx.media3.common.Player;
 import androidx.media3.transformer.Effects;
 import androidx.media3.effect.HslAdjustment;
 import androidx.media3.effect.RgbAdjustment;
+import androidx.media3.effect.BitmapOverlay;
+import androidx.media3.effect.OverlayEffect;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.transformer.Composition;
@@ -77,6 +79,14 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private LinearLayout colorStyleRow;
     private SeekBar filterStrengthBar;
     private TextView filterStrengthLabel;
+    private SeekBar vignetteBar;
+    private SeekBar grainBar;
+    private TextView vignetteLabel;
+    private TextView grainLabel;
+    private ImageView vignettePreviewView;
+    private ImageView grainPreviewView;
+    private int vignetteStrength = 0;
+    private int grainStrength = 0;
     private int filterStrength = 100;
     private int selectedColorStyle = 0;
     private final String[] colorStyleNames = new String[]{"ORIGINAL", "CINEMATIC", "NEON", "WARM", "B&W", "FILM", "VINTAGE", "DREAM", "CYBER"};
@@ -205,6 +215,15 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         });
         previewCard.addView(videoView, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
 
+        vignettePreviewView = new ImageView(this);
+        vignettePreviewView.setScaleType(ImageView.ScaleType.FIT_XY);
+        vignettePreviewView.setClickable(false);
+        previewCard.addView(vignettePreviewView, new FrameLayout.LayoutParams(-1, -1));
+        grainPreviewView = new ImageView(this);
+        grainPreviewView.setScaleType(ImageView.ScaleType.FIT_XY);
+        grainPreviewView.setClickable(false);
+        previewCard.addView(grainPreviewView, new FrameLayout.LayoutParams(-1, -1));
+
         // Native ASTRA playback controls, rendered above the TextureView.
         LinearLayout controls = new LinearLayout(this);
         controls.setOrientation(LinearLayout.HORIZONTAL);
@@ -323,6 +342,50 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         LinearLayout.LayoutParams strengthParams = new LinearLayout.LayoutParams(-1, wrap().height);
         strengthParams.bottomMargin = dp(5);
         root.addView(strengthPanel, strengthParams);
+
+        LinearLayout cinematicPanel = new LinearLayout(this);
+        cinematicPanel.setOrientation(LinearLayout.VERTICAL);
+        cinematicPanel.setPadding(dp(12), dp(9), dp(12), dp(8));
+        cinematicPanel.setBackground(gradient(PANEL, Color.rgb(65, 48, 101), 15));
+        vignetteLabel = text("VIGNETTE  ·  0%", 10, MUTED, true);
+        cinematicPanel.addView(vignetteLabel, wrap());
+        vignetteBar = new SeekBar(this);
+        vignetteBar.setMax(100);
+        vignetteBar.setProgress(vignetteStrength);
+        vignetteBar.setProgressTintList(android.content.res.ColorStateList.valueOf(PURPLE));
+        vignetteBar.setThumbTintList(android.content.res.ColorStateList.valueOf(LILAC));
+        vignetteBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int value, boolean fromUser) {
+                vignetteStrength = value;
+                vignetteLabel.setText("VIGNETTE  ·  " + value + "%");
+                refreshCinematicOverlays();
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        cinematicPanel.addView(vignetteBar, new LinearLayout.LayoutParams(-1, dp(34)));
+        grainLabel = text("FILM GRAIN  ·  0%", 10, MUTED, true);
+        LinearLayout.LayoutParams grainLabelParams = wrap(); grainLabelParams.topMargin = dp(3);
+        cinematicPanel.addView(grainLabel, grainLabelParams);
+        grainBar = new SeekBar(this);
+        grainBar.setMax(100);
+        grainBar.setProgress(grainStrength);
+        grainBar.setProgressTintList(android.content.res.ColorStateList.valueOf(PURPLE));
+        grainBar.setThumbTintList(android.content.res.ColorStateList.valueOf(LILAC));
+        grainBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int value, boolean fromUser) {
+                grainStrength = value;
+                grainLabel.setText("FILM GRAIN  ·  " + value + "%");
+                refreshCinematicOverlays();
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        cinematicPanel.addView(grainBar, new LinearLayout.LayoutParams(-1, dp(34)));
+        LinearLayout.LayoutParams cinematicParams = new LinearLayout.LayoutParams(-1, -2);
+        cinematicParams.bottomMargin = dp(10);
+        root.addView(cinematicPanel, cinematicParams);
+        refreshCinematicOverlays();
 
         LinearLayout timelinePanel = new LinearLayout(this);
         timelinePanel.setOrientation(LinearLayout.VERTICAL);
@@ -809,6 +872,24 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         videoView.invalidate();
     }
 
+    private void refreshCinematicOverlays() {
+        if (vignettePreviewView == null || grainPreviewView == null) return;
+        if (vignetteStrength > 0) {
+            vignettePreviewView.setImageBitmap(CinematicOverlayFactory.createVignette(512, 512, vignetteStrength));
+            vignettePreviewView.setVisibility(View.VISIBLE);
+        } else {
+            vignettePreviewView.setImageDrawable(null);
+            vignettePreviewView.setVisibility(View.GONE);
+        }
+        if (grainStrength > 0) {
+            grainPreviewView.setImageBitmap(CinematicOverlayFactory.createGrain(512, 512, grainStrength));
+            grainPreviewView.setVisibility(View.VISIBLE);
+        } else {
+            grainPreviewView.setImageDrawable(null);
+            grainPreviewView.setVisibility(View.GONE);
+        }
+    }
+
     private float scaleEffect(float value) {
         return value * (filterStrength / 100f);
     }
@@ -853,6 +934,14 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 break;
             default:
                 break;
+        }
+        if (vignetteStrength > 0 || grainStrength > 0) {
+            ArrayList<androidx.media3.effect.TextureOverlay> overlays = new ArrayList<>();
+            if (vignetteStrength > 0) overlays.add(BitmapOverlay.createStaticBitmapOverlay(
+                    CinematicOverlayFactory.createVignette(512, 512, vignetteStrength)));
+            if (grainStrength > 0) overlays.add(BitmapOverlay.createStaticBitmapOverlay(
+                    CinematicOverlayFactory.createGrain(512, 512, grainStrength)));
+            videoEffects.add(new OverlayEffect(overlays));
         }
         return new Effects(java.util.Collections.emptyList(), videoEffects);
     }
