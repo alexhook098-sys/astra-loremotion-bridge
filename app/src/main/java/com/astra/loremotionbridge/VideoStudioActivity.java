@@ -106,15 +106,6 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         header.addView(back, new LinearLayout.LayoutParams(dp(76), dp(40)));
         root.addView(header);
 
-        TextView intro = text("Твоя творческая видеостудия", 14, MUTED, false);
-        LinearLayout.LayoutParams ip = wrap();
-        ip.topMargin = dp(5); ip.bottomMargin = dp(17);
-        root.addView(intro, ip);
-
-        TextView section = text("СЕЙЧАС В ПРОЕКТЕ", 10, PURPLE, true);
-        section.setLetterSpacing(0.12f);
-        root.addView(section, wrap());
-
         previewCard = new FrameLayout(this);
         GradientDrawable previewBg = gradient(PANEL_2, Color.rgb(75, 48, 119), 24);
         previewCard.setBackground(previewBg);
@@ -122,8 +113,8 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         // which can place the separate video surface behind the card on some devices.
         previewCard.setClipToOutline(false);
         previewCard.setElevation(0f);
-        LinearLayout.LayoutParams vp = new LinearLayout.LayoutParams(-1, dp(280));
-        vp.topMargin = dp(9);
+        LinearLayout.LayoutParams vp = new LinearLayout.LayoutParams(-1, dp(330));
+        vp.topMargin = dp(8);
         root.addView(previewCard, vp);
 
         videoView = new TextureView(this);
@@ -232,11 +223,6 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         recentList.setPadding(dp(13), dp(13), dp(13), dp(13));
         recentList.setBackground(gradient(PANEL, Color.rgb(49, 40, 78), 18));
         root.addView(recentList, wrap());
-
-        TextView footer = text("ASTRA VIDEO  ·  ЛОКАЛЬНАЯ СТУДИЯ", 9, MUTED, true);
-        footer.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams fp = wrap(); fp.topMargin = dp(18);
-        root.addView(footer, fp);
 
         setContentView(scroll);
     }
