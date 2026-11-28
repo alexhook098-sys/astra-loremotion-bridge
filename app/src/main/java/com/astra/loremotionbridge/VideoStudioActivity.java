@@ -220,7 +220,8 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
             }
             @Override public void onStartTrackingTouch(SeekBar bar) { userSeeking = true; }
             @Override public void onStopTrackingTouch(SeekBar bar) {
-                if (prepared && mediaPlayer != null) mediaPlayer.seekTo(bar.getProgress());
+                if (timelinePlayer != null) timelinePlayer.seekTo(bar.getProgress());
+                else if (prepared && mediaPlayer != null) mediaPlayer.seekTo(bar.getProgress());
                 userSeeking = false;
             }
         });
@@ -568,6 +569,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     }
 
     private void releasePlayer() {
+        releaseTimelinePlayer();
         prepared = false;
         if (mediaPlayer != null) {
             try { mediaPlayer.setOnPreparedListener(null); mediaPlayer.setOnCompletionListener(null); mediaPlayer.setOnErrorListener(null); mediaPlayer.reset(); mediaPlayer.release(); } catch (Exception ignored) {}
@@ -708,6 +710,11 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     }
 
     private void togglePlayback() {
+        if (timelinePlayer != null) {
+            if (timelinePlayer.isPlaying()) { timelinePlayer.pause(); playPauseButton.setText("▶"); }
+            else { timelinePlayer.play(); playPauseButton.setText("Ⅱ"); }
+            return;
+        }
         if (prepared && mediaPlayer != null && mediaPlayer.isPlaying()) { mediaPlayer.pause(); playPauseButton.setText("▶"); return; }
         if (timelineClips.size() > 1) { startTimelinePreview(); return; }
         if (!prepared || mediaPlayer == null) return;
@@ -716,29 +723,73 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     }
 
     private void startTimelinePreview() {
-        if (timelineClips.isEmpty()) return;
+        if (timelineClips.isEmpty() || !videoView.isAvailable()) return;
+        releasePlayer();
         timelinePreviewActive = true; previewTimelineIndex = 0; selectedClipIndex = 0;
-        renderTimeline(); prepareTimelinePreviewClip(timelineClips.get(0));
-    }
-
-    private void prepareTimelinePreviewClip(TimelineClip clip) {
-        currentUri = clip.uri; sourceDurationMs = clip.durationMs;
-        trimStartMs = clip.startMs; trimEndMs = clip.endMs;
-        previewTitle.setText("МОНТАЖ · " + (previewTimelineIndex + 1) + "/" + timelineClips.size());
-        previewHint.setText("Просмотр всей монтажной последовательности");
-        prepareVideo(clip.uri);
-    }
-
-    private void advanceTimelinePreview() {
-        if (!timelinePreviewActive) return;
-        previewTimelineIndex++;
-        if (previewTimelineIndex >= timelineClips.size()) {
-            timelinePreviewActive = false; previewHint.setText("Просмотр всего монтажа завершён");
-            if (playPauseButton != null) playPauseButton.setText("▶");
-            return;
+        try {
+            timelinePlayer = new ExoPlayer.Builder(this).build();
+            timelinePlayer.setVideoTextureView(videoView);
+            timelinePlayer.addListener(new Player.Listener() {
+                @Override public void onMediaItemTransition(MediaItem item, int reason) {
+                    int index = timelinePlayer.getCurrentMediaItemIndex();
+                    if (index >= 0 && index < timelineClips.size()) {
+                        previewTimelineIndex = index; selectedClipIndex = index;
+                        TimelineClip clip = timelineClips.get(index);
+                        previewTitle.setText("МОНТАЖ · " + (index + 1) + "/" + timelineClips.size());
+                        currentUri = clip.uri; sourceDurationMs = clip.durationMs;
+                        trimStartMs = clip.startMs; trimEndMs = clip.endMs;
+                        renderTimeline();
+                    }
+                }
+                @Override public void onPlaybackStateChanged(int state) {
+                    if (state == Player.STATE_READY) previewHint.setText("Воспроизведение всей монтажной шкалы");
+                    if (state == Player.STATE_ENDED) {
+                        timelinePreviewActive = false; previewHint.setText("Просмотр всего монтажа завершён");
+                        if (playPauseButton != null) playPauseButton.setText("▶");
+                    }
+                }
+            });
+            ArrayList<MediaItem> playlist = new ArrayList<>();
+            for (TimelineClip clip : timelineClips) {
+                MediaItem.ClippingConfiguration clipping = new MediaItem.ClippingConfiguration.Builder()
+                        .setStartPositionMs(clip.startMs).setEndPositionMs(clip.endMs).build();
+                playlist.add(new MediaItem.Builder().setUri(clip.uri).setClippingConfiguration(clipping).build());
+            }
+            timelinePlayer.setMediaItems(playlist); timelinePlayer.prepare(); timelinePlayer.play();
+            renderTimeline(); uiHandler.removeCallbacks(progressUpdater); uiHandler.post(progressUpdater);
+        } catch (Exception e) {
+            timelinePreviewActive = false; previewHint.setText("Не удалось запустить монтаж: " + e.getMessage());
+            releaseTimelinePlayer();
         }
-        selectedClipIndex = previewTimelineIndex; renderTimeline();
-        prepareTimelinePreviewClip(timelineClips.get(previewTimelineIndex));
+    }
+
+    private void releaseTimelinePlayer() {
+        if (timelinePlayer != null) { try { timelinePlayer.release(); } catch (Exception ignored) {} timelinePlayer = null; }
+        timelinePreviewActive = false;
+    }
+
+    private void splitSelectedClipAtPlayhead() {
+        if (selectedClipIndex < 0 || selectedClipIndex >= timelineClips.size()) {
+            Toast.makeText(this, "Сначала выбери фрагмент", Toast.LENGTH_SHORT).show(); return;
+        }
+        TimelineClip original = timelineClips.get(selectedClipIndex);
+        int position;
+        if (timelinePlayer != null && timelinePreviewActive) {
+            position = original.startMs + (int) timelinePlayer.getCurrentPosition();
+        } else if (prepared && mediaPlayer != null) {
+            position = mediaPlayer.getCurrentPosition();
+        } else {
+            Toast.makeText(this, "Сначала запусти монтаж и установи курсор", Toast.LENGTH_SHORT).show(); return;
+        }
+        position = Math.max(original.startMs + 500, Math.min(original.endMs - 500, position));
+        if (position <= original.startMs || position >= original.endMs) {
+            Toast.makeText(this, "Слишком близко к краю фрагмента", Toast.LENGTH_SHORT).show(); return;
+        }
+        TimelineClip second = new TimelineClip(original.uri, original.name, original.durationMs);
+        second.startMs = position; second.endMs = original.endMs; original.endMs = position;
+        timelineClips.add(selectedClipIndex + 1, second);
+        int next = selectedClipIndex + 1; releaseTimelinePlayer(); selectTimelineClip(next);
+        Toast.makeText(this, "Фрагмент разделён на две части", Toast.LENGTH_SHORT).show();
     }
 
     @Override public void start() { if (prepared && mediaPlayer != null) mediaPlayer.start(); }
