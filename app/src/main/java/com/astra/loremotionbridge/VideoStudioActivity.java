@@ -106,6 +106,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 if (currentTimeLabel != null) currentTimeLabel.setText(formatTime(position));
                 if (durationLabel != null) durationLabel.setText(formatTime(duration));
                 if (playPauseButton != null) playPauseButton.setText((timelinePlayer != null ? timelinePlayer.isPlaying() : mediaPlayer.isPlaying()) ? "Ⅱ" : "▶");
+                updateTimelinePlayhead();
                 uiHandler.postDelayed(this, 250);
             }
         }
@@ -120,6 +121,8 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private final ArrayList<TimelineClip> timelineClips = new ArrayList<>();
     private LinearLayout timelineList;
     private HorizontalScrollView timelineScroller;
+    private FrameLayout timelineFrame;
+    private View timelinePlayhead;
     private TextView timelineSummary;
     private int selectedClipIndex = -1;
     private boolean timelinePreviewActive = false;
@@ -279,6 +282,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         timelinePanel.addView(text("МОНТАЖНАЯ ШКАЛА", 13, WHITE, true), wrap());
         timelineSummary = text("Фрагменты будут идти друг за другом в готовом видео", 10, MUTED, false);
         timelinePanel.addView(timelineSummary, wrap());
+        timelineFrame = new FrameLayout(this);
         timelineScroller = new HorizontalScrollView(this);
         timelineScroller.setHorizontalScrollBarEnabled(false);
         timelineScroller.setFillViewport(false);
@@ -286,9 +290,16 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         timelineList.setOrientation(LinearLayout.HORIZONTAL);
         timelineList.setGravity(Gravity.CENTER_VERTICAL);
         timelineScroller.addView(timelineList, new HorizontalScrollView.LayoutParams(-2, dp(112)));
+        timelineFrame.addView(timelineScroller, new FrameLayout.LayoutParams(-1, dp(118)));
+        timelinePlayhead = new View(this);
+        timelinePlayhead.setBackgroundColor(Color.rgb(255, 224, 255));
+        FrameLayout.LayoutParams playheadParams = new FrameLayout.LayoutParams(dp(2), dp(104), Gravity.TOP | Gravity.LEFT);
+        playheadParams.topMargin = dp(3);
+        timelineFrame.addView(timelinePlayhead, playheadParams);
+        timelinePlayhead.setElevation(dp(6));
         LinearLayout.LayoutParams timelineScrollParams = new LinearLayout.LayoutParams(-1, dp(118));
         timelineScrollParams.topMargin = dp(8);
-        timelinePanel.addView(timelineScroller, timelineScrollParams);
+        timelinePanel.addView(timelineFrame, timelineScrollParams);
         Button splitClip = pill("✂  РАЗДЕЛИТЬ В ТОЧКЕ ПРОСМОТРА", PURPLE);
         splitClip.setOnClickListener(v -> splitSelectedClipAtPlayhead());
         LinearLayout.LayoutParams splitParams = new LinearLayout.LayoutParams(-1, dp(42));
@@ -456,7 +467,29 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
             timelineList.addView(card, params);
         }
         if (timelineSummary != null) timelineSummary.setText(timelineClips.size() + " клипа · " + formatTime(total)
-                + " · листай в сторону, удерживай для удаления");
+                + " · светлая линия — курсор разделения");
+        updateTimelinePlayhead();
+    }
+
+    private void updateTimelinePlayhead() {
+        if (timelinePlayhead == null || timelineScroller == null || timelineClips.isEmpty()) return;
+        int index = selectedClipIndex;
+        int position = 0;
+        if (timelinePlayer != null && timelinePreviewActive) {
+            index = timelinePlayer.getCurrentMediaItemIndex();
+            position = (int) timelinePlayer.getCurrentPosition();
+        } else if (prepared && mediaPlayer != null) {
+            position = mediaPlayer.getCurrentPosition();
+        } else if (index >= 0 && index < timelineClips.size()) {
+            position = timelineClips.get(index).startMs;
+        }
+        if (index < 0 || index >= timelineClips.size()) return;
+        TimelineClip clip = timelineClips.get(index);
+        float fraction = Math.max(0f, Math.min(1f,
+                (float) (position - clip.startMs) / Math.max(1, clip.endMs - clip.startMs)));
+        float contentX = dp(147) * index + dp(140) * fraction;
+        timelinePlayhead.setTranslationX(contentX - timelineScroller.getScrollX());
+        timelinePlayhead.setVisibility(View.VISIBLE);
     }
 
     private void moveTimelineClip(int from, int delta) {
@@ -799,6 +832,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         second.startMs = position; second.endMs = original.endMs; original.endMs = position;
         timelineClips.add(selectedClipIndex + 1, second);
         int next = selectedClipIndex + 1; releaseTimelinePlayer(); selectTimelineClip(next);
+        if (timelineScroller != null) timelineScroller.post(() -> timelineScroller.smoothScrollTo(Math.max(0, dp(147) * next - dp(40)), 0));
         Toast.makeText(this, "Фрагмент разделён на две части", Toast.LENGTH_SHORT).show();
     }
 
