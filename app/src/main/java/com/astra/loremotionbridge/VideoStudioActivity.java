@@ -59,6 +59,12 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private Button playPauseButton;
     private Button exportButton;
     private Button speedButton;
+    private SeekBar trimStartBar;
+    private SeekBar trimEndBar;
+    private TextView trimRangeLabel;
+    private int trimStartMs = 0;
+    private int trimEndMs = 0;
+    private int sourceDurationMs = 0;
     private final float[] playbackSpeeds = new float[]{1.0f, 1.25f, 1.5f, 2.0f, 0.75f, 0.5f};
     private int playbackSpeedIndex = 0;
     private Transformer activeTransformer;
@@ -248,6 +254,54 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         sp.bottomMargin = dp(9);
         root.addView(speedButton, sp);
 
+        LinearLayout trimPanel = new LinearLayout(this);
+        trimPanel.setOrientation(LinearLayout.VERTICAL);
+        trimPanel.setPadding(dp(13), dp(12), dp(13), dp(12));
+        trimPanel.setBackground(gradient(PANEL, Color.rgb(75, 48, 119), 17));
+        TextView trimTitle = text("ОБРЕЗКА ФРАГМЕНТА", 13, WHITE, true);
+        trimPanel.addView(trimTitle, wrap());
+        trimRangeLabel = text("00:00 — 00:00", 11, LILAC, true);
+        LinearLayout.LayoutParams trlp = wrap(); trlp.topMargin = dp(5);
+        trimPanel.addView(trimRangeLabel, trlp);
+        TextView startCaption = text("НАЧАЛО", 9, MUTED, true);
+        LinearLayout.LayoutParams scp = wrap(); scp.topMargin = dp(7);
+        trimPanel.addView(startCaption, scp);
+        trimStartBar = new SeekBar(this);
+        trimStartBar.setMax(1000);
+        trimStartBar.setProgressTintList(android.content.res.ColorStateList.valueOf(PURPLE));
+        trimStartBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int value, boolean fromUser) {
+                if (fromUser && sourceDurationMs > 0) {
+                    trimStartMs = Math.min(value, Math.max(0, trimEndMs - 500));
+                    updateTrimLabel();
+                }
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {
+                if (prepared && mediaPlayer != null) mediaPlayer.seekTo(trimStartMs);
+            }
+        });
+        trimPanel.addView(trimStartBar, wrap());
+        TextView endCaption = text("КОНЕЦ", 9, MUTED, true);
+        trimPanel.addView(endCaption, wrap());
+        trimEndBar = new SeekBar(this);
+        trimEndBar.setMax(1000);
+        trimEndBar.setProgressTintList(android.content.res.ColorStateList.valueOf(LILAC));
+        trimEndBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int value, boolean fromUser) {
+                if (fromUser && sourceDurationMs > 0) {
+                    trimEndMs = Math.max(trimStartMs + 500, Math.min(sourceDurationMs, value));
+                    updateTrimLabel();
+                }
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        trimPanel.addView(trimEndBar, wrap());
+        LinearLayout.LayoutParams trp = new LinearLayout.LayoutParams(-1, -2);
+        trp.bottomMargin = dp(10);
+        root.addView(trimPanel, trp);
+
         LinearLayout quick = new LinearLayout(this);
         quick.setOrientation(LinearLayout.HORIZONTAL);
         quick.addView(quickCard("✂", "Монтаж", "Скоро"), weighted());
@@ -292,6 +346,10 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
 
     private void play(Uri uri, String name) {
         currentUri = uri;
+        sourceDurationMs = 0;
+        trimStartMs = 0;
+        trimEndMs = 0;
+        updateTrimLabel();
         if (exportButton != null) exportButton.setVisibility(View.VISIBLE);
         if (videoView != null && previewCard != null) {
             FrameLayout.LayoutParams full = new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER);
@@ -320,6 +378,12 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 if (seekBar != null) { seekBar.setMax(mp.getDuration()); seekBar.setProgress(0); }
                 if (currentTimeLabel != null) currentTimeLabel.setText("00:00");
                 if (durationLabel != null) durationLabel.setText(formatTime(mp.getDuration()));
+                sourceDurationMs = mp.getDuration();
+                trimStartMs = 0;
+                trimEndMs = sourceDurationMs;
+                if (trimStartBar != null) { trimStartBar.setMax(sourceDurationMs); trimStartBar.setProgress(0); }
+                if (trimEndBar != null) { trimEndBar.setMax(sourceDurationMs); trimEndBar.setProgress(sourceDurationMs); }
+                updateTrimLabel();
                 if (playPauseButton != null) playPauseButton.setText("Ⅱ");
                 applyPlaybackSpeed();
                 mp.start();
@@ -388,7 +452,13 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         exportButton.setText("ЭКСПОРТ…");
         previewHint.setText("Подготовка экспорта…");
         try {
-            EditedMediaItem edited = new EditedMediaItem.Builder(MediaItem.fromUri(currentUri)).build();
+            if (sourceDurationMs <= 0 || trimEndMs <= trimStartMs) throw new IllegalStateException("Выбери корректный фрагмент");
+            MediaItem.ClippingConfiguration clipping = new MediaItem.ClippingConfiguration.Builder()
+                    .setStartPositionMs(trimStartMs)
+                    .setEndPositionMs(trimEndMs)
+                    .build();
+            MediaItem clippedItem = new MediaItem.Builder().setUri(currentUri).setClippingConfiguration(clipping).build();
+            EditedMediaItem edited = new EditedMediaItem.Builder(clippedItem).build();
             activeTransformer = new Transformer.Builder(this)
                     .setVideoMimeType(MimeTypes.VIDEO_H264)
                     .setAudioMimeType(MimeTypes.AUDIO_AAC)
@@ -458,6 +528,11 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         previewHint.setText(message);
         Toast.makeText(this, success ? "Видео сохранено в Галерею" : message, Toast.LENGTH_LONG).show();
         scanAstraExports();
+    }
+
+    private void updateTrimLabel() {
+        if (trimRangeLabel != null) trimRangeLabel.setText(formatTime(trimStartMs) + " — " + formatTime(trimEndMs)
+                + "   ·   " + formatTime(Math.max(0, trimEndMs - trimStartMs)));
     }
 
     private void cyclePlaybackSpeed() {
