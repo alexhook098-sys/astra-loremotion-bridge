@@ -86,8 +86,10 @@ public class VideoStudioActivity extends Activity {
         previewCard = new FrameLayout(this);
         GradientDrawable previewBg = gradient(PANEL_2, Color.rgb(75, 48, 119), 24);
         previewCard.setBackground(previewBg);
-        previewCard.setClipToOutline(true);
-        previewCard.setElevation(dp(5));
+        // VideoView uses a SurfaceView on Android. Avoid clipping/elevation on its parent,
+        // which can place the separate video surface behind the card on some devices.
+        previewCard.setClipToOutline(false);
+        previewCard.setElevation(0f);
         LinearLayout.LayoutParams vp = new LinearLayout.LayoutParams(-1, dp(280));
         vp.topMargin = dp(9);
         root.addView(previewCard, vp);
@@ -98,8 +100,7 @@ public class VideoStudioActivity extends Activity {
         videoView.setOnPreparedListener(mp -> {
             previewTitle.setText("ВОСПРОИЗВЕДЕНИЕ");
             previewHint.setText("Видео готово · нажми ▶");
-            fitVideoInsidePreview(mp.getVideoWidth(), mp.getVideoHeight());
-            mp.setOnVideoSizeChangedListener((m,w,h) -> fitVideoInsidePreview(w, h));
+            // VideoView performs native aspect-ratio measurement; do not resize its SurfaceView.
         });
         videoView.setOnCompletionListener(mp -> previewHint.setText("Просмотр завершён"));
         videoView.setOnErrorListener((mp, what, extra) -> {
@@ -191,24 +192,8 @@ public class VideoStudioActivity extends Activity {
         videoView.requestFocus();
         videoView.setOnPreparedListener(mp -> {
             previewHint.setText(formatTime(mp.getDuration()) + "  ·  готово к просмотру");
-            fitVideoInsidePreview(mp.getVideoWidth(), mp.getVideoHeight());
+            // Keep VideoView at match-parent; its internal measure pass fits the source aspect ratio.
             videoView.start();
-        });
-    }
-
-    // Keep the complete source frame visible and center it for portrait, landscape and square videos.
-    private void fitVideoInsidePreview(int videoWidth, int videoHeight) {
-        if (previewCard == null || videoView == null || videoWidth <= 0 || videoHeight <= 0) return;
-        previewCard.post(() -> {
-            int availableWidth = previewCard.getWidth();
-            int availableHeight = previewCard.getHeight();
-            if (availableWidth <= 0 || availableHeight <= 0) return;
-            float scale = Math.min((float) availableWidth / videoWidth, (float) availableHeight / videoHeight);
-            int fittedWidth = Math.max(1, Math.round(videoWidth * scale));
-            int fittedHeight = Math.max(1, Math.round(videoHeight * scale));
-            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(fittedWidth, fittedHeight, Gravity.CENTER);
-            videoView.setLayoutParams(params);
-            videoView.setBackgroundColor(Color.BLACK);
         });
     }
 
