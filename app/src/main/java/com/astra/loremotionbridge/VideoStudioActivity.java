@@ -247,6 +247,10 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
 
     private void play(Uri uri, String name) {
         currentUri = uri;
+        if (videoView != null && previewCard != null) {
+            FrameLayout.LayoutParams full = new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER);
+            videoView.setLayoutParams(full);
+        }
         if (emptyOverlay != null) emptyOverlay.setVisibility(View.GONE);
         previewTitle.setText(name == null ? "ВИДЕО ВЫБРАНО" : name);
         previewHint.setText("Загрузка видео…");
@@ -261,6 +265,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
             mediaPlayer.setDataSource(this, uri);
             videoSurface = new Surface(videoView.getSurfaceTexture());
             mediaPlayer.setSurface(videoSurface);
+            mediaPlayer.setOnVideoSizeChangedListener((mp, videoWidth, videoHeight) -> fitVideoToPreview(videoWidth, videoHeight));
             mediaPlayer.setOnPreparedListener(mp -> {
                 prepared = true;
                 previewTitle.setText("ВОСПРОИЗВЕДЕНИЕ");
@@ -285,6 +290,27 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
             previewHint.setText("Не удалось открыть видео: " + e.getMessage());
             releasePlayer();
         }
+    }
+
+    private void fitVideoToPreview(int videoWidth, int videoHeight) {
+        if (videoView == null || previewCard == null || videoWidth <= 0 || videoHeight <= 0) return;
+        int availableWidth = previewCard.getWidth();
+        int availableHeight = previewCard.getHeight();
+        if (availableWidth <= 0 || availableHeight <= 0) return;
+
+        float videoRatio = (float) videoWidth / (float) videoHeight;
+        float frameRatio = (float) availableWidth / (float) availableHeight;
+        int fittedWidth;
+        int fittedHeight;
+        if (videoRatio > frameRatio) {
+            fittedWidth = availableWidth;
+            fittedHeight = Math.round(availableWidth / videoRatio);
+        } else {
+            fittedHeight = availableHeight;
+            fittedWidth = Math.round(availableHeight * videoRatio);
+        }
+        FrameLayout.LayoutParams fitted = new FrameLayout.LayoutParams(fittedWidth, fittedHeight, Gravity.CENTER);
+        videoView.setLayoutParams(fitted);
     }
 
     private void releasePlayer() {
