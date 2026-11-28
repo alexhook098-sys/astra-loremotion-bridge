@@ -591,7 +591,19 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                             Toast.makeText(VideoStudioActivity.this, "Не удалось экспортировать видео", Toast.LENGTH_LONG).show();
                         }
                     }).build();
-            activeTransformer.start(edited, activeExportFile.getAbsolutePath());
+            if (timelineClips.size() > 1) {
+                ArrayList<EditedMediaItem> items = new ArrayList<>();
+                for (TimelineClip clip : timelineClips) {
+                    MediaItem.ClippingConfiguration range = new MediaItem.ClippingConfiguration.Builder().setStartPositionMs(clip.startMs).setEndPositionMs(clip.endMs).build();
+                    MediaItem item = new MediaItem.Builder().setUri(clip.uri).setClippingConfiguration(range).build();
+                    items.add(new EditedMediaItem.Builder(item).build());
+                }
+                EditedMediaItemSequence sequence = EditedMediaItemSequence.withAudioAndVideoFrom(items);
+                Composition composition = new Composition.Builder(sequence).build();
+                activeTransformer.start(composition, activeExportFile.getAbsolutePath());
+            } else {
+                activeTransformer.start(edited, activeExportFile.getAbsolutePath());
+            }
             uiHandler.post(exportProgressUpdater);
         } catch (Exception e) {
             activeTransformer = null;
