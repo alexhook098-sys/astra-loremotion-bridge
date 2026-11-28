@@ -17,6 +17,9 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
+import android.graphics.Bitmap;
 import android.widget.MediaController;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
@@ -34,6 +37,8 @@ import java.io.FileInputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.Player;
+import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.transformer.Composition;
 import androidx.media3.transformer.EditedMediaItemSequence;
@@ -56,6 +61,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
 
     private TextureView videoView;
     private MediaPlayer mediaPlayer;
+    private ExoPlayer timelinePlayer;
     private MediaController mediaController;
     private Surface videoSurface;
     private boolean prepared = false;
@@ -90,20 +96,16 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private boolean userSeeking = false;
     private final Runnable progressUpdater = new Runnable() {
         @Override public void run() {
-            if (prepared && mediaPlayer != null) {
-                int duration = mediaPlayer.getDuration();
-                int position = mediaPlayer.getCurrentPosition();
+            if ((prepared && mediaPlayer != null) || timelinePlayer != null) {
+                int duration = timelinePlayer != null ? (int) Math.max(0, timelinePlayer.getDuration()) : mediaPlayer.getDuration();
+                int position = timelinePlayer != null ? (int) timelinePlayer.getCurrentPosition() : mediaPlayer.getCurrentPosition();
                 if (!userSeeking && seekBar != null && duration > 0) {
                     seekBar.setMax(duration);
                     seekBar.setProgress(position);
                 }
                 if (currentTimeLabel != null) currentTimeLabel.setText(formatTime(position));
                 if (durationLabel != null) durationLabel.setText(formatTime(duration));
-                if (playPauseButton != null) playPauseButton.setText(mediaPlayer.isPlaying() ? "Ⅱ" : "▶");
-                if (timelinePreviewActive && mediaPlayer.isPlaying() && previewTimelineIndex >= 0 && previewTimelineIndex < timelineClips.size()) {
-                    TimelineClip active = timelineClips.get(previewTimelineIndex);
-                    if (position >= active.endMs) { mediaPlayer.pause(); advanceTimelinePreview(); return; }
-                }
+                if (playPauseButton != null) playPauseButton.setText((timelinePlayer != null ? timelinePlayer.isPlaying() : mediaPlayer.isPlaying()) ? "Ⅱ" : "▶");
                 uiHandler.postDelayed(this, 250);
             }
         }
@@ -117,6 +119,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private final ArrayList<File> recentFiles = new ArrayList<>();
     private final ArrayList<TimelineClip> timelineClips = new ArrayList<>();
     private LinearLayout timelineList;
+    private HorizontalScrollView timelineScroller;
     private TextView timelineSummary;
     private int selectedClipIndex = -1;
     private boolean timelinePreviewActive = false;
@@ -328,9 +331,21 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         timelinePanel.addView(text("МОНТАЖНАЯ ШКАЛА", 13, WHITE, true), wrap());
         timelineSummary = text("Фрагменты будут идти друг за другом в готовом видео", 10, MUTED, false);
         timelinePanel.addView(timelineSummary, wrap());
+        timelineScroller = new HorizontalScrollView(this);
+        timelineScroller.setHorizontalScrollBarEnabled(false);
+        timelineScroller.setFillViewport(false);
         timelineList = new LinearLayout(this);
-        timelineList.setOrientation(LinearLayout.VERTICAL);
-        timelinePanel.addView(timelineList, wrap());
+        timelineList.setOrientation(LinearLayout.HORIZONTAL);
+        timelineList.setGravity(Gravity.CENTER_VERTICAL);
+        timelineScroller.addView(timelineList, new HorizontalScrollView.LayoutParams(-2, dp(112)));
+        LinearLayout.LayoutParams timelineScrollParams = new LinearLayout.LayoutParams(-1, dp(118));
+        timelineScrollParams.topMargin = dp(8);
+        timelinePanel.addView(timelineScroller, timelineScrollParams);
+        Button splitClip = pill("✂  РАЗДЕЛИТЬ В ТОЧКЕ ПРОСМОТРА", PURPLE);
+        splitClip.setOnClickListener(v -> splitSelectedClipAtPlayhead());
+        LinearLayout.LayoutParams splitParams = new LinearLayout.LayoutParams(-1, dp(42));
+        splitParams.topMargin = dp(7);
+        timelinePanel.addView(splitClip, splitParams);
         Button addClip = pill("＋  ДОБАВИТЬ ФРАГМЕНТ", LILAC);
         addClip.setOnClickListener(v -> chooseExtraVideo());
         LinearLayout.LayoutParams addParams = new LinearLayout.LayoutParams(-1, dp(44));
