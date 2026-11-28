@@ -67,8 +67,8 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
             int state = activeTransformer.getProgress(exportProgress);
             if (state == Transformer.PROGRESS_STATE_AVAILABLE) {
                 previewHint.setText("Экспорт видео… " + exportProgress.progress + "%");
-                uiHandler.postDelayed(this, 500);
             }
+            if (state != Transformer.PROGRESS_STATE_NOT_STARTED) uiHandler.postDelayed(this, 500);
         }
     };
     private SeekBar seekBar;
