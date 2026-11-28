@@ -3,6 +3,9 @@ package com.astra.loremotionbridge;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -38,6 +41,9 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.Player;
+import androidx.media3.common.Effects;
+import androidx.media3.effect.HslAdjustment;
+import androidx.media3.effect.RgbAdjustment;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.transformer.Composition;
@@ -68,6 +74,9 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private Button playPauseButton;
     private Button exportButton;
     private Button speedButton;
+    private LinearLayout colorStyleRow;
+    private int selectedColorStyle = 0;
+    private final String[] colorStyleNames = new String[]{"ORIGINAL", "CINEMATIC", "NEON", "WARM", "B&W"};
     private SeekBar trimStartBar;
     private SeekBar trimEndBar;
     private TextView trimRangeLabel;
@@ -277,6 +286,16 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, dp(42));
         sp.bottomMargin = dp(9);
         root.addView(speedButton, sp);
+
+        HorizontalScrollView colorScroll = new HorizontalScrollView(this);
+        colorScroll.setHorizontalScrollBarEnabled(false);
+        colorStyleRow = new LinearLayout(this);
+        colorStyleRow.setOrientation(LinearLayout.HORIZONTAL);
+        colorScroll.addView(colorStyleRow, new HorizontalScrollView.LayoutParams(-2, dp(44)));
+        LinearLayout.LayoutParams colorParams = new LinearLayout.LayoutParams(-1, dp(46));
+        colorParams.bottomMargin = dp(9);
+        root.addView(colorScroll, colorParams);
+        renderColorStyles();
 
         LinearLayout timelinePanel = new LinearLayout(this);
         timelinePanel.setOrientation(LinearLayout.VERTICAL);
@@ -680,6 +699,86 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     }
 
 
+
+    private void renderColorStyles() {
+        if (colorStyleRow == null) return;
+        colorStyleRow.removeAllViews();
+        for (int i = 0; i < colorStyleNames.length; i++) {
+            final int style = i;
+            Button choice = pill(colorStyleNames[i], i == selectedColorStyle ? PURPLE : LILAC);
+            choice.setTextSize(10);
+            choice.setPadding(dp(12), 0, dp(12), 0);
+            choice.setBackground(gradient(i == selectedColorStyle ? PANEL_2 : PANEL,
+                    i == selectedColorStyle ? PURPLE : Color.rgb(65, 55, 91), 13));
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, dp(38));
+            p.rightMargin = dp(7);
+            colorStyleRow.addView(choice, p);
+            choice.setOnClickListener(v -> {
+                selectedColorStyle = style;
+                applyPreviewColorStyle();
+                renderColorStyles();
+                if (previewHint != null) previewHint.setText("Цветовой стиль: " + colorStyleNames[style]);
+            });
+        }
+    }
+
+    private void applyPreviewColorStyle() {
+        if (videoView == null) return;
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        ColorMatrix matrix = new ColorMatrix();
+        switch (selectedColorStyle) {
+            case 1: // Cinematic: slightly richer contrast and cooler shadows.
+                matrix.set(new float[]{
+                    1.08f,0,0,0,-5, 0,1.04f,0,0,-3, 0,0,1.12f,0,0, 0,0,0,1,0
+                });
+                break;
+            case 2: // Neon Night: blue-violet cast.
+                matrix.set(new float[]{
+                    0.92f,0,0,0,0, 0,0.94f,0,0,0, 0,0,1.20f,0,8, 0,0,0,1,0
+                });
+                break;
+            case 3: // Warm Glow.
+                matrix.set(new float[]{
+                    1.12f,0,0,0,5, 0,1.03f,0,0,2, 0,0,0.88f,0,0, 0,0,0,1,0
+                });
+                break;
+            case 4:
+                matrix.setSaturation(0f);
+                break;
+            default:
+                matrix.reset();
+                break;
+        }
+        paint.setColorFilter(new ColorMatrixColorFilter(matrix));
+        videoView.setLayerType(View.LAYER_TYPE_HARDWARE, paint);
+        videoView.setLayerPaint(paint);
+        videoView.invalidate();
+    }
+
+    private Effects buildColorEffects() {
+        ArrayList<androidx.media3.common.Effect> videoEffects = new ArrayList<>();
+        switch (selectedColorStyle) {
+            case 1:
+                videoEffects.add(new HslAdjustment.Builder().adjustSaturation(10f).adjustLightness(-2f).build());
+                videoEffects.add(new RgbAdjustment.Builder().setRedScale(1.04f).setBlueScale(1.08f).build());
+                break;
+            case 2:
+                videoEffects.add(new HslAdjustment.Builder().adjustHue(-8f).adjustSaturation(18f).adjustLightness(-2f).build());
+                videoEffects.add(new RgbAdjustment.Builder().setRedScale(0.92f).setGreenScale(0.96f).setBlueScale(1.18f).build());
+                break;
+            case 3:
+                videoEffects.add(new HslAdjustment.Builder().adjustSaturation(8f).adjustLightness(2f).build());
+                videoEffects.add(new RgbAdjustment.Builder().setRedScale(1.10f).setGreenScale(1.03f).setBlueScale(0.88f).build());
+                break;
+            case 4:
+                videoEffects.add(new HslAdjustment.Builder().adjustSaturation(-100f).build());
+                break;
+            default:
+                break;
+        }
+        return new Effects(java.util.Collections.emptyList(), videoEffects);
+    }
+
     private void exportCurrentVideo() {
         if (currentUri == null || activeTransformer != null) {
             if (activeTransformer != null) Toast.makeText(this, "Экспорт уже выполняется", Toast.LENGTH_SHORT).show();
@@ -699,7 +798,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                     .setEndPositionMs(trimEndMs)
                     .build();
             MediaItem clippedItem = new MediaItem.Builder().setUri(currentUri).setClippingConfiguration(clipping).build();
-            EditedMediaItem edited = new EditedMediaItem.Builder(clippedItem).build();
+            EditedMediaItem edited = new EditedMediaItem.Builder(clippedItem).setEffects(buildColorEffects()).build();
             activeTransformer = new Transformer.Builder(this)
                     .setVideoMimeType(MimeTypes.VIDEO_H264)
                     .setAudioMimeType(MimeTypes.AUDIO_AAC)
@@ -724,7 +823,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 for (TimelineClip clip : timelineClips) {
                     MediaItem.ClippingConfiguration range = new MediaItem.ClippingConfiguration.Builder().setStartPositionMs(clip.startMs).setEndPositionMs(clip.endMs).build();
                     MediaItem item = new MediaItem.Builder().setUri(clip.uri).setClippingConfiguration(range).build();
-                    items.add(new EditedMediaItem.Builder(item).build());
+                    items.add(new EditedMediaItem.Builder(item).setEffects(buildColorEffects()).build());
                 }
                 EditedMediaItemSequence sequence = EditedMediaItemSequence.withAudioAndVideoFrom(items);
                 Composition composition = new Composition.Builder(sequence).build();
