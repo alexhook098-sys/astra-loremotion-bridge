@@ -414,6 +414,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
 
     private void selectTimelineClip(int index) {
         if (index < 0 || index >= timelineClips.size()) return;
+        timelinePreviewActive = false; previewTimelineIndex = -1;
         selectedClipIndex = index;
         TimelineClip clip = timelineClips.get(index);
         currentUri = clip.uri;
