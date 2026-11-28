@@ -573,7 +573,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 uiHandler.removeCallbacks(progressUpdater);
                 uiHandler.post(progressUpdater);
             });
-            mediaPlayer.setOnCompletionListener(mp -> { if (timelinePreviewActive) advanceTimelinePreview(); else previewHint.setText("Просмотр завершён"); });
+            mediaPlayer.setOnCompletionListener(mp -> previewHint.setText("Просмотр завершён"));
             mediaPlayer.setOnErrorListener((mp, what, extra) -> {
                 prepared = false;
                 previewHint.setText("Ошибка воспроизведения (" + what + "/" + extra + ")");
