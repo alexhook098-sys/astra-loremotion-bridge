@@ -373,6 +373,89 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         play(uri, displayName(uri));
     }
 
+
+    private void chooseExtraVideo() {
+        Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        pick.addCategory(Intent.CATEGORY_OPENABLE);
+        pick.setType("video/*");
+        pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        try { startActivityForResult(pick, PICK_EXTRA_VIDEO); }
+        catch (Exception e) { Toast.makeText(this, "Не удалось открыть выбор видео", Toast.LENGTH_SHORT).show(); }
+    }
+
+    private void addClipToTimeline(Uri uri, String name) {
+        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+        int duration = 0;
+        try {
+            retriever.setDataSource(this, uri);
+            String value = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+            if (value != null) duration = Integer.parseInt(value);
+        } catch (Exception e) {
+            Toast.makeText(this, "Не удалось прочитать видео", Toast.LENGTH_LONG).show();
+            return;
+        } finally { try { retriever.release(); } catch (Exception ignored) {} }
+        if (duration < 500) {
+            Toast.makeText(this, "Видео слишком короткое или не поддерживается", Toast.LENGTH_LONG).show();
+            return;
+        }
+        timelineClips.add(new TimelineClip(uri, name, duration));
+        selectTimelineClip(timelineClips.size() - 1);
+    }
+
+    private void selectTimelineClip(int index) {
+        if (index < 0 || index >= timelineClips.size()) return;
+        selectedClipIndex = index;
+        TimelineClip clip = timelineClips.get(index);
+        currentUri = clip.uri;
+        sourceDurationMs = clip.durationMs;
+        trimStartMs = clip.startMs;
+        trimEndMs = clip.endMs;
+        previewTitle.setText(clip.name);
+        if (trimStartBar != null) { trimStartBar.setMax(sourceDurationMs); trimStartBar.setProgress(trimStartMs); }
+        if (trimEndBar != null) { trimEndBar.setMax(sourceDurationMs); trimEndBar.setProgress(trimEndMs); }
+        updateTrimLabel();
+        if (exportButton != null) exportButton.setVisibility(View.VISIBLE);
+        if (videoView != null && videoView.isAvailable()) prepareVideo(clip.uri);
+        renderTimeline();
+    }
+
+    private void saveSelectedClipRange() {
+        if (selectedClipIndex >= 0 && selectedClipIndex < timelineClips.size()) {
+            TimelineClip clip = timelineClips.get(selectedClipIndex);
+            clip.startMs = trimStartMs;
+            clip.endMs = trimEndMs;
+            renderTimeline();
+        }
+    }
+
+    private void renderTimeline() {
+        if (timelineList == null) return;
+        timelineList.removeAllViews();
+        int total = 0;
+        for (int i = 0; i < timelineClips.size(); i++) {
+            TimelineClip clip = timelineClips.get(i);
+            total += Math.max(0, clip.endMs - clip.startMs);
+            final int index = i;
+            Button item = pill((i == selectedClipIndex ? "●  " : (i + 1) + ".  ") + clip.name
+                    + "   " + formatTime(clip.endMs - clip.startMs), i == selectedClipIndex ? PURPLE : LILAC);
+            item.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
+            item.setOnClickListener(v -> selectTimelineClip(index));
+            item.setOnLongClickListener(v -> {
+                if (timelineClips.size() <= 1) return true;
+                timelineClips.remove(index);
+                selectedClipIndex = Math.min(selectedClipIndex, timelineClips.size() - 1);
+                selectTimelineClip(selectedClipIndex);
+                Toast.makeText(this, "Фрагмент удалён", Toast.LENGTH_SHORT).show();
+                return true;
+            });
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(42));
+            params.bottomMargin = dp(5);
+            timelineList.addView(item, params);
+        }
+        if (timelineSummary != null) timelineSummary.setText(timelineClips.size() + " фрагм. · " + formatTime(total)
+                + " · нажми для выбора, удерживай для удаления");
+    }
+
     private void play(Uri uri, String name) {
         currentUri = uri;
         sourceDurationMs = 0;
