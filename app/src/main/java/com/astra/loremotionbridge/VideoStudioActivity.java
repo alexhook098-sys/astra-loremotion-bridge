@@ -7,6 +7,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.media.MediaPlayer;
+import android.media.MediaMetadataRetriever;
 import android.view.Surface;
 import android.view.TextureView;
 import android.os.Bundle;
@@ -35,6 +36,7 @@ import java.util.ArrayList;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.transformer.Composition;
+import androidx.media3.transformer.EditedMediaItemSequence;
 import androidx.media3.transformer.EditedMediaItem;
 import androidx.media3.transformer.ExportException;
 import androidx.media3.transformer.ExportResult;
@@ -50,6 +52,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private static final int WHITE = Color.rgb(245, 241, 255);
     private static final int MUTED = Color.rgb(157, 148, 185);
     private static final int PICK_VIDEO = 8421;
+    private static final int PICK_EXTRA_VIDEO = 8422;
 
     private TextureView videoView;
     private MediaPlayer mediaPlayer;
@@ -108,6 +111,11 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private LinearLayout emptyOverlay;
     private Uri currentUri;
     private final ArrayList<File> recentFiles = new ArrayList<>();
+    private final ArrayList<TimelineClip> timelineClips = new ArrayList<>();
+    private LinearLayout timelineList;
+    private TextView timelineSummary;
+    private int selectedClipIndex = -1;
+    private static class TimelineClip { Uri uri; String name; int durationMs; int startMs; int endMs; TimelineClip(Uri u, String n, int d) { uri=u; name=n; durationMs=d; startMs=0; endMs=d; } }
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
