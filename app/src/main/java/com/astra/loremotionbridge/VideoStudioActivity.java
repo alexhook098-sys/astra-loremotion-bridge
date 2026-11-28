@@ -129,6 +129,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private int pendingPreviewSeekMs = -1;
     private boolean pauseAfterPreviewSeek = false;
     private boolean timelinePreviewActive = false;
+    private boolean timelineHasStartedPlayback = false;
     private int previewTimelineIndex = -1;
     private static class TimelineClip { Uri uri; String name; int durationMs; int startMs; int endMs; TimelineClip(Uri u, String n, int d) { uri=u; name=n; durationMs=d; startMs=0; endMs=d; } }
 
@@ -810,9 +811,10 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 timelinePlayer.pause();
                 playPauseButton.setText("▶");
             } else {
-                if (timelinePlayer.getPlaybackState() == Player.STATE_ENDED) {
+                if (!timelineHasStartedPlayback || timelinePlayer.getPlaybackState() == Player.STATE_ENDED) {
                     timelinePlayer.seekTo(0, 0L);
                 }
+                timelineHasStartedPlayback = true;
                 timelinePlayer.play();
                 playPauseButton.setText("Ⅱ");
                 uiHandler.removeCallbacks(progressUpdater);
@@ -868,7 +870,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private void startTimelinePreviewAt(int startIndex, int sourcePositionMs, boolean autoplay) {
         if (timelineClips.isEmpty() || videoView == null || !videoView.isAvailable()) return;
         startIndex = Math.max(0, Math.min(startIndex, timelineClips.size() - 1));
-        releasePlayer(); timelinePreviewActive = true; previewTimelineIndex = startIndex; selectedClipIndex = startIndex;
+        releasePlayer(); timelinePreviewActive = true; timelineHasStartedPlayback = autoplay; previewTimelineIndex = startIndex; selectedClipIndex = startIndex;
         try {
             timelinePlayer = new ExoPlayer.Builder(this).build();
             timelinePlayer.setVideoTextureView(videoView);
