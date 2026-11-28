@@ -97,8 +97,8 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private final Runnable progressUpdater = new Runnable() {
         @Override public void run() {
             if ((prepared && mediaPlayer != null) || timelinePlayer != null) {
-                int duration = timelinePlayer != null ? (int) Math.max(0, timelinePlayer.getDuration()) : mediaPlayer.getDuration();
-                int position = timelinePlayer != null ? (int) timelinePlayer.getCurrentPosition() : mediaPlayer.getCurrentPosition();
+                int duration = timelinePlayer != null && timelinePreviewActive ? getTimelineDurationMs() : mediaPlayer.getDuration();
+                int position = timelinePlayer != null && timelinePreviewActive ? getTimelinePositionMs() : mediaPlayer.getCurrentPosition();
                 if (!userSeeking && seekBar != null && duration > 0) {
                     seekBar.setMax(duration);
                     seekBar.setProgress(position);
@@ -221,12 +221,11 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         controls.addView(seekBar, new LinearLayout.LayoutParams(0, dp(36), 1));
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
-                if (fromUser && prepared && mediaPlayer != null && mediaPlayer.getDuration() > 0)
-                    currentTimeLabel.setText(formatTime(progress));
+                if (fromUser) currentTimeLabel.setText(formatTime(progress));
             }
             @Override public void onStartTrackingTouch(SeekBar bar) { userSeeking = true; }
             @Override public void onStopTrackingTouch(SeekBar bar) {
-                if (timelinePlayer != null) timelinePlayer.seekTo(bar.getProgress());
+                if (timelinePlayer != null && timelinePreviewActive) seekTimelineGlobal(bar.getProgress());
                 else if (prepared && mediaPlayer != null) mediaPlayer.seekTo(bar.getProgress());
                 userSeeking = false;
             }
@@ -406,7 +405,8 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         if (trimEndBar != null) { trimEndBar.setMax(sourceDurationMs); trimEndBar.setProgress(trimEndMs); }
         updateTrimLabel();
         if (exportButton != null) exportButton.setVisibility(View.VISIBLE);
-        if (videoView != null && videoView.isAvailable()) prepareVideo(clip.uri);
+        if (timelineClips.size() > 1 && videoView != null && videoView.isAvailable()) startTimelinePreviewAt(index, clip.startMs, false);
+        else if (videoView != null && videoView.isAvailable()) prepareVideo(clip.uri);
         renderTimeline();
     }
 
@@ -495,21 +495,12 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         trimEndMs = clip.endMs;
         selectedCursorMs = Math.max(clip.startMs, Math.min(clip.endMs, positionMs));
         pendingPreviewSeekMs = selectedCursorMs;
-        if (timelinePlayer != null) releaseTimelinePlayer();
         if (exportButton != null) exportButton.setVisibility(View.VISIBLE);
-        if (changedClip) {
-            renderTimeline();
-            if (videoView != null && videoView.isAvailable()) prepareVideo(clip.uri);
-        } else if (prepared && mediaPlayer != null && currentUri.equals(clip.uri)) {
-            try {
-                pauseAfterPreviewSeek = true;
-                if (mediaPlayer.isPlaying()) mediaPlayer.pause();
-                mediaPlayer.seekTo(selectedCursorMs);
-                if (playPauseButton != null) playPauseButton.setText("▶");
-            } catch (Exception ignored) {}
-        } else if (videoView != null && videoView.isAvailable()) {
-            prepareVideo(clip.uri);
-        }
+        if (timelineClips.size() > 1 && videoView != null && videoView.isAvailable()) startTimelinePreviewAt(index, selectedCursorMs, false);
+        else if (prepared && mediaPlayer != null && currentUri.equals(clip.uri)) {
+            try { pauseAfterPreviewSeek = true; if (mediaPlayer.isPlaying()) mediaPlayer.pause(); mediaPlayer.seekTo(selectedCursorMs); if (playPauseButton != null) playPauseButton.setText("▶"); } catch (Exception ignored) {}
+        } else if (videoView != null && videoView.isAvailable()) prepareVideo(clip.uri);
+        renderTimeline();
         updateTimelinePlayhead();
     }
 
@@ -820,8 +811,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 playPauseButton.setText("▶");
             } else {
                 if (timelinePlayer.getPlaybackState() == Player.STATE_ENDED) {
-                    int restartIndex = selectedClipIndex >= 0 && selectedClipIndex < timelineClips.size() ? selectedClipIndex : 0;
-                    timelinePlayer.seekTo(restartIndex, 0L);
+                    timelinePlayer.seekTo(0, 0L);
                 }
                 timelinePlayer.play();
                 playPauseButton.setText("Ⅱ");
@@ -831,17 +821,54 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
             return;
         }
         if (prepared && mediaPlayer != null && mediaPlayer.isPlaying()) { mediaPlayer.pause(); playPauseButton.setText("▶"); return; }
-        if (timelineClips.size() > 1) { startTimelinePreview(); return; }
+        if (timelineClips.size() > 1) { startTimelinePreviewAt(0, timelineClips.get(0).startMs, true); return;}
         if (!prepared || mediaPlayer == null) return;
         mediaPlayer.start(); playPauseButton.setText("Ⅱ");
         uiHandler.removeCallbacks(progressUpdater); uiHandler.post(progressUpdater);
     }
 
+    private int getTimelineDurationMs() {
+        int total = 0;
+        for (TimelineClip clip : timelineClips) total += Math.max(0, clip.endMs - clip.startMs);
+        return total;
+    }
+
+    private int getTimelinePositionMs() {
+        if (timelinePlayer == null || !timelinePreviewActive) return 0;
+        int index = timelinePlayer.getCurrentMediaItemIndex(), total = 0;
+        for (int i = 0; i < Math.min(index, timelineClips.size()); i++) {
+            TimelineClip c = timelineClips.get(i); total += Math.max(0, c.endMs - c.startMs);
+        }
+        if (index >= 0 && index < timelineClips.size()) {
+            TimelineClip c = timelineClips.get(index);
+            total += Math.max(0, Math.min(c.endMs - c.startMs, (int) timelinePlayer.getCurrentPosition()));
+        }
+        return total;
+    }
+
+    private void seekTimelineGlobal(int globalMs) {
+        if (timelinePlayer == null || timelineClips.isEmpty()) return;
+        int target = Math.max(0, Math.min(getTimelineDurationMs(), globalMs)), offset = 0;
+        for (int i = 0; i < timelineClips.size(); i++) {
+            TimelineClip c = timelineClips.get(i); int len = Math.max(0, c.endMs - c.startMs);
+            if (target <= offset + len || i == timelineClips.size() - 1) {
+                selectedClipIndex = i; selectedCursorMs = c.startMs + Math.max(0, Math.min(len, target - offset));
+                currentUri = c.uri; timelinePlayer.seekTo(i, Math.max(0, selectedCursorMs - c.startMs));
+                if (playPauseButton != null && !timelinePlayer.isPlaying()) playPauseButton.setText("▶");
+                renderTimeline(); updateTimelinePlayhead(); return;
+            }
+            offset += len;
+        }
+    }
+
     private void startTimelinePreview() {
-        if (timelineClips.isEmpty() || !videoView.isAvailable()) return;
-        int startIndex = selectedClipIndex >= 0 && selectedClipIndex < timelineClips.size() ? selectedClipIndex : 0;
-        releasePlayer();
-        timelinePreviewActive = true; previewTimelineIndex = startIndex; selectedClipIndex = startIndex;
+        startTimelinePreviewAt(0, timelineClips.isEmpty() ? 0 : timelineClips.get(0).startMs, true);
+    }
+
+    private void startTimelinePreviewAt(int startIndex, int sourcePositionMs, boolean autoplay) {
+        if (timelineClips.isEmpty() || videoView == null || !videoView.isAvailable()) return;
+        startIndex = Math.max(0, Math.min(startIndex, timelineClips.size() - 1));
+        releasePlayer(); timelinePreviewActive = true; previewTimelineIndex = startIndex; selectedClipIndex = startIndex;
         try {
             timelinePlayer = new ExoPlayer.Builder(this).build();
             timelinePlayer.setVideoTextureView(videoView);
@@ -850,44 +877,38 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                     int index = timelinePlayer.getCurrentMediaItemIndex();
                     if (index >= 0 && index < timelineClips.size()) {
                         previewTimelineIndex = index; selectedClipIndex = index;
-                        TimelineClip clip = timelineClips.get(index);
+                        TimelineClip c = timelineClips.get(index);
                         previewTitle.setText("МОНТАЖ · " + (index + 1) + "/" + timelineClips.size());
-                        currentUri = clip.uri; sourceDurationMs = clip.durationMs;
-                        trimStartMs = clip.startMs; trimEndMs = clip.endMs;
+                        currentUri = c.uri; sourceDurationMs = c.durationMs; trimStartMs = c.startMs; trimEndMs = c.endMs;
                         renderTimeline();
                     }
                 }
                 @Override public void onPlaybackStateChanged(int state) {
                     if (state == Player.STATE_READY) {
-                        previewHint.setText("Воспроизведение всей монтажной шкалы");
+                        previewHint.setText("Просмотр общей монтажной последовательности");
+                        if (playPauseButton != null) playPauseButton.setText(timelinePlayer.isPlaying() ? "Ⅱ" : "▶");
+                        if (seekBar != null) { seekBar.setMax(getTimelineDurationMs()); seekBar.setProgress(getTimelinePositionMs()); }
+                        if (durationLabel != null) durationLabel.setText(formatTime(getTimelineDurationMs()));
                     } else if (state == Player.STATE_ENDED) {
-                        int current = timelinePlayer.getCurrentMediaItemIndex();
-                        if (current >= 0 && current < timelineClips.size() - 1) {
-                            // Safety fallback: if a clipped item reports ENDED before the playlist advances,
-                            // explicitly continue with the next clip.
-                            timelinePlayer.seekToNextMediaItem();
-                            timelinePlayer.play();
-                            return;
-                        }
-                        timelinePreviewActive = false;
                         previewHint.setText("Просмотр всего монтажа завершён · нажми ▶ для повтора");
                         if (playPauseButton != null) playPauseButton.setText("▶");
                     }
                 }
             });
             ArrayList<MediaItem> playlist = new ArrayList<>();
-            for (TimelineClip clip : timelineClips) {
+            for (TimelineClip c : timelineClips) {
                 MediaItem.ClippingConfiguration clipping = new MediaItem.ClippingConfiguration.Builder()
-                        .setStartPositionMs(clip.startMs).setEndPositionMs(clip.endMs).build();
-                playlist.add(new MediaItem.Builder().setUri(clip.uri).setClippingConfiguration(clipping).build());
+                        .setStartPositionMs(c.startMs).setEndPositionMs(c.endMs).build();
+                playlist.add(new MediaItem.Builder().setUri(c.uri).setClippingConfiguration(clipping).build());
             }
-            timelinePlayer.setMediaItems(playlist, startIndex, 0L);
+            long local = Math.max(0, Math.min(timelineClips.get(startIndex).endMs - timelineClips.get(startIndex).startMs,
+                    sourcePositionMs - timelineClips.get(startIndex).startMs));
+            timelinePlayer.setMediaItems(playlist, startIndex, local);
             timelinePlayer.prepare();
-            timelinePlayer.play();
+            if (autoplay) timelinePlayer.play(); else timelinePlayer.pause();
             renderTimeline(); uiHandler.removeCallbacks(progressUpdater); uiHandler.post(progressUpdater);
         } catch (Exception e) {
-            timelinePreviewActive = false; previewHint.setText("Не удалось запустить монтаж: " + e.getMessage());
-            releaseTimelinePlayer();
+            timelinePreviewActive = false; previewHint.setText("Не удалось запустить монтаж: " + e.getMessage()); releaseTimelinePlayer();
         }
     }
 
