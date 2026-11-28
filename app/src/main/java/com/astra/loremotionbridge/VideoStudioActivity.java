@@ -18,6 +18,9 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.MediaController;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
+import android.os.Handler;
+import android.os.Looper;
 import android.widget.TextView;
 
 import android.widget.Toast;
@@ -39,6 +42,28 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private MediaController mediaController;
     private Surface videoSurface;
     private boolean prepared = false;
+    private Button playPauseButton;
+    private SeekBar seekBar;
+    private TextView currentTimeLabel;
+    private TextView durationLabel;
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
+    private boolean userSeeking = false;
+    private final Runnable progressUpdater = new Runnable() {
+        @Override public void run() {
+            if (prepared && mediaPlayer != null) {
+                int duration = mediaPlayer.getDuration();
+                int position = mediaPlayer.getCurrentPosition();
+                if (!userSeeking && seekBar != null && duration > 0) {
+                    seekBar.setMax(duration);
+                    seekBar.setProgress(position);
+                }
+                if (currentTimeLabel != null) currentTimeLabel.setText(formatTime(position));
+                if (durationLabel != null) durationLabel.setText(formatTime(duration));
+                if (playPauseButton != null) playPauseButton.setText(mediaPlayer.isPlaying() ? "Ⅱ" : "▶");
+                uiHandler.postDelayed(this, 250);
+            }
+        }
+    };
     private FrameLayout previewCard;
     private TextView previewTitle;
     private TextView previewHint;
@@ -115,6 +140,52 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
             @Override public void onSurfaceTextureUpdated(android.graphics.SurfaceTexture texture) {}
         });
         previewCard.addView(videoView, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
+
+        // Native ASTRA playback controls, rendered above the TextureView.
+        LinearLayout controls = new LinearLayout(this);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+        controls.setGravity(Gravity.CENTER_VERTICAL);
+        controls.setPadding(dp(10), dp(5), dp(10), dp(5));
+        controls.setBackground(gradient(Color.argb(225, 10, 8, 24), PURPLE, 14));
+        FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(-1, dp(52), Gravity.BOTTOM);
+        cp.setMargins(dp(8), 0, dp(8), dp(8));
+        previewCard.addView(controls, cp);
+
+        playPauseButton = pill("▶", PURPLE);
+        playPauseButton.setTextSize(17);
+        playPauseButton.setOnClickListener(v -> togglePlayback());
+        controls.addView(playPauseButton, new LinearLayout.LayoutParams(dp(44), dp(40)));
+
+        currentTimeLabel = text("00:00", 10, WHITE, true);
+        currentTimeLabel.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams ctp = new LinearLayout.LayoutParams(dp(42), -2);
+        ctp.leftMargin = dp(6);
+        controls.addView(currentTimeLabel, ctp);
+
+        seekBar = new SeekBar(this);
+        seekBar.setMax(1000);
+        seekBar.setProgressTintList(android.content.res.ColorStateList.valueOf(PURPLE));
+        seekBar.setThumbTintList(android.content.res.ColorStateList.valueOf(LILAC));
+        seekBar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.GRAY));
+        controls.addView(seekBar, new LinearLayout.LayoutParams(0, dp(36), 1));
+        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                if (fromUser && prepared && mediaPlayer != null && mediaPlayer.getDuration() > 0)
+                    currentTimeLabel.setText(formatTime(progress));
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) { userSeeking = true; }
+            @Override public void onStopTrackingTouch(SeekBar bar) {
+                if (prepared && mediaPlayer != null) mediaPlayer.seekTo(bar.getProgress());
+                userSeeking = false;
+            }
+        });
+
+        durationLabel = text("00:00", 10, WHITE, true);
+        durationLabel.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams dtp = new LinearLayout.LayoutParams(dp(42), -2);
+        dtp.leftMargin = dp(4);
+        controls.addView(durationLabel, dtp);
+
 
         emptyOverlay = new LinearLayout(this);
         LinearLayout empty = emptyOverlay;
@@ -208,11 +279,14 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 prepared = true;
                 previewTitle.setText("ВОСПРОИЗВЕДЕНИЕ");
                 previewHint.setText(formatTime(mp.getDuration()) + "  ·  готово к просмотру");
-                mediaController = new MediaController(this);
-                mediaController.setAnchorView(previewCard);
-                mediaController.setMediaPlayer(this);
-                mediaController.setEnabled(true);
+                mediaController = null; // ASTRA draws its own controls over TextureView.
+                if (seekBar != null) { seekBar.setMax(mp.getDuration()); seekBar.setProgress(0); }
+                if (currentTimeLabel != null) currentTimeLabel.setText("00:00");
+                if (durationLabel != null) durationLabel.setText(formatTime(mp.getDuration()));
+                if (playPauseButton != null) playPauseButton.setText("Ⅱ");
                 mp.start();
+                uiHandler.removeCallbacks(progressUpdater);
+                uiHandler.post(progressUpdater);
             });
             mediaPlayer.setOnCompletionListener(mp -> previewHint.setText("Просмотр завершён"));
             mediaPlayer.setOnErrorListener((mp, what, extra) -> {
@@ -233,7 +307,25 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
             try { mediaPlayer.setOnPreparedListener(null); mediaPlayer.setOnCompletionListener(null); mediaPlayer.setOnErrorListener(null); mediaPlayer.reset(); mediaPlayer.release(); } catch (Exception ignored) {}
             mediaPlayer = null;
         }
+        uiHandler.removeCallbacks(progressUpdater);
+        if (playPauseButton != null) playPauseButton.setText("▶");
+        if (seekBar != null) seekBar.setProgress(0);
+        if (currentTimeLabel != null) currentTimeLabel.setText("00:00");
+        if (durationLabel != null) durationLabel.setText("00:00");
         if (videoSurface != null) { try { videoSurface.release(); } catch (Exception ignored) {} videoSurface = null; }
+    }
+
+    private void togglePlayback() {
+        if (!prepared || mediaPlayer == null) return;
+        if (mediaPlayer.isPlaying()) {
+            mediaPlayer.pause();
+            playPauseButton.setText("▶");
+        } else {
+            mediaPlayer.start();
+            playPauseButton.setText("Ⅱ");
+            uiHandler.removeCallbacks(progressUpdater);
+            uiHandler.post(progressUpdater);
+        }
     }
 
     @Override public void start() { if (prepared && mediaPlayer != null) mediaPlayer.start(); }
