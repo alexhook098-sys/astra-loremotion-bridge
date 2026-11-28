@@ -75,6 +75,9 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private Button exportButton;
     private Button speedButton;
     private LinearLayout colorStyleRow;
+    private SeekBar filterStrengthBar;
+    private TextView filterStrengthLabel;
+    private int filterStrength = 100;
     private int selectedColorStyle = 0;
     private final String[] colorStyleNames = new String[]{"ORIGINAL", "CINEMATIC", "NEON", "WARM", "B&W", "FILM", "VINTAGE", "DREAM", "CYBER"};
     private SeekBar trimStartBar;
@@ -296,6 +299,30 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         colorParams.bottomMargin = dp(9);
         root.addView(colorScroll, colorParams);
         renderColorStyles();
+
+        LinearLayout strengthPanel = new LinearLayout(this);
+        strengthPanel.setOrientation(LinearLayout.VERTICAL);
+        strengthPanel.setPadding(dp(2), 0, dp(2), dp(5));
+        filterStrengthLabel = text("СИЛА ФИЛЬТРА  ·  100%", 10, MUTED, true);
+        strengthPanel.addView(filterStrengthLabel, wrap());
+        filterStrengthBar = new SeekBar(this);
+        filterStrengthBar.setMax(100);
+        filterStrengthBar.setProgress(filterStrength);
+        filterStrengthBar.setProgressTintList(android.content.res.ColorStateList.valueOf(PURPLE));
+        filterStrengthBar.setThumbTintList(android.content.res.ColorStateList.valueOf(LILAC));
+        filterStrengthBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int value, boolean fromUser) {
+                filterStrength = value;
+                if (filterStrengthLabel != null) filterStrengthLabel.setText("СИЛА ФИЛЬТРА  ·  " + value + "%");
+                applyPreviewColorStyle();
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        strengthPanel.addView(filterStrengthBar, new LinearLayout.LayoutParams(-1, dp(38)));
+        LinearLayout.LayoutParams strengthParams = new LinearLayout.LayoutParams(-1, wrap().height);
+        strengthParams.bottomMargin = dp(5);
+        root.addView(strengthPanel, strengthParams);
 
         LinearLayout timelinePanel = new LinearLayout(this);
         timelinePanel.setOrientation(LinearLayout.VERTICAL);
@@ -769,45 +796,60 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 matrix.reset();
                 break;
         }
+        float[] values = matrix.getArray();
+        float amount = filterStrength / 100f;
+        float[] identity = new ColorMatrix().getArray();
+        for (int i = 0; i < values.length; i++) {
+            values[i] = identity[i] + (values[i] - identity[i]) * amount;
+        }
+        matrix.set(values);
         paint.setColorFilter(new ColorMatrixColorFilter(matrix));
         videoView.setLayerType(View.LAYER_TYPE_HARDWARE, paint);
         videoView.setLayerPaint(paint);
         videoView.invalidate();
     }
 
+    private float scaleEffect(float value) {
+        return value * (filterStrength / 100f);
+    }
+
+    private float scaleRgb(float scale) {
+        return 1f + (scale - 1f) * (filterStrength / 100f);
+    }
+
     private Effects buildColorEffects() {
         ArrayList<androidx.media3.common.Effect> videoEffects = new ArrayList<>();
         switch (selectedColorStyle) {
             case 1:
-                videoEffects.add(new HslAdjustment.Builder().adjustSaturation(10f).adjustLightness(-2f).build());
-                videoEffects.add(new RgbAdjustment.Builder().setRedScale(1.04f).setBlueScale(1.08f).build());
+                videoEffects.add(new HslAdjustment.Builder().adjustSaturation(scaleEffect(10f)).adjustLightness(scaleEffect(-2f)).build());
+                videoEffects.add(new RgbAdjustment.Builder().setRedScale(scaleRgb(1.04f)).setBlueScale(scaleRgb(1.08f)).build());
                 break;
             case 2:
-                videoEffects.add(new HslAdjustment.Builder().adjustHue(-8f).adjustSaturation(18f).adjustLightness(-2f).build());
-                videoEffects.add(new RgbAdjustment.Builder().setRedScale(0.92f).setGreenScale(0.96f).setBlueScale(1.18f).build());
+                videoEffects.add(new HslAdjustment.Builder().adjustHue(scaleEffect(-8f)).adjustSaturation(scaleEffect(18f)).adjustLightness(scaleEffect(-2f)).build());
+                videoEffects.add(new RgbAdjustment.Builder().setRedScale(scaleRgb(0.92f)).setGreenScale(scaleRgb(0.96f)).setBlueScale(scaleRgb(1.18f)).build());
                 break;
             case 3:
-                videoEffects.add(new HslAdjustment.Builder().adjustSaturation(8f).adjustLightness(2f).build());
-                videoEffects.add(new RgbAdjustment.Builder().setRedScale(1.10f).setGreenScale(1.03f).setBlueScale(0.88f).build());
+                videoEffects.add(new HslAdjustment.Builder().adjustSaturation(scaleEffect(8f)).adjustLightness(scaleEffect(2f)).build());
+                videoEffects.add(new RgbAdjustment.Builder().setRedScale(scaleRgb(1.10f)).setGreenScale(scaleRgb(1.03f)).setBlueScale(scaleRgb(0.88f)).build());
                 break;
             case 4:
-                videoEffects.add(new HslAdjustment.Builder().adjustSaturation(-100f).build());
+                videoEffects.add(new HslAdjustment.Builder().adjustSaturation(scaleEffect(-100f)).build());
                 break;
             case 5:
-                videoEffects.add(new HslAdjustment.Builder().adjustSaturation(12f).adjustLightness(-3f).build());
-                videoEffects.add(new RgbAdjustment.Builder().setRedScale(1.06f).setGreenScale(1.01f).setBlueScale(0.94f).build());
+                videoEffects.add(new HslAdjustment.Builder().adjustSaturation(scaleEffect(12f)).adjustLightness(scaleEffect(-3f)).build());
+                videoEffects.add(new RgbAdjustment.Builder().setRedScale(scaleRgb(1.06f)).setGreenScale(scaleRgb(1.01f)).setBlueScale(scaleRgb(0.94f)).build());
                 break;
             case 6:
-                videoEffects.add(new HslAdjustment.Builder().adjustSaturation(-20f).adjustLightness(3f).build());
-                videoEffects.add(new RgbAdjustment.Builder().setRedScale(1.12f).setGreenScale(1.02f).setBlueScale(0.84f).build());
+                videoEffects.add(new HslAdjustment.Builder().adjustSaturation(scaleEffect(-20f)).adjustLightness(scaleEffect(3f)).build());
+                videoEffects.add(new RgbAdjustment.Builder().setRedScale(scaleRgb(1.12f)).setGreenScale(scaleRgb(1.02f)).setBlueScale(scaleRgb(0.84f)).build());
                 break;
             case 7:
-                videoEffects.add(new HslAdjustment.Builder().adjustSaturation(-8f).adjustLightness(5f).build());
-                videoEffects.add(new RgbAdjustment.Builder().setRedScale(1.04f).setGreenScale(1.02f).setBlueScale(1.08f).build());
+                videoEffects.add(new HslAdjustment.Builder().adjustSaturation(scaleEffect(-8f)).adjustLightness(scaleEffect(5f)).build());
+                videoEffects.add(new RgbAdjustment.Builder().setRedScale(scaleRgb(1.04f)).setGreenScale(scaleRgb(1.02f)).setBlueScale(scaleRgb(1.08f)).build());
                 break;
             case 8:
-                videoEffects.add(new HslAdjustment.Builder().adjustHue(-14f).adjustSaturation(24f).adjustLightness(-2f).build());
-                videoEffects.add(new RgbAdjustment.Builder().setRedScale(0.90f).setGreenScale(1.05f).setBlueScale(1.22f).build());
+                videoEffects.add(new HslAdjustment.Builder().adjustHue(scaleEffect(-14f)).adjustSaturation(scaleEffect(24f)).adjustLightness(scaleEffect(-2f)).build());
+                videoEffects.add(new RgbAdjustment.Builder().setRedScale(scaleRgb(0.90f)).setGreenScale(scaleRgb(1.05f)).setBlueScale(scaleRgb(1.22f)).build());
                 break;
             default:
                 break;
