@@ -76,7 +76,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
     private Button speedButton;
     private LinearLayout colorStyleRow;
     private int selectedColorStyle = 0;
-    private final String[] colorStyleNames = new String[]{"ORIGINAL", "CINEMATIC", "NEON", "WARM", "B&W"};
+    private final String[] colorStyleNames = new String[]{"ORIGINAL", "CINEMATIC", "NEON", "WARM", "B&W", "FILM", "VINTAGE", "DREAM", "CYBER"};
     private SeekBar trimStartBar;
     private SeekBar trimEndBar;
     private TextView trimRangeLabel;
@@ -717,7 +717,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 selectedColorStyle = style;
                 applyPreviewColorStyle();
                 renderColorStyles();
-                if (previewHint != null) previewHint.setText("Цветовой стиль: " + colorStyleNames[style]);
+                if (previewHint != null) previewHint.setText("Фильтр: " + colorStyleNames[style]);
             });
         }
     }
@@ -744,6 +744,26 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 break;
             case 4:
                 matrix.setSaturation(0f);
+                break;
+            case 5: // Film: richer contrast with slightly warm highlights.
+                matrix.set(new float[]{
+                    1.10f,0,0,0,-4, 0,1.04f,0,0,-2, 0,0,0.94f,0,1, 0,0,0,1,0
+                });
+                break;
+            case 6: // Vintage: faded warm print.
+                matrix.set(new float[]{
+                    0.92f,0.06f,0.02f,0,12, 0.03f,0.90f,0.02f,0,8, 0.02f,0.05f,0.78f,0,5, 0,0,0,1,0
+                });
+                break;
+            case 7: // Dream: soft lifted, pastel image.
+                matrix.set(new float[]{
+                    1.04f,0,0,0,9, 0,1.03f,0,0,8, 0,0,1.08f,0,12, 0,0,0,1,0
+                });
+                break;
+            case 8: // Cyber: cool blue-magenta look.
+                matrix.set(new float[]{
+                    0.96f,0.02f,0,0,0, 0,0.96f,0.02f,0,0, 0.04f,0,1.18f,0,7, 0,0,0,1,0
+                });
                 break;
             default:
                 matrix.reset();
@@ -772,6 +792,22 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                 break;
             case 4:
                 videoEffects.add(new HslAdjustment.Builder().adjustSaturation(-100f).build());
+                break;
+            case 5:
+                videoEffects.add(new HslAdjustment.Builder().adjustSaturation(12f).adjustLightness(-3f).build());
+                videoEffects.add(new RgbAdjustment.Builder().setRedScale(1.06f).setGreenScale(1.01f).setBlueScale(0.94f).build());
+                break;
+            case 6:
+                videoEffects.add(new HslAdjustment.Builder().adjustSaturation(-20f).adjustLightness(3f).build());
+                videoEffects.add(new RgbAdjustment.Builder().setRedScale(1.12f).setGreenScale(1.02f).setBlueScale(0.84f).build());
+                break;
+            case 7:
+                videoEffects.add(new HslAdjustment.Builder().adjustSaturation(-8f).adjustLightness(5f).build());
+                videoEffects.add(new RgbAdjustment.Builder().setRedScale(1.04f).setGreenScale(1.02f).setBlueScale(1.08f).build());
+                break;
+            case 8:
+                videoEffects.add(new HslAdjustment.Builder().adjustHue(-14f).adjustSaturation(24f).adjustLightness(-2f).build());
+                videoEffects.add(new RgbAdjustment.Builder().setRedScale(0.90f).setGreenScale(1.05f).setBlueScale(1.22f).build());
                 break;
             default:
                 break;
