@@ -394,6 +394,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         releaseTimelinePlayer();
         timelinePreviewActive = false; previewTimelineIndex = -1;
         selectedClipIndex = index;
+        if (emptyOverlay != null) emptyOverlay.setVisibility(View.GONE);
         TimelineClip clip = timelineClips.get(index);
         currentUri = clip.uri;
         sourceDurationMs = clip.durationMs;
@@ -458,23 +459,11 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
             actions.addView(text("↕", 11, MUTED, false), new LinearLayout.LayoutParams(dp(24), dp(25)));
             actions.addView(right, new LinearLayout.LayoutParams(dp(38), dp(25)));
             card.addView(actions);
-            card.setOnTouchListener((v, event) -> {
-                if (event.getAction() == android.view.MotionEvent.ACTION_DOWN || event.getAction() == android.view.MotionEvent.ACTION_MOVE) {
-                    float x = Math.max(0f, Math.min(dp(140), event.getX()));
-                    float fraction = Math.max(0f, Math.min(1f, x / dp(140)));
-                    setTimelineCursor(index, clip.startMs + Math.round((clip.endMs - clip.startMs) * fraction));
-                }
-                return true;
-            });
+            TextView remove = text("×", 18, LILAC, true);
+            remove.setGravity(Gravity.CENTER);
+            remove.setOnClickListener(v -> removeTimelineClip(index));
+            actions.addView(remove, new LinearLayout.LayoutParams(dp(30), dp(25)));
             card.setOnClickListener(v -> selectTimelineClip(index));
-            card.setOnLongClickListener(v -> {
-                if (timelineClips.size() <= 1) return true;
-                timelineClips.remove(index);
-                selectedClipIndex = Math.min(index, timelineClips.size() - 1);
-                selectTimelineClip(selectedClipIndex);
-                Toast.makeText(this, "Фрагмент удалён", Toast.LENGTH_SHORT).show();
-                return true;
-            });
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(140), dp(112));
             params.rightMargin = dp(7);
             timelineList.addView(card, params);
@@ -524,6 +513,32 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         timelinePlayhead.setVisibility(View.VISIBLE);
     }
 
+    private void removeTimelineClip(int index) {
+        if (index < 0 || index >= timelineClips.size()) return;
+        if (timelineClips.size() == 1) {
+            timelineClips.clear();
+            selectedClipIndex = -1;
+            selectedCursorMs = 0;
+            currentUri = null;
+            sourceDurationMs = 0;
+            releasePlayer();
+            if (exportButton != null) exportButton.setVisibility(View.GONE);
+            if (emptyOverlay != null) emptyOverlay.setVisibility(View.VISIBLE);
+            previewTitle.setText("ТВОЁ СЛЕДУЮЩЕЕ ВИДЕО");
+            previewHint.setText("Выбери видео из памяти телефона");
+            renderTimeline();
+            Toast.makeText(this, "Фрагмент удалён", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        timelineClips.remove(index);
+        int next = selectedClipIndex;
+        if (index < selectedClipIndex) next--;
+        else if (index == selectedClipIndex) next = Math.min(index, timelineClips.size() - 1);
+        next = Math.max(0, Math.min(next, timelineClips.size() - 1));
+        selectTimelineClip(next);
+        Toast.makeText(this, "Фрагмент удалён", Toast.LENGTH_SHORT).show();
+    }
+
     private void moveTimelineClip(int from, int delta) {
         int to = from + delta;
         if (from < 0 || from >= timelineClips.size() || to < 0 || to >= timelineClips.size()) return;
@@ -547,8 +562,6 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
             videoView.setLayoutParams(full);
         }
         if (emptyOverlay != null) emptyOverlay.setVisibility(View.GONE);
-        previewTitle.setText(name == null ? "ВИДЕО ВЫБРАНО" : name);
-        previewHint.setText("Загрузка видео…");
         releasePlayer();
         if (videoView.isAvailable()) prepareVideo(uri);
     }
@@ -563,8 +576,7 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
             mediaPlayer.setOnVideoSizeChangedListener((mp, videoWidth, videoHeight) -> fitVideoToPreview(videoWidth, videoHeight));
             mediaPlayer.setOnPreparedListener(mp -> {
                 prepared = true;
-                previewTitle.setText("ВОСПРОИЗВЕДЕНИЕ");
-                previewHint.setText(formatTime(mp.getDuration()) + "  ·  готово к просмотру");
+                if (emptyOverlay != null) emptyOverlay.setVisibility(View.GONE);
                 mediaController = null; // ASTRA draws its own controls over TextureView.
                 if (seekBar != null) { seekBar.setMax(mp.getDuration()); seekBar.setProgress(0); }
                 if (currentTimeLabel != null) currentTimeLabel.setText("00:00");
