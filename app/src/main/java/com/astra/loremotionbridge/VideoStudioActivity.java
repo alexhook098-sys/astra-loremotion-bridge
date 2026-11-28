@@ -272,59 +272,6 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         sp.bottomMargin = dp(9);
         root.addView(speedButton, sp);
 
-        LinearLayout trimPanel = new LinearLayout(this);
-        trimPanel.setOrientation(LinearLayout.VERTICAL);
-        trimPanel.setPadding(dp(13), dp(12), dp(13), dp(12));
-        trimPanel.setBackground(gradient(PANEL, Color.rgb(75, 48, 119), 17));
-        TextView trimTitle = text("ОБРЕЗКА ФРАГМЕНТА", 13, WHITE, true);
-        trimPanel.addView(trimTitle, wrap());
-        TextView trimHelp = text("Выбери фрагмент ниже и настрой начало и конец", 10, MUTED, false);
-        LinearLayout.LayoutParams thp = wrap(); thp.topMargin = dp(3);
-        trimPanel.addView(trimHelp, thp);
-        trimRangeLabel = text("00:00 — 00:00", 11, LILAC, true);
-        LinearLayout.LayoutParams trlp = wrap(); trlp.topMargin = dp(5);
-        trimPanel.addView(trimRangeLabel, trlp);
-        TextView startCaption = text("НАЧАТЬ С", 10, MUTED, true);
-        LinearLayout.LayoutParams scp = wrap(); scp.topMargin = dp(7);
-        trimPanel.addView(startCaption, scp);
-        trimStartBar = new SeekBar(this);
-        trimStartBar.setMax(1000);
-        trimStartBar.setProgressTintList(android.content.res.ColorStateList.valueOf(PURPLE));
-        trimStartBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar bar, int value, boolean fromUser) {
-                if (fromUser && sourceDurationMs > 0) {
-                    trimStartMs = Math.min(value, Math.max(0, trimEndMs - 500));
-                    updateTrimLabel();
-                }
-            }
-            @Override public void onStartTrackingTouch(SeekBar bar) {}
-            @Override public void onStopTrackingTouch(SeekBar bar) {
-                saveSelectedClipRange();
-                if (prepared && mediaPlayer != null) mediaPlayer.seekTo(trimStartMs);
-            }
-        });
-        trimPanel.addView(trimStartBar, wrap());
-        TextView endCaption = text("ЗАКОНЧИТЬ НА", 10, MUTED, true);
-        trimPanel.addView(endCaption, wrap());
-        trimEndBar = new SeekBar(this);
-        trimEndBar.setMax(1000);
-        trimEndBar.setProgressTintList(android.content.res.ColorStateList.valueOf(LILAC));
-        trimEndBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar bar, int value, boolean fromUser) {
-                if (fromUser && sourceDurationMs > 0) {
-                    trimEndMs = Math.max(trimStartMs + 500, Math.min(sourceDurationMs, value));
-                    updateTrimLabel();
-                }
-            }
-            @Override public void onStartTrackingTouch(SeekBar bar) {}
-            @Override public void onStopTrackingTouch(SeekBar bar) { saveSelectedClipRange(); }
-        });
-        trimPanel.addView(trimEndBar, wrap());
-        LinearLayout.LayoutParams trp = new LinearLayout.LayoutParams(-1, -2);
-        trp.bottomMargin = dp(10);
-        root.addView(trimPanel, trp);
-
-
         LinearLayout timelinePanel = new LinearLayout(this);
         timelinePanel.setOrientation(LinearLayout.VERTICAL);
         timelinePanel.setPadding(dp(13), dp(12), dp(13), dp(12));
@@ -750,8 +697,19 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
 
     private void togglePlayback() {
         if (timelinePlayer != null) {
-            if (timelinePlayer.isPlaying()) { timelinePlayer.pause(); playPauseButton.setText("▶"); }
-            else { timelinePlayer.play(); playPauseButton.setText("Ⅱ"); }
+            if (timelinePlayer.isPlaying()) {
+                timelinePlayer.pause();
+                playPauseButton.setText("▶");
+            } else {
+                if (timelinePlayer.getPlaybackState() == Player.STATE_ENDED) {
+                    timelinePlayer.seekTo(0, 0);
+                    timelinePlayer.prepare();
+                }
+                timelinePlayer.play();
+                playPauseButton.setText("Ⅱ");
+                uiHandler.removeCallbacks(progressUpdater);
+                uiHandler.post(progressUpdater);
+            }
             return;
         }
         if (prepared && mediaPlayer != null && mediaPlayer.isPlaying()) { mediaPlayer.pause(); playPauseButton.setText("▶"); return; }
@@ -781,9 +739,19 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
                     }
                 }
                 @Override public void onPlaybackStateChanged(int state) {
-                    if (state == Player.STATE_READY) previewHint.setText("Воспроизведение всей монтажной шкалы");
-                    if (state == Player.STATE_ENDED) {
-                        timelinePreviewActive = false; previewHint.setText("Просмотр всего монтажа завершён");
+                    if (state == Player.STATE_READY) {
+                        previewHint.setText("Воспроизведение всей монтажной шкалы");
+                    } else if (state == Player.STATE_ENDED) {
+                        int current = timelinePlayer.getCurrentMediaItemIndex();
+                        if (current >= 0 && current < timelineClips.size() - 1) {
+                            // Safety fallback: if a clipped item reports ENDED before the playlist advances,
+                            // explicitly continue with the next clip.
+                            timelinePlayer.seekToNextMediaItem();
+                            timelinePlayer.play();
+                            return;
+                        }
+                        timelinePreviewActive = false;
+                        previewHint.setText("Просмотр всего монтажа завершён · нажми ▶ для повтора");
                         if (playPauseButton != null) playPauseButton.setText("▶");
                     }
                 }
@@ -814,6 +782,9 @@ public class VideoStudioActivity extends Activity implements MediaController.Med
         TimelineClip original = timelineClips.get(selectedClipIndex);
         int position;
         if (timelinePlayer != null && timelinePreviewActive) {
+            int playingIndex = timelinePlayer.getCurrentMediaItemIndex();
+            if (playingIndex >= 0 && playingIndex < timelineClips.size()) selectedClipIndex = playingIndex;
+            original = timelineClips.get(selectedClipIndex);
             position = original.startMs + (int) timelinePlayer.getCurrentPosition();
         } else if (prepared && mediaPlayer != null) {
             position = mediaPlayer.getCurrentPosition();
